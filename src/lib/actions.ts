@@ -382,16 +382,53 @@ export async function createUser(formData: any) {
 
 export async function getManagers() {
     try {
+        // Fetch users who have the Line Manager role OR are listed as managers in hr_staff
         const managers = await query(`
-            SELECT u.id, u.username, u.department 
+            SELECT DISTINCT u.id, u.username, u.department, u.staff_id
             FROM memo_system_users u
-            JOIN user_roles ur ON u.id = ur.user_id
-            JOIN roles r ON ur.role_id = r.id
+            LEFT JOIN user_roles ur ON u.id = ur.user_id
+            LEFT JOIN roles r ON ur.role_id = r.id
             WHERE r.name = 'Line Manager'
+            OR u.staff_id IN (SELECT DISTINCT LineManagerID FROM hr_staff WHERE LineManagerID IS NOT NULL AND LineManagerID != '')
+            LIMIT 50
         `) as any[];
         return managers;
     } catch (error) {
         console.error('Failed to fetch managers:', error);
+        return [];
+    }
+}
+
+export async function searchManagers(searchTerm: string) {
+    const session = await auth();
+    if (!session?.user) return [];
+
+    try {
+        // Search hr_staff for people who are managers (appear in LineManagerID of others)
+        // AND check if they have a system account
+        const results = await query(`
+            SELECT 
+                hr.StaffID, 
+                hr.FirstName, 
+                hr.Surname, 
+                hr.DepartmentCode,
+                u.id as system_user_id
+            FROM hr_staff hr
+            LEFT JOIN memo_system_users u ON hr.StaffID = u.staff_id
+            WHERE (hr.FirstName LIKE ? OR hr.Surname LIKE ? OR hr.StaffID LIKE ?)
+            AND hr.StaffID IN (SELECT DISTINCT LineManagerID FROM hr_staff WHERE LineManagerID IS NOT NULL AND LineManagerID != '')
+            AND hr.IsActive = 1
+            LIMIT 20
+        `, [`%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`]) as any[];
+
+        return results.map(r => ({
+            id: r.system_user_id, // If null, they don't have an account yet
+            staff_id: r.StaffID,
+            username: `${r.FirstName} ${r.Surname}`,
+            department: r.DepartmentCode
+        }));
+    } catch (error) {
+        console.error('Failed to search managers:', error);
         return [];
     }
 }

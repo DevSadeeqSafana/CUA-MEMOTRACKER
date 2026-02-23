@@ -15,7 +15,7 @@ import {
     AlertTriangle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { createUser, searchHRStaff, getManagers } from '@/lib/actions';
+import { createUser, searchHRStaff, getManagers, searchManagers } from '@/lib/actions';
 import toast from 'react-hot-toast';
 
 interface CreateUserFormProps {
@@ -37,6 +37,7 @@ export default function CreateUserForm({ onClose }: CreateUserFormProps) {
     const [availableManagers, setAvailableManagers] = useState<any[]>([]);
     const [managerSearchTerm, setManagerSearchTerm] = useState('');
     const [selectedManager, setSelectedManager] = useState<any>(null);
+    const [isSearchingManagers, setIsSearchingManagers] = useState(false);
 
     const [formData, setFormData] = useState({
         staff_id: '',
@@ -55,6 +56,22 @@ export default function CreateUserForm({ onClose }: CreateUserFormProps) {
         };
         fetchManagers();
     }, []);
+
+    useEffect(() => {
+        if (managerSearchTerm.length < 2) {
+            // If empty, reset to initial managers if needed or just leave
+            return;
+        }
+
+        const delayDebounceFn = setTimeout(async () => {
+            setIsSearchingManagers(true);
+            const results = await searchManagers(managerSearchTerm);
+            setAvailableManagers(results);
+            setIsSearchingManagers(false);
+        }, 300);
+
+        return () => clearTimeout(delayDebounceFn);
+    }, [managerSearchTerm]);
 
     useEffect(() => {
         if (hrSearchTerm.length < 2) {
@@ -100,6 +117,28 @@ export default function CreateUserForm({ onClose }: CreateUserFormProps) {
             // Silent fail — the server action will catch it on submit
         } finally {
             setIsCheckingDuplicate(false);
+        }
+
+        // AUTO-FETCH MANAGER FROM HR MAPPING
+        if (staff.LineManagerID) {
+            setIsSearchingManagers(true);
+            try {
+                const managerResults = await searchManagers(staff.LineManagerID);
+                if (managerResults.length > 0) {
+                    const manager = managerResults[0];
+                    if (manager.id) {
+                        setSelectedManager(manager);
+                        setFormData(prev => ({ ...prev, line_manager_id: manager.id }));
+                        toast.success(`Default Line Manager (${manager.username}) identified from HR.`);
+                    } else {
+                        toast.error(`HR Manager ${manager.username} found but has no system account yet.`);
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to auto-fetch manager:", err);
+            } finally {
+                setIsSearchingManagers(false);
+            }
         }
     };
 
@@ -340,40 +379,50 @@ export default function CreateUserForm({ onClose }: CreateUserFormProps) {
                         <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={20} />
                         <input
                             type="text"
-                            placeholder="Search available Line Managers..."
+                            placeholder="Search Managers by Name or Staff ID..."
                             value={managerSearchTerm}
                             onChange={e => setManagerSearchTerm(e.target.value)}
                             className="w-full bg-slate-50 border border-slate-200 rounded-[1.5rem] py-5 pl-14 pr-6 focus:ring-8 focus:ring-blue-500/5 focus:border-blue-500 transition-all outline-none font-bold text-slate-700 placeholder:text-slate-300 placeholder:font-medium"
                         />
+                        {isSearchingManagers && (
+                            <div className="absolute right-5 top-1/2 -translate-y-1/2">
+                                <Loader2 className="animate-spin text-blue-500" size={20} />
+                            </div>
+                        )}
                     </div>
 
-                    {managerSearchTerm && (
+                    {managerSearchTerm && availableManagers.length > 0 && (
                         <div className="bg-white border border-slate-200 rounded-[2rem] shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300 max-h-48 overflow-y-auto">
-                            {availableManagers
-                                .filter(m =>
-                                    m.username.toLowerCase().includes(managerSearchTerm.toLowerCase()) ||
-                                    m.department.toLowerCase().includes(managerSearchTerm.toLowerCase())
-                                )
-                                .map((manager) => (
-                                    <button
-                                        key={manager.id}
-                                        type="button"
-                                        onClick={() => {
-                                            setSelectedManager(manager);
-                                            setFormData(prev => ({ ...prev, line_manager_id: manager.id }));
-                                            setManagerSearchTerm('');
-                                        }}
-                                        className="w-full flex items-center gap-4 p-4 hover:bg-blue-50 text-left transition-all border-b border-slate-50 last:border-0"
-                                    >
-                                        <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">
-                                            {manager.username[0]}
-                                        </div>
-                                        <div>
-                                            <p className="font-bold text-slate-900 text-sm tracking-tight">{manager.username}</p>
-                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{manager.department}</p>
-                                        </div>
-                                    </button>
-                                ))
+                            {availableManagers.map((manager) => (
+                                <button
+                                    key={manager.staff_id || manager.id}
+                                    type="button"
+                                    onClick={() => {
+                                        if (!manager.id) {
+                                            toast.error(`${manager.username} does not have a system account. Provision them first to assign as a manager.`);
+                                            return;
+                                        }
+                                        setSelectedManager(manager);
+                                        setFormData(prev => ({ ...prev, line_manager_id: manager.id }));
+                                        setManagerSearchTerm('');
+                                    }}
+                                    className={cn(
+                                        "w-full flex items-center gap-4 p-4 hover:bg-blue-50 text-left transition-all border-b border-slate-50 last:border-0",
+                                        !manager.id && "opacity-50 cursor-not-allowed grayscale"
+                                    )}
+                                >
+                                    <div className={cn(
+                                        "w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs",
+                                        manager.id ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-400"
+                                    )}>
+                                        {manager.username[0]}
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-slate-900 text-sm tracking-tight">{manager.username}</p>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{manager.department} {!manager.id && "• No Account"}</p>
+                                    </div>
+                                </button>
+                            ))
                             }
                         </div>
                     )}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
     Save,
     Mail,
@@ -17,7 +17,7 @@ import {
     Check
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { updateUser } from '@/lib/actions';
+import { updateUser, searchManagers } from '@/lib/actions';
 
 interface EditUserFormProps {
     user: any;
@@ -42,6 +42,25 @@ export default function EditUserForm({ user, managers, onClose }: EditUserFormPr
     const [selectedManager, setSelectedManager] = useState<any>(
         user.line_manager_id ? managers.find(m => m.id === user.line_manager_id) : null
     );
+
+    const [availableManagers, setAvailableManagers] = useState<any[]>(managers);
+    const [isSearchingManagers, setIsSearchingManagers] = useState(false);
+
+    useEffect(() => {
+        if (managerSearchTerm.length < 2) {
+            setAvailableManagers(managers);
+            return;
+        }
+
+        const delayDebounceFn = setTimeout(async () => {
+            setIsSearchingManagers(true);
+            const results = await searchManagers(managerSearchTerm);
+            setAvailableManagers(results);
+            setIsSearchingManagers(false);
+        }, 300);
+
+        return () => clearTimeout(delayDebounceFn);
+    }, [managerSearchTerm, managers]);
 
     const availableRoles = [
         'Memo Creator',
@@ -205,40 +224,50 @@ export default function EditUserForm({ user, managers, onClose }: EditUserFormPr
                         <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={20} />
                         <input
                             type="text"
-                            placeholder="Change Line Manager..."
+                            placeholder="Search Managers by Name or Staff ID..."
                             value={managerSearchTerm}
                             onChange={e => setManagerSearchTerm(e.target.value)}
                             className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3.5 px-14 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none font-bold"
                         />
+                        {isSearchingManagers && (
+                            <div className="absolute right-5 top-1/2 -translate-y-1/2">
+                                <Loader2 className="animate-spin text-blue-500" size={20} />
+                            </div>
+                        )}
                     </div>
 
-                    {managerSearchTerm && (
+                    {managerSearchTerm && availableManagers.length > 0 && (
                         <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300 max-h-48 overflow-y-auto z-50 relative">
-                            {managers
-                                .filter(m =>
-                                    m.username.toLowerCase().includes(managerSearchTerm.toLowerCase()) ||
-                                    m.department.toLowerCase().includes(managerSearchTerm.toLowerCase())
-                                )
-                                .map((manager) => (
-                                    <button
-                                        key={manager.id}
-                                        type="button"
-                                        onClick={() => {
-                                            setSelectedManager(manager);
-                                            setFormData(prev => ({ ...prev, line_manager_id: manager.id }));
-                                            setManagerSearchTerm('');
-                                        }}
-                                        className="w-full flex items-center gap-4 p-4 hover:bg-blue-50 text-left transition-all border-b border-slate-50 last:border-0"
-                                    >
-                                        <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">
-                                            {manager.username[0]}
-                                        </div>
-                                        <div>
-                                            <p className="font-bold text-slate-900 text-sm tracking-tight">{manager.username}</p>
-                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{manager.department}</p>
-                                        </div>
-                                    </button>
-                                ))
+                            {availableManagers.map((manager) => (
+                                <button
+                                    key={manager.staff_id || manager.id}
+                                    type="button"
+                                    onClick={() => {
+                                        if (!manager.id) {
+                                            // Manager exists in HR but has no account
+                                            return; // Optionally show a toast here too
+                                        }
+                                        setSelectedManager(manager);
+                                        setFormData(prev => ({ ...prev, line_manager_id: manager.id }));
+                                        setManagerSearchTerm('');
+                                    }}
+                                    className={cn(
+                                        "w-full flex items-center gap-4 p-4 hover:bg-blue-50 text-left transition-all border-b border-slate-50 last:border-0",
+                                        !manager.id && "opacity-50 cursor-not-allowed grayscale"
+                                    )}
+                                >
+                                    <div className={cn(
+                                        "w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs",
+                                        manager.id ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-400"
+                                    )}>
+                                        {manager.username[0]}
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-slate-900 text-sm tracking-tight">{manager.username}</p>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{manager.department} {!manager.id && "• No Account"}</p>
+                                    </div>
+                                </button>
+                            ))
                             }
                         </div>
                     )}
