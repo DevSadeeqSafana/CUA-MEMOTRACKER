@@ -1,0 +1,14 @@
+{
+    "version": 2,
+    "buildCommand": "npm run build",
+    "installCommand": "npm install",
+    "framework": "nextjs",
+    "env": {
+        "DB_HOST": "@db_host",
+        "DB_USER": "@db_user",
+        "DB_PASSWORD": "@db_password",
+        "DB_NAME": "@db_name",
+        "NEXTAUTH_URL": "@nextauth_url",
+        "NEXTAUTH_SECRET": "@nextauth_secret"
+    }
+}
