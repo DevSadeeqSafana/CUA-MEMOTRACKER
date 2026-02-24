@@ -75,7 +75,7 @@ export default function ReviewerDecisionPanel({ memoId, approvalId, memoTitle }:
                     <CheckCircle2 size={40} />
                 </div>
                 <div className="space-y-2">
-                    <h2 className="text-3xl font-black text-white font-outfit uppercase tracking-tight">Decision Recorded</h2>
+                    <h2 className="text-2xl font-black text-white font-outfit uppercase tracking-tight">Decision Recorded</h2>
                     <p className="text-emerald-50/80 font-medium">The institutional workflow for this request has been successfully updated.</p>
                 </div>
             </div>
@@ -93,7 +93,7 @@ export default function ReviewerDecisionPanel({ memoId, approvalId, memoTitle }:
                             <ShieldCheck size={32} />
                         </div>
                         <div className="space-y-1">
-                            <h3 className="text-3xl font-black text-white font-outfit uppercase tracking-tight">Final Decision Desk</h3>
+                            <h3 className="text-2xl font-black text-white font-outfit uppercase tracking-tight">Final Decision Desk</h3>
                             <p className="text-blue-100/60 font-medium flex items-center gap-2">
                                 <FileSignature size={14} />
                                 Formal authorization required for institutional broadcasting.

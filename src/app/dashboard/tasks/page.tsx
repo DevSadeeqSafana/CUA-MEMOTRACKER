@@ -9,7 +9,8 @@ import {
     ChevronRight,
     Inbox,
     Bell,
-    ShieldCheck
+    ShieldCheck,
+    Wallet
 } from 'lucide-react';
 import Link from 'next/link';
 import { cn, formatDate } from '@/lib/utils';
@@ -22,7 +23,8 @@ export default async function TaskCenterPage() {
     // 1. Pending Approvals (For Line Managers / Reviewers)
     // Only shows if it's currently THEIR turn to approve
     const pendingApprovals = await query(
-        `SELECT m.*, u.username as creator_name, a.id as approval_id, a.step_order 
+        `SELECT m.*, u.username as creator_name, a.id as approval_id, a.step_order,
+                (SELECT COUNT(*) FROM memo_budget_info bi WHERE bi.memo_id = m.id) > 0 as is_budget_memo 
      FROM memos m 
      JOIN memo_approvals a ON m.id = a.memo_id 
      JOIN memo_system_users u ON m.created_by = u.id 
@@ -40,7 +42,8 @@ export default async function TaskCenterPage() {
 
     // 2. Distributed Memos (For Recipients / Receivers)
     const distributedMemos = await query(
-        `SELECT m.*, u.username as creator_name, mr.read_at, mr.acknowledged_at
+        `SELECT m.*, u.username as creator_name, mr.read_at, mr.acknowledged_at,
+                (SELECT COUNT(*) FROM memo_budget_info bi WHERE bi.memo_id = m.id) > 0 as is_budget_memo
      FROM memos m
      JOIN memo_recipients mr ON m.id = mr.memo_id
      JOIN memo_system_users u ON m.created_by = u.id
@@ -114,6 +117,15 @@ export default async function TaskCenterPage() {
                                                 </div>
                                                 <span className="w-1 h-1 rounded-full bg-slate-200"></span>
                                                 <span className="text-[10px] font-bold text-slate-400">{memo.department}</span>
+                                                {memo.is_budget_memo === 1 && (
+                                                    <>
+                                                        <span className="w-1 h-1 rounded-full bg-slate-200"></span>
+                                                        <span className="text-emerald-600 font-bold uppercase tracking-wider text-[9px] flex items-center gap-1">
+                                                            <Wallet size={12} className="shrink-0" />
+                                                            Budget
+                                                        </span>
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
                                         <ChevronRight size={18} className="text-slate-300 group-hover:text-blue-600 transition-all group-hover:translate-x-1 shrink-0 mt-2" />
@@ -180,6 +192,12 @@ export default async function TaskCenterPage() {
                                                 )}>
                                                     Type: {memo.memo_type}
                                                 </span>
+                                                {memo.is_budget_memo === 1 && (
+                                                    <span className="text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md border bg-emerald-50 text-emerald-600 border-emerald-100 flex items-center gap-1">
+                                                        <Wallet size={10} className="shrink-0" />
+                                                        Budget Requisition
+                                                    </span>
+                                                )}
                                                 <span className="text-[10px] font-bold text-slate-400 truncate">From {memo.creator_name}</span>
                                             </div>
                                         </div>

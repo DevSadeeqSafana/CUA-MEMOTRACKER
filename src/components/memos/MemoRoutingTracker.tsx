@@ -103,8 +103,8 @@ export default function MemoRoutingTracker({ memo, approvals, recipients }: Memo
     };
 
     return (
-        <div className="bg-white border border-slate-200 rounded-[2.5rem] p-10 shadow-sm space-y-8">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-6">
+        <div className="bg-white border border-slate-200 rounded-[1.5rem] p-6 shadow-sm space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
                 <div>
                     <h3 className="text-xl font-black text-[#1a365d] font-outfit uppercase tracking-tight flex items-center gap-3">
                         <Send size={18} className="text-blue-500" />
@@ -141,11 +141,11 @@ export default function MemoRoutingTracker({ memo, approvals, recipients }: Memo
 
                             {/* Node */}
                             <div className={cn(
-                                "w-12 h-12 rounded-2xl flex items-center justify-center border-2 shadow-sm shrink-0 transition-all",
+                                "w-10 h-10 rounded-xl flex items-center justify-center border-2 shadow-sm shrink-0 transition-all",
                                 colorMap[step.status]
                             )}>
-                                {idx === 0 ? <FilePlus size={20} /> :
-                                    step.id === 'distributed' ? <Users size={20} /> :
+                                {idx === 0 ? <FilePlus size={16} /> :
+                                    step.id === 'distributed' ? <Users size={16} /> :
                                         iconMap[step.status]}
                             </div>
 
@@ -197,17 +197,17 @@ export default function MemoRoutingTracker({ memo, approvals, recipients }: Memo
                         <Bell size={12} />
                         Recipient Treatment Status
                     </h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {recipients.map((rec) => (
                             <div key={rec.recipient_id} className={cn(
-                                "flex items-center justify-between p-4 rounded-2xl border transition-all",
+                                "flex items-center justify-between p-3 rounded-xl border transition-all",
                                 rec.acknowledged_at
                                     ? "bg-emerald-50 border-emerald-100"
                                     : "bg-slate-50 border-slate-100"
                             )}>
                                 <div className="flex items-center gap-3 overflow-hidden">
                                     <div className={cn(
-                                        "w-8 h-8 rounded-xl flex items-center justify-center text-[10px] font-black shrink-0",
+                                        "w-7 h-7 rounded-lg flex items-center justify-center text-[9px] font-black shrink-0",
                                         rec.acknowledged_at ? "bg-emerald-200 text-emerald-800" : "bg-slate-200 text-slate-500"
                                     )}>
                                         {rec.recipient_name[0]}
@@ -222,9 +222,9 @@ export default function MemoRoutingTracker({ memo, approvals, recipients }: Memo
                                     </div>
                                 </div>
                                 {rec.acknowledged_at ? (
-                                    <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
+                                    <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
                                 ) : (
-                                    <Clock size={16} className="text-slate-300 shrink-0" />
+                                    <Clock size={14} className="text-slate-200 shrink-0" />
                                 )}
                             </div>
                         ))}

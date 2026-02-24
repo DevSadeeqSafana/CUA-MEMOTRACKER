@@ -85,6 +85,10 @@ export default function EditUserForm({ user, managers, onClose }: EditUserFormPr
             setError('Please select at least one role.');
             return;
         }
+        if (!formData.line_manager_id) {
+            setError('Please assign a Line Manager for this user.');
+            return;
+        }
 
         setIsLoading(true);
         setError(null);
@@ -117,19 +121,19 @@ export default function EditUserForm({ user, managers, onClose }: EditUserFormPr
     }
 
     return (
-        <div className="p-8 space-y-8 max-h-[90vh] overflow-y-auto font-sans">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-6">
-                <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
-                        <UserCheck size={24} />
+        <div className="p-6 space-y-6 max-h-[90vh] overflow-y-auto font-sans">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
+                        <UserCheck size={20} />
                     </div>
                     <div>
-                        <h2 className="text-2xl font-black text-[#1a365d] font-outfit leading-none">Modify Account</h2>
-                        <p className="text-sm text-slate-400 font-medium mt-1">Updating credentials for {user.username}.</p>
+                        <h2 className="text-xl font-black text-[#1a365d] font-outfit leading-none">Modify Account</h2>
+                        <p className="text-[10px] text-slate-400 font-medium mt-1">Updating credentials for {user.username}.</p>
                     </div>
                 </div>
                 <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-400">
-                    <X size={24} />
+                    <X size={20} />
                 </button>
             </div>
 
@@ -140,44 +144,44 @@ export default function EditUserForm({ user, managers, onClose }: EditUserFormPr
                 </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-slate-900">
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-slate-900">
                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Update Name</label>
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Update Name</label>
                         <input
                             required
                             value={formData.username}
                             onChange={e => setFormData(prev => ({ ...prev, username: e.target.value }))}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3.5 px-6 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none font-bold"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-5 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none font-bold text-sm"
                         />
                     </div>
 
                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Update Email</label>
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Update Email</label>
                         <input
                             type="email"
                             required
                             value={formData.email}
                             onChange={e => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3.5 px-6 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none font-bold"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-5 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none font-bold text-sm"
                         />
                     </div>
 
                     <div className="space-y-2 md:col-span-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Department</label>
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Department</label>
                         <input
                             required
                             value={formData.department}
                             readOnly
-                            className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3.5 px-6 focus:ring-0 text-slate-400 font-bold cursor-not-allowed"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-5 focus:ring-0 text-slate-400 font-bold cursor-not-allowed text-sm"
                         />
                     </div>
                 </div>
 
-                <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 flex items-center justify-between">
+                <div className="p-4 bg-slate-50 rounded-[1.5rem] border border-slate-100 flex items-center justify-between">
                     <div>
-                        <p className="text-sm font-black text-[#1a365d] font-outfit">Account Status</p>
-                        <p className="text-xs text-slate-400 font-medium">Determine if this user can access the institutional portal.</p>
+                        <p className="text-xs font-black text-[#1a365d] font-outfit">Account Status</p>
+                        <p className="text-[10px] text-slate-400 font-medium">Determine if this user can access the institutional portal.</p>
                     </div>
                     <button
                         type="button"
@@ -185,27 +189,27 @@ export default function EditUserForm({ user, managers, onClose }: EditUserFormPr
                         className="transition-all"
                     >
                         {formData.is_active ? (
-                            <div className="flex items-center gap-2 text-emerald-600 font-bold uppercase text-[10px] tracking-widest">
-                                Active <ToggleRight size={32} />
+                            <div className="flex items-center gap-2 text-emerald-600 font-bold uppercase text-[9px] tracking-widest">
+                                Active <ToggleRight size={24} />
                             </div>
                         ) : (
-                            <div className="flex items-center gap-2 text-slate-400 font-bold uppercase text-[10px] tracking-widest">
-                                Inactive <ToggleLeft size={32} />
+                            <div className="flex items-center gap-2 text-slate-400 font-bold uppercase text-[9px] tracking-widest">
+                                Inactive <ToggleLeft size={24} />
                             </div>
                         )}
                     </button>
                 </div>
 
-                <div className="space-y-4">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Access Roles</label>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="space-y-3">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Access Roles</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                         {availableRoles.map((role) => (
                             <button
                                 key={role}
                                 type="button"
                                 onClick={() => toggleRole(role)}
                                 className={cn(
-                                    "flex items-center gap-2 px-4 py-3 border rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all",
+                                    "flex items-center gap-2 px-3 py-2 border rounded-xl text-[9px] font-black uppercase tracking-widest transition-all",
                                     formData.roles.includes(role)
                                         ? "bg-[#1a365d] border-[#1a365d] text-white shadow-lg"
                                         : "bg-white border-slate-200 text-slate-500 hover:border-blue-300"
@@ -218,16 +222,16 @@ export default function EditUserForm({ user, managers, onClose }: EditUserFormPr
                     </div>
                 </div>
 
-                <div className="space-y-4">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Assigned Line Manager</label>
+                <div className="space-y-3">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Assigned Line Manager</label>
                     <div className="relative group">
-                        <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={20} />
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={16} />
                         <input
                             type="text"
                             placeholder="Search Managers by Name or Staff ID..."
                             value={managerSearchTerm}
                             onChange={e => setManagerSearchTerm(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3.5 px-14 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none font-bold"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-12 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none font-bold text-sm"
                         />
                         {isSearchingManagers && (
                             <div className="absolute right-5 top-1/2 -translate-y-1/2">
@@ -294,20 +298,20 @@ export default function EditUserForm({ user, managers, onClose }: EditUserFormPr
                     )}
                 </div>
 
-                <div className="pt-6 flex gap-4">
+                <div className="pt-4 flex gap-3">
                     <button
                         type="button"
                         onClick={onClose}
-                        className="flex-1 px-8 py-4 border border-slate-200 rounded-2xl font-bold text-slate-500 hover:bg-slate-50 transition-all"
+                        className="flex-1 px-6 py-3 border border-slate-200 rounded-xl font-bold text-slate-500 hover:bg-slate-50 transition-all text-xs"
                     >
                         Discard
                     </button>
                     <button
                         type="submit"
                         disabled={isLoading}
-                        className="flex-2 px-12 py-4 bg-[#1a365d] text-white rounded-2xl font-bold hover:bg-[#2c5282] transition-all shadow-xl shadow-blue-900/20 disabled:opacity-50 flex items-center justify-center gap-3"
+                        className="flex-2 px-10 py-3 bg-[#1a365d] text-white rounded-xl font-bold hover:bg-[#2c5282] transition-all shadow-xl shadow-blue-900/20 disabled:opacity-50 flex items-center justify-center gap-3 text-xs"
                     >
-                        {isLoading ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
+                        {isLoading ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
                         Save Changes
                     </button>
                 </div>

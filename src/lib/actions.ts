@@ -16,7 +16,6 @@ export async function createMemo(data: FormData, isDraft: boolean) {
 
     const userId = session.user.id;
 
-    // Extract fields from FormData
     const title = data.get('title') as string;
     const content = data.get('content') as string;
     const department = data.get('department') as string;
@@ -24,6 +23,13 @@ export async function createMemo(data: FormData, isDraft: boolean) {
     const priority = data.get('priority') as string;
     const memo_type = data.get('memo_type') as string;
     const expiry_date = data.get('expiry_date') as string;
+    const is_budget_memo = data.get('is_budget_memo') === 'true';
+    const year_id = data.get('year_id') as string;
+    const budget_category = data.get('budget_category') as string;
+    const other_category = data.get('other_category') as string;
+    const budget_items_raw = data.get('budget_items') as string;
+    const budget_items = budget_items_raw ? JSON.parse(budget_items_raw) : [];
+
     const recipient_ids = JSON.parse(data.get('recipient_ids') as string || '[]');
     const files = data.getAll('attachments') as File[];
 
@@ -52,6 +58,27 @@ export async function createMemo(data: FormData, isDraft: boolean) {
         ) as any;
 
         const memoId = result.insertId;
+
+        // Handle Budget Info
+        if (is_budget_memo) {
+            await query(
+                `INSERT INTO memo_budget_info 
+                 (memo_id, year_id, budget_category, other_category) 
+                 VALUES (?, ?, ?, ?)`,
+                [memoId, year_id, budget_category, other_category]
+            );
+
+            // Insert each line item
+            for (const item of budget_items) {
+                const subtotal = (item.quantity || 0) * (item.amount || 0);
+                await query(
+                    `INSERT INTO memo_budget_items 
+                     (memo_id, name, description, quantity, amount, total) 
+                     VALUES (?, ?, ?, ?, ?, ?)`,
+                    [memoId, item.name, item.description || '', item.quantity || 1, item.amount || 0, subtotal]
+                );
+            }
+        }
 
         // Handle Attachments
         if (files.length > 0) {
@@ -96,70 +123,23 @@ export async function createMemo(data: FormData, isDraft: boolean) {
 
             let currentStep = 1;
 
-            if (!isLineManager) {
-                // Step 1: Hierarchical Line Manager
-                const userResult = await query('SELECT staff_id FROM memo_system_users WHERE id = ?', [userId]) as any[];
-                const staffId = userResult.length > 0 ? userResult[0].staff_id : null;
+            // Step 1: Accountability Routing (Always route to the user's assigned Line Manager)
+            const userResult = await query('SELECT line_manager_id FROM memo_system_users WHERE id = ?', [userId]) as any[];
+            const managerId = userResult.length > 0 ? userResult[0].line_manager_id : null;
 
-                if (staffId) {
-                    // Check if user has an explicitly assigned line manager first
-                    const assignedManagerResult = await query('SELECT line_manager_id FROM memo_system_users WHERE staff_id = ?', [staffId]) as any[];
-                    let managerId = assignedManagerResult.length > 0 ? assignedManagerResult[0].line_manager_id : null;
+            if (managerId) {
+                await query(
+                    'INSERT INTO memo_approvals (memo_id, approver_id, step_order, status) VALUES (?, ?, ?, ?)',
+                    [memoId, managerId, currentStep++, 'Pending']
+                );
 
-                    // If no explicit mapping, fallback to hr_staff table lookup
-                    if (!managerId) {
-                        const hrResult = await query('SELECT LineManagerID FROM hr_staff WHERE StaffID = ?', [staffId]) as any[];
-                        const hrManagerId = hrResult.length > 0 ? hrResult[0].LineManagerID : null;
-
-                        if (hrManagerId) {
-                            const systemManager = await query('SELECT id FROM memo_system_users WHERE staff_id = ?', [hrManagerId]) as any[];
-                            managerId = systemManager.length > 0 ? systemManager[0].id : null;
-                        }
-                    }
-
-                    if (managerId) {
-                        await query(
-                            'INSERT INTO memo_approvals (memo_id, approver_id, step_order, status) VALUES (?, ?, ?, ?)',
-                            [memoId, managerId, currentStep++, 'Pending']
-                        );
-                    }
-                }
-            }
-
-            // Step 2 (Final Decision Maker): Global Reviewer or Admin
-            // If it's an Approval memo, we MUST have a final decision maker
-            if (memo_type === 'Approval') {
-                const reviewers = await query(`
-                    SELECT u.id FROM memo_system_users u 
-                    JOIN user_roles ur ON u.id = ur.user_id 
-                    JOIN roles r ON ur.role_id = r.id 
-                    WHERE r.name = 'Reviewer' LIMIT 1`
-                ) as any[];
-
-                if (reviewers.length > 0) {
-                    await query(
-                        'INSERT INTO memo_approvals (memo_id, approver_id, step_order, status) VALUES (?, ?, ?, ?)',
-                        [memoId, reviewers[0].id, currentStep++, 'Pending']
-                    );
-                }
-            }
-
-            // Determine initial status based on who needs to act first
-            const firstStep = await query(
-                'SELECT approver_id FROM memo_approvals WHERE memo_id = ? ORDER BY step_order ASC LIMIT 1',
-                [memoId]
-            ) as any[];
-
-            if (firstStep.length > 0) {
-                const targetStatus = !isLineManager ? 'Line Manager Review' : 'Reviewer Approval';
-                await query('UPDATE memos SET status = ? WHERE id = ?', [targetStatus, memoId]);
-
+                await query('UPDATE memos SET status = "Line Manager Review" WHERE id = ?', [memoId]);
                 await query(
                     'INSERT INTO notifications (user_id, memo_id, message) VALUES (?, ?, ?)',
-                    [firstStep[0].approver_id, memoId, `A new memo "${title}" requires your review.`]
+                    [managerId, memoId, `A new memo "${title}" from ${session.user.name} requires your validation.`]
                 );
             } else {
-                // No approvals needed? (Unlikely for CUA records)
+                // Final safety: if no manager (should be impossible now), distribute directly
                 await query('UPDATE memos SET status = "Distributed" WHERE id = ?', [memoId]);
             }
         }
@@ -633,4 +613,78 @@ export async function changePassword(formData: { currentPassword: string; newPas
     );
 
     return { success: true };
+}
+
+export async function getBudgetItems(searchTerm: string, yearId?: string) {
+    const session = await auth();
+    if (!session?.user) return [];
+
+    try {
+        let sql = `
+            SELECT i.EntryID as id, i.ItemName as name, i.ItemDescription as description, i.Amount as amount, i.Total as total,
+                   b.EntryID as budget_ref, b.YearID as year_id
+            FROM hr_finance_budget_item i
+            JOIN hr_finance_budget b ON i.BudgetID = b.EntryID
+            WHERE (i.ItemName LIKE ? OR i.ItemDescription LIKE ?)
+        `;
+        const params: any[] = [`%${searchTerm}%`, `%${searchTerm}%`];
+
+        if (yearId) {
+            sql += ` AND b.YearID = ?`;
+            params.push(yearId);
+        }
+
+        sql += ` LIMIT 20`;
+
+        const items = await query(sql, params) as any[];
+        return items;
+    } catch (error) {
+        console.error('Failed to fetch budget items:', error);
+        return [];
+    }
+}
+
+export async function getBudgetAccounts() {
+    try {
+        const accounts = await query(`
+            SELECT DISTINCT AccountName as name, Category as category
+            FROM hr_finance_account
+            LIMIT 100
+        `) as any[];
+        return accounts;
+    } catch (error) {
+        console.error('Failed to fetch budget accounts:', error);
+        return [];
+    }
+}
+
+export async function getBudgetItemLists() {
+    try {
+        const items = await query(`
+            SELECT EntryID as id, ItemName as name
+            FROM hr_finance_budget_item_list
+            ORDER BY ItemName ASC
+        `) as any[];
+        return items;
+    } catch (error) {
+        console.error('Failed to fetch budget item list:', error);
+        return [];
+    }
+}
+export async function getBudgetYears() {
+    try {
+        const years = await query(`
+            SELECT EntryID as id, StartDate, EndDate
+            FROM hr_finance_year
+            ORDER BY StartDate DESC
+        `) as any[];
+
+        return years.map(y => ({
+            id: y.id,
+            name: `${new Date(y.StartDate).toLocaleDateString()} - ${new Date(y.EndDate).toLocaleDateString()}`
+        }));
+    } catch (error) {
+        console.error('Failed to fetch budget years:', error);
+        return [];
+    }
 }

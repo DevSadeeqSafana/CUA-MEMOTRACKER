@@ -91,54 +91,54 @@ export default function MemoHistory({ memo, approvals, recipients }: MemoHistory
     });
 
     return (
-        <div className="bg-white border border-slate-200 rounded-[2.5rem] p-10 shadow-sm space-y-10">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-8">
+        <div className="bg-white border border-slate-200 rounded-[1.5rem] p-6 shadow-sm space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
                 <div>
                     <h3 className="text-xl font-black text-[#1a365d] font-outfit uppercase tracking-tight">Institutional Audit Trail</h3>
                     <p className="text-xs text-slate-400 font-medium mt-1">Immutable lifecycle tracking for Reference {memo.reference_number}</p>
                 </div>
             </div>
 
-            <div className="space-y-1 relative ml-4">
-                <div className="absolute top-2 bottom-2 left-[19px] w-0.5 bg-slate-100" />
+            <div className="space-y-1 relative ml-2">
+                <div className="absolute top-2 bottom-2 left-[15px] w-0.5 bg-slate-100" />
 
                 {sortedEvents.map((event, idx) => (
-                    <div key={event.id} className="relative flex items-start gap-8 pb-10 group last:pb-0">
+                    <div key={event.id} className="relative flex items-start gap-6 pb-6 group last:pb-0">
                         <div className={cn(
-                            "w-10 h-10 rounded-2xl flex items-center justify-center z-10 border-4 border-white shadow-sm transition-all group-hover:scale-110",
+                            "w-8 h-8 rounded-xl flex items-center justify-center z-10 border-2 border-white shadow-sm transition-all group-hover:scale-110",
                             event.status === 'completed' ? "bg-emerald-500 text-white" :
                                 event.status === 'failed' ? "bg-red-500 text-white" :
                                     "bg-amber-100 text-amber-600 animate-pulse border-amber-50"
                         )}>
-                            {event.type === 'creation' && <FilePlus size={16} />}
-                            {(event.type === 'approval' || event.type === 'acknowledgment') && <CheckCircle2 size={16} />}
-                            {event.type === 'rejection' && <XCircle size={16} />}
-                            {event.type === 'distribution' && <Send size={16} />}
+                            {event.type === 'creation' && <FilePlus size={14} />}
+                            {(event.type === 'approval' || event.type === 'acknowledgment') && <CheckCircle2 size={14} />}
+                            {event.type === 'rejection' && <XCircle size={14} />}
+                            {event.type === 'distribution' && <Send size={14} />}
                         </div>
 
-                        <div className="flex-grow space-y-1 pt-1">
+                        <div className="flex-grow space-y-0.5 pt-0.5">
                             <div className="flex items-center justify-between">
                                 <h4 className={cn(
-                                    "font-black text-sm uppercase tracking-wider",
+                                    "font-black text-xs uppercase tracking-wider",
                                     event.status === 'completed' ? "text-[#1a365d]" :
                                         event.status === 'failed' ? "text-red-700" :
                                             "text-amber-700"
                                 )}>
                                     {event.title}
                                 </h4>
-                                <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-100">
+                                <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
                                     {event.timestamp ? formatDate(event.timestamp) : 'Pending Action'}
                                 </span>
                             </div>
-                            <p className="text-sm font-medium text-slate-500 leading-relaxed max-w-lg">
+                            <p className="text-xs font-medium text-slate-500 leading-relaxed max-w-lg">
                                 {event.description}
                             </p>
                             {event.user && (
-                                <div className="flex items-center gap-2 mt-2">
-                                    <div className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[8px] font-black text-slate-400">
-                                        <User size={10} />
+                                <div className="flex items-center gap-2 mt-1.5">
+                                    <div className="w-4 h-4 rounded-full bg-slate-100 flex items-center justify-center text-[7px] font-black text-slate-400">
+                                        <User size={8} />
                                     </div>
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{event.user}</span>
+                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{event.user}</span>
                                 </div>
                             )}
                         </div>

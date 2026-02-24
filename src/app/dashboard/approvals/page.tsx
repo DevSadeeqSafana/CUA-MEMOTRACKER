@@ -35,8 +35,8 @@ export default async function ApprovalsPage() {
     return (
         <div className="space-y-6">
             <div>
-                <h2 className="text-2xl font-bold">Pending Approvals</h2>
-                <p className="text-muted-foreground">Memos waiting for your review and approval.</p>
+                <h2 className="text-xl font-black text-[#1a365d] font-outfit uppercase tracking-tight">Pending Approvals</h2>
+                <p className="text-[10px] text-slate-400 font-medium font-sans">Memos waiting for your review and approval.</p>
             </div>
 
             {pendingApprovals.length === 0 ? (
@@ -50,35 +50,35 @@ export default async function ApprovalsPage() {
                         <Link
                             key={item.approval_id}
                             href={`/dashboard/memos/${item.uuid}`}
-                            className="group bg-card border rounded-xl p-5 hover:border-primary/50 transition-all hover:shadow-md flex items-center justify-between"
+                            className="group bg-white border border-slate-200 rounded-xl p-4 hover:border-blue-500 transition-all hover:shadow-md flex items-center justify-between"
                         >
                             <div className="flex items-center gap-5 overflow-hidden">
-                                <div className="w-12 h-12 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                                    <FileText size={24} />
+                                <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                                    <FileText size={20} />
                                 </div>
                                 <div className="overflow-hidden">
-                                    <div className="flex items-center gap-2 mb-1 text-xs">
-                                        <span className="font-mono text-muted-foreground">{item.reference_number}</span>
-                                        <span className="text-muted-foreground">•</span>
-                                        <span className="font-semibold text-primary">Step {item.step_order}</span>
+                                    <div className="flex items-center gap-2 mb-0.5 text-[9px]">
+                                        <span className="font-mono text-slate-400 uppercase">{item.reference_number}</span>
+                                        <span className="text-slate-300">•</span>
+                                        <span className="font-black text-blue-600 uppercase tracking-widest">Step {item.step_order}</span>
                                     </div>
-                                    <h3 className="font-bold text-lg truncate group-hover:text-primary transition-colors">
+                                    <h3 className="font-black text-[#1a365d] font-outfit text-base truncate group-hover:text-blue-600 transition-colors uppercase tracking-tight">
                                         {item.title}
                                     </h3>
-                                    <div className="text-sm text-muted-foreground flex items-center gap-2">
-                                        <span>From: <span className="font-medium text-foreground">{item.creator_name}</span></span>
+                                    <div className="text-[10px] text-slate-400 flex items-center gap-2 font-medium mt-0.5">
+                                        <span className="uppercase tracking-wider">From: <span className="font-bold text-slate-700">{item.creator_name}</span></span>
                                         <span>•</span>
-                                        <span>{item.department}</span>
+                                        <span className="uppercase tracking-wider">{item.department}</span>
                                     </div>
                                 </div>
                             </div>
 
                             <div className="flex items-center gap-4 shrink-0">
                                 <div className="text-right hidden sm:block">
-                                    <p className="text-xs text-muted-foreground">Received on</p>
-                                    <p className="text-sm font-medium">{formatDate(item.created_at)}</p>
+                                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none mb-1">Received</p>
+                                    <p className="text-xs font-black text-slate-900 uppercase">{formatDate(item.created_at)}</p>
                                 </div>
-                                <ChevronRight size={20} className="text-muted-foreground group-hover:translate-x-1 transition-transform" />
+                                <ChevronRight size={16} className="text-slate-300 group-hover:translate-x-1 transition-transform group-hover:text-blue-500" />
                             </div>
                         </Link>
                     ))}

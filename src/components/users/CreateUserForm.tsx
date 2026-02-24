@@ -169,6 +169,10 @@ export default function CreateUserForm({ onClose }: CreateUserFormProps) {
             setError('Governance error: At least one administrative or operational role must be assigned.');
             return;
         }
+        if (!formData.line_manager_id) {
+            setError('Accountability error: Every user must be assigned a Line Manager for memo validation.');
+            return;
+        }
 
         setIsLoading(true);
         setError(null);
@@ -204,24 +208,24 @@ export default function CreateUserForm({ onClose }: CreateUserFormProps) {
     }
 
     return (
-        <div className="p-10 space-y-10 max-h-[90vh] overflow-y-auto font-sans bg-white">
-            <div className="flex items-center justify-between border-b border-slate-50 pb-8">
-                <div className="flex items-center gap-6">
-                    <div className="w-14 h-14 rounded-2xl bg-blue-50 text-[#1a365d] flex items-center justify-center border border-blue-100 shadow-sm">
-                        <UserPlus size={28} />
+        <div className="p-8 space-y-8 max-h-[90vh] overflow-y-auto font-sans bg-white">
+            <div className="flex items-center justify-between border-b border-slate-50 pb-6">
+                <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#1a365d] flex items-center justify-center border border-blue-100 shadow-sm">
+                        <UserPlus size={20} />
                     </div>
                     <div>
-                        <h2 className="text-3xl font-black text-[#1a365d] font-outfit uppercase tracking-tight">Account Provisioning</h2>
-                        <p className="text-xs text-slate-400 font-bold uppercase tracking-[0.2em] mt-1">HR Directory Synchronization</p>
+                        <h2 className="text-xl font-black text-[#1a365d] font-outfit uppercase tracking-tight">Account Provisioning</h2>
+                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1 italic">Security & Hierarchy Configuration</p>
                     </div>
                 </div>
-                <button onClick={onClose} className="p-3 hover:bg-slate-50 rounded-2xl transition-all text-slate-300 hover:text-slate-600">
-                    <X size={24} />
+                <button onClick={onClose} className="p-2 hover:bg-slate-50 rounded-xl transition-all text-slate-300 hover:text-slate-600">
+                    <X size={20} />
                 </button>
             </div>
 
             {duplicateWarning && (
-                <div className="bg-amber-50 border border-amber-300 p-6 rounded-[2rem] animate-in slide-in-from-top-4 duration-300">
+                <div className="bg-amber-50 border border-amber-300 p-4 rounded-[1.5rem] animate-in slide-in-from-top-4 duration-300">
                     <div className="flex items-start gap-4">
                         <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
                             <AlertTriangle size={20} />
@@ -259,16 +263,16 @@ export default function CreateUserForm({ onClose }: CreateUserFormProps) {
                 </div>
             )}
 
-            <div className="space-y-4">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-1">1. Search HR Staff Directory</label>
+            <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] ml-1">1. Search HR Staff Directory</label>
                 <div className="relative group">
-                    <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={20} />
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={16} />
                     <input
                         type="text"
                         placeholder="Search by Staff ID, Name, or Email..."
                         value={hrSearchTerm}
                         onChange={e => setHrSearchTerm(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-[1.5rem] py-5 pl-14 pr-6 focus:ring-8 focus:ring-blue-500/5 focus:border-blue-500 transition-all outline-none font-bold text-slate-700 placeholder:text-slate-300 placeholder:font-medium"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-12 pr-5 focus:ring-8 focus:ring-blue-500/5 focus:border-blue-500 transition-all outline-none font-bold text-slate-700 text-sm placeholder:text-slate-300 placeholder:font-medium"
                     />
                     {isSearchingHR && (
                         <div className="absolute right-5 top-1/2 -translate-y-1/2">
@@ -306,7 +310,7 @@ export default function CreateUserForm({ onClose }: CreateUserFormProps) {
 
             {selectedStaff && (
                 <div className={cn(
-                    "border p-6 rounded-[2rem] flex items-center justify-between animate-in zoom-in-95 duration-300",
+                    "border p-4 rounded-[1.5rem] flex items-center justify-between animate-in zoom-in-95 duration-300",
                     duplicateWarning ? "bg-amber-50/50 border-amber-200" : "bg-blue-50/50 border-blue-100"
                 )}>
                     <div className="flex items-center gap-5">
@@ -335,17 +339,17 @@ export default function CreateUserForm({ onClose }: CreateUserFormProps) {
                 </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-10">
-                <div className="space-y-4">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-1">2. Assign System Access Role</label>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            <form onSubmit={handleSubmit} className="space-y-8">
+                <div className="space-y-3">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] ml-1">2. Assign System Access Role</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                         {availableRoles.map((role) => (
                             <button
                                 key={role}
                                 type="button"
                                 onClick={() => toggleRole(role)}
                                 className={cn(
-                                    "flex items-center gap-3 px-5 py-4 border rounded-[1.25rem] text-[10px] font-black uppercase tracking-widest transition-all text-left",
+                                    "flex items-center gap-3 px-4 py-3 border rounded-xl text-[9px] font-black uppercase tracking-widest transition-all text-left",
                                     formData.roles.includes(role)
                                         ? "bg-[#1a365d] border-[#1a365d] text-white shadow-xl shadow-blue-900/20"
                                         : "bg-white border-slate-200 text-slate-400 hover:border-blue-300"
@@ -358,31 +362,31 @@ export default function CreateUserForm({ onClose }: CreateUserFormProps) {
                     </div>
                 </div>
 
-                <div className="space-y-4">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-1">3. Security Configuration</label>
+                <div className="space-y-3">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] ml-1">3. Security Configuration</label>
                     <div className="relative group">
-                        <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={20} />
+                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={16} />
                         <input
                             type="password"
                             required
                             value={formData.password}
                             onChange={e => setFormData(prev => ({ ...prev, password: e.target.value }))}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-[1.5rem] py-5 pl-14 pr-6 focus:ring-8 focus:ring-blue-500/5 focus:border-blue-500 transition-all outline-none font-bold text-slate-700 placeholder:text-slate-300 placeholder:font-medium"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-12 pr-5 focus:ring-8 focus:ring-blue-500/5 focus:border-blue-500 transition-all outline-none font-bold text-slate-700 text-sm placeholder:text-slate-300 placeholder:font-medium"
                             placeholder="Set Initial Account Token..."
                         />
                     </div>
                 </div>
 
-                <div className="space-y-4">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-1">4. Line Manager Assignment</label>
+                <div className="space-y-3">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] ml-1">4. Line Manager Assignment</label>
                     <div className="relative group">
-                        <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={20} />
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={16} />
                         <input
                             type="text"
                             placeholder="Search Managers by Name or Staff ID..."
                             value={managerSearchTerm}
                             onChange={e => setManagerSearchTerm(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-[1.5rem] py-5 pl-14 pr-6 focus:ring-8 focus:ring-blue-500/5 focus:border-blue-500 transition-all outline-none font-bold text-slate-700 placeholder:text-slate-300 placeholder:font-medium"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-12 pr-5 focus:ring-8 focus:ring-blue-500/5 focus:border-blue-500 transition-all outline-none font-bold text-slate-700 text-sm placeholder:text-slate-300 placeholder:font-medium"
                         />
                         {isSearchingManagers && (
                             <div className="absolute right-5 top-1/2 -translate-y-1/2">
@@ -449,21 +453,21 @@ export default function CreateUserForm({ onClose }: CreateUserFormProps) {
                     )}
                 </div>
 
-                <div className="pt-6 flex gap-6">
+                <div className="pt-4 flex gap-4">
                     <button
                         type="button"
                         onClick={onClose}
-                        className="flex-1 px-8 py-5 border border-slate-200 rounded-[1.5rem] font-black text-[10px] uppercase tracking-[0.2em] text-slate-400 hover:bg-slate-50 transition-all"
+                        className="flex-1 px-6 py-4 border border-slate-200 rounded-xl font-black text-[9px] uppercase tracking-[0.2em] text-slate-400 hover:bg-slate-50 transition-all"
                     >
                         Decline
                     </button>
                     <button
                         type="submit"
                         disabled={isLoading || !selectedStaff || !!duplicateWarning || isCheckingDuplicate}
-                        className="flex-2 px-16 py-5 bg-[#1a365d] text-white rounded-[1.5rem] font-black text-[10px] uppercase tracking-[0.2em] hover:bg-[#2c5282] transition-all shadow-2xl shadow-blue-900/40 disabled:opacity-30 flex items-center justify-center gap-4"
+                        className="flex-2 px-10 py-4 bg-[#1a365d] text-white rounded-xl font-black text-[9px] uppercase tracking-[0.2em] hover:bg-[#2c5282] transition-all shadow-2xl shadow-blue-900/40 disabled:opacity-30 flex items-center justify-center gap-3"
                     >
-                        {isLoading ? <Loader2 className="animate-spin" size={20} /> : <UserPlus size={20} />}
-                        {duplicateWarning ? 'Account Already Exists' : 'Confirm Provisioning'}
+                        {isLoading ? <Loader2 className="animate-spin" size={18} /> : <UserPlus size={18} />}
+                        {duplicateWarning ? 'Exists' : 'Confirm'}
                     </button>
                 </div>
             </form>

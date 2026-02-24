@@ -65,9 +65,9 @@ export default async function UserManagementPage({
                         <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#1a365d] flex items-center justify-center border border-blue-100">
                             <UsersIcon size={18} />
                         </div>
-                        <h1 className="text-2xl font-black tracking-tight text-[#1a365d] font-outfit">User Directory</h1>
+                        <h1 className="text-xl font-black tracking-tight text-[#1a365d] font-outfit">User Directory</h1>
                     </div>
-                    <p className="text-xs text-slate-500 font-medium ml-[44px]">Manage institutional accounts and system permissions.</p>
+                    <p className="text-[10px] text-slate-500 font-medium ml-[44px]">Manage institutional accounts and system permissions.</p>
                 </div>
 
                 <CreateUserFormWrapper />
@@ -88,13 +88,13 @@ export default async function UserManagementPage({
                     <table className="w-full text-left border-collapse min-w-[1200px]">
                         <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
                             <tr>
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">Staff Identity</th>
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">University Email</th>
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">Department</th>
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">Reporting To</th>
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">Status</th>
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">System Roles</th>
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right bg-slate-50">Actions</th>
+                                <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">Staff Identity</th>
+                                <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">University Email</th>
+                                <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">Department</th>
+                                <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">Reporting To</th>
+                                <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">Status</th>
+                                <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">System Roles</th>
+                                <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] text-right bg-slate-50">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -112,8 +112,8 @@ export default async function UserManagementPage({
                                                 {user.username?.[0] || 'U'}
                                             </div>
                                             <div className="space-y-0.5">
-                                                <p className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors uppercase tracking-tight">{user.username}</p>
-                                                <p className="text-[10px] text-slate-400 font-black uppercase tracking-wider">{user.staff_id || `#CUA-${String(user.id).padStart(5, '0')}`}</p>
+                                                <p className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors uppercase tracking-tight text-sm">{user.username}</p>
+                                                <p className="text-[9px] text-slate-400 font-black uppercase tracking-wider">{user.staff_id || `#CUA-${String(user.id).padStart(5, '0')}`}</p>
                                             </div>
                                         </div>
                                     </td>
@@ -157,11 +157,11 @@ export default async function UserManagementPage({
                                     <td className="px-8 py-6">
                                         <div className="flex flex-wrap gap-2">
                                             {user.roles.map((role: string) => (
-                                                <span key={role} className="px-3 py-1 bg-blue-50 text-blue-700 text-[10px] font-black uppercase tracking-wider rounded-lg border border-blue-100">
+                                                <span key={role} className="px-3 py-1 bg-blue-50 text-blue-700 text-[9px] font-black uppercase tracking-wider rounded-lg border border-blue-100">
                                                     {role}
                                                 </span>
                                             ))}
-                                            {user.roles.length === 0 && <span className="text-[10px] text-slate-400 italic">No role</span>}
+                                            {user.roles.length === 0 && <span className="text-[9px] text-slate-400 italic">No role</span>}
                                         </div>
                                     </td>
                                     <td className="px-8 py-6 text-right">

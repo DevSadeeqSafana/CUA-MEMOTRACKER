@@ -6,6 +6,7 @@
 }
 
 :root {
+  font-size: 92%;
   --background: oklch(0.99 0.005 240);
   --foreground: oklch(0.2 0.02 240);
   --card: oklch(1 0 0);

@@ -29,55 +29,55 @@ export default async function DashboardLayout({
                             <Image src="/CUALogo.png" alt="CUA Logo" width={32} height={32} className="object-contain" />
                         </div>
                         <div className="flex flex-col">
-                            <span className="font-bold text-lg leading-tight">CUA IMTS</span>
-                            <span className="text-[10px] opacity-60 uppercase tracking-widest font-bold">University Portal</span>
+                            <span className="font-bold text-base leading-tight">CUA IMTS</span>
+                            <span className="text-[9px] opacity-60 uppercase tracking-widest font-bold">University Portal</span>
                         </div>
                     </Link>
                 </div>
 
                 <nav className="flex-grow p-6 space-y-2 overflow-y-auto">
-                    <p className="text-[10px] font-bold text-white/40 uppercase tracking-[0.2em] px-3 mb-4">Main Navigation</p>
+                    <p className="text-[9px] font-bold text-white/40 uppercase tracking-[0.2em] px-3 mb-4">Main Navigation</p>
                     <Link href="/dashboard" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 transition-all group">
                         <Inbox size={20} className="opacity-70 group-hover:opacity-100" />
-                        <span className="font-medium">Overview</span>
+                        <span className="font-medium text-sm">Overview</span>
                     </Link>
                     <Link href="/dashboard/tasks" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 transition-all group">
                         <CheckSquare size={20} className="opacity-70 group-hover:opacity-100" />
-                        <span className="font-medium">Task Center</span>
+                        <span className="font-medium text-sm">Task Center</span>
                     </Link>
                     {(userRoles.includes('Line Manager') || userRoles.includes('Reviewer')) && (
                         <Link href="/dashboard/approvals" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 transition-all group">
                             <PlusCircle size={20} className="opacity-70 group-hover:opacity-100 text-amber-400 rotate-45" />
-                            <span className="font-medium">Signatures Queue</span>
+                            <span className="font-medium text-sm">Signatures Queue</span>
                         </Link>
                     )}
                     <Link href="/dashboard/memos/new" className="flex items-center gap-3 px-4 py-3 rounded-xl bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/40 hover:bg-blue-500 transition-all border border-blue-400/20">
                         <PlusCircle size={20} />
-                        <span>New Memo</span>
+                        <span className="text-sm">New Memo</span>
                     </Link>
                     <Link href="/dashboard/memos/my-memos" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 transition-all group">
                         <FileText size={20} className="opacity-70 group-hover:opacity-100" />
-                        <span className="font-medium">My Memos</span>
+                        <span className="font-medium text-sm">My Memos</span>
                     </Link>
 
 
                     <div className="pt-8" />
-                    <p className="text-[10px] font-bold text-white/40 uppercase tracking-[0.2em] px-3 mb-4">Administration</p>
+                    <p className="text-[9px] font-bold text-white/40 uppercase tracking-[0.2em] px-3 mb-4">Administration</p>
                     {userRoles.includes('Administrator') && (
                         <>
                             <Link href="/dashboard/users" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 transition-all group">
                                 <PlusCircle size={20} className="opacity-70 group-hover:opacity-100 text-emerald-400" />
-                                <span className="font-medium">User Directory</span>
+                                <span className="font-medium text-sm">User Directory</span>
                             </Link>
                             <Link href="/dashboard/reports" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 transition-all group">
                                 <BarChart2 size={20} className="opacity-70 group-hover:opacity-100" />
-                                <span className="font-medium">Analytics & Reports</span>
+                                <span className="font-medium text-sm">Analytics & Reports</span>
                             </Link>
                         </>
                     )}
                     <Link href="/dashboard/settings" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 transition-all group">
                         <Settings size={20} className="opacity-70 group-hover:opacity-100" />
-                        <span className="font-medium">Account Settings</span>
+                        <span className="font-medium text-sm">Account Settings</span>
                     </Link>
                 </nav>
 

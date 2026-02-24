@@ -29,6 +29,15 @@ export default function NewMemoClient({ recipients }: NewMemoClientProps) {
             formData.append('expiry_date', data.expiry_date || '');
             formData.append('recipient_ids', JSON.stringify(data.recipient_ids));
 
+            // Budget Fields
+            formData.append('is_budget_memo', data.is_budget_memo ? 'true' : 'false');
+            if (data.is_budget_memo) {
+                formData.append('year_id', data.year_id || '');
+                formData.append('budget_category', data.budget_category || '');
+                formData.append('other_category', data.other_category || '');
+                formData.append('budget_items', JSON.stringify(data.budget_items || []));
+            }
+
             // Append files
             if (data.attachments && data.attachments.length > 0) {
                 data.attachments.forEach((file: File) => {
