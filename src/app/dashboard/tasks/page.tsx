@@ -10,7 +10,10 @@ import {
     Inbox,
     Bell,
     ShieldCheck,
-    Wallet
+    Wallet,
+    History,
+    Search,
+    Forward
 } from 'lucide-react';
 import Link from 'next/link';
 import { cn, formatDate } from '@/lib/utils';
@@ -40,6 +43,29 @@ export default async function TaskCenterPage() {
         [userId]
     ) as any[];
 
+    // 1.5 Pending Forwards (Consultations needing input)
+    const consultationRequests = await query(
+        `SELECT m.*, u.username as creator_name, c.created_at as forwarded_at, c.from_user_id, fu.username as forwarded_by, c.id as consultation_id,
+                (SELECT COUNT(*) FROM memo_budget_info bi WHERE bi.memo_id = m.id) > 0 as is_budget_memo
+         FROM memos m
+         JOIN memo_consultations c ON m.id = c.memo_id
+         JOIN memo_system_users u ON m.created_by = u.id
+         JOIN memo_system_users fu ON c.from_user_id = fu.id
+         WHERE c.to_user_id = ? AND c.type = 'Forward'
+         AND NOT EXISTS (
+             SELECT 1 FROM memo_consultations r 
+             WHERE r.parent_id = c.id AND r.from_user_id = ? AND r.type = 'Response'
+         )
+         ORDER BY c.created_at DESC`,
+        [userId, userId]
+    ) as any[];
+
+    // Combine approvals and consultations for the Action Items column
+    const pendingActions = [
+        ...pendingApprovals.map(m => ({ ...m, action_type: 'Approval', sort_date: m.created_at })),
+        ...consultationRequests.map((m: any) => ({ ...m, action_type: 'Consultation', sort_date: m.forwarded_at }))
+    ].sort((a, b) => new Date(b.sort_date).getTime() - new Date(a.sort_date).getTime());
+
     // 2. Distributed Memos (For Recipients / Receivers)
     const distributedMemos = await query(
         `SELECT m.*, u.username as creator_name, mr.read_at, mr.acknowledged_at,
@@ -49,6 +75,19 @@ export default async function TaskCenterPage() {
      JOIN memo_system_users u ON m.created_by = u.id
      WHERE mr.recipient_id = ? AND m.status = 'Distributed'
      ORDER BY m.created_at DESC`,
+        [userId]
+    ) as any[];
+
+    // 3. Processed Approvals (For Managers to track progress)
+    const processedApprovals = await query(
+        `SELECT m.*, u.username as creator_name, a.status as my_decision, a.processed_at,
+                (SELECT COUNT(*) FROM memo_budget_info bi WHERE bi.memo_id = m.id) > 0 as is_budget_memo
+     FROM memos m
+     JOIN memo_approvals a ON m.id = a.memo_id
+     JOIN memo_system_users u ON m.created_by = u.id
+     WHERE a.approver_id = ? AND a.status IN ('Approved', 'Rejected')
+     ORDER BY a.processed_at DESC
+     LIMIT 10`,
         [userId]
     ) as any[];
 
@@ -75,12 +114,12 @@ export default async function TaskCenterPage() {
                             Pending Decisions
                         </h2>
                         <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-100">
-                            {pendingApprovals.length} Required
+                            {pendingActions.length} Required
                         </span>
                     </div>
 
                     <div className="space-y-4">
-                        {pendingApprovals.length === 0 ? (
+                        {pendingActions.length === 0 ? (
                             <div className="bg-white border border-slate-200 border-dashed rounded-[2rem] p-16 text-center space-y-4">
                                 <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto text-slate-200">
                                     <Clock size={32} />
@@ -88,20 +127,23 @@ export default async function TaskCenterPage() {
                                 <p className="text-slate-400 font-bold text-sm">Your decision queue is currently empty.</p>
                             </div>
                         ) : (
-                            pendingApprovals.map(memo => (
+                            pendingActions.map(memo => (
                                 <Link
-                                    key={memo.approval_id}
+                                    key={memo.action_type === 'Approval' ? `app-${memo.approval_id}` : `cons-${memo.consultation_id}`}
                                     href={`/dashboard/memos/${memo.uuid}`}
                                     className="block bg-white border border-slate-200 rounded-3xl p-6 hover:border-blue-500 hover:shadow-xl hover:shadow-blue-900/10 transition-all group"
                                 >
                                     <div className="flex items-start gap-5">
                                         <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-[#1a365d] group-hover:bg-[#1a365d] group-hover:text-white transition-all shrink-0">
-                                            <FileText size={20} />
+                                            {memo.action_type === 'Consultation' ? <Forward size={20} /> : <FileText size={20} />}
                                         </div>
                                         <div className="flex-grow min-w-0 space-y-2">
                                             <div className="flex items-center gap-2">
-                                                <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-100 uppercase tracking-widest shrink-0">
-                                                    Step {memo.step_order}
+                                                <span className={cn(
+                                                    "text-[9px] font-black px-2 py-0.5 rounded-lg border uppercase tracking-widest shrink-0",
+                                                    memo.action_type === 'Consultation' ? "text-purple-600 bg-purple-50 border-purple-100" : "text-blue-600 bg-blue-50 border-blue-100"
+                                                )}>
+                                                    {memo.action_type === 'Consultation' ? 'Input Requested' : `Step ${memo.step_order}`}
                                                 </span>
                                                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest truncate">
                                                     {memo.reference_number}
@@ -117,6 +159,12 @@ export default async function TaskCenterPage() {
                                                 </div>
                                                 <span className="w-1 h-1 rounded-full bg-slate-200"></span>
                                                 <span className="text-[10px] font-bold text-slate-400">{memo.department}</span>
+                                                {memo.action_type === 'Consultation' && (
+                                                    <>
+                                                        <span className="w-1 h-1 rounded-full bg-slate-200"></span>
+                                                        <span className="text-[10px] font-bold text-purple-600 truncate">From: {memo.forwarded_by}</span>
+                                                    </>
+                                                )}
                                                 {memo.is_budget_memo === 1 && (
                                                     <>
                                                         <span className="w-1 h-1 rounded-full bg-slate-200"></span>
@@ -208,8 +256,81 @@ export default async function TaskCenterPage() {
                         )}
                     </div>
                 </section>
-            </div>
-        </div>
+            </div >
+
+            {/* ─── NEW: Institutional Tracking (For Managers/Reviewers) ─── */}
+            < section className="space-y-6 pt-10 border-t border-slate-100" >
+                <div className="flex items-center justify-between px-2">
+                    <div className="space-y-1">
+                        <h2 className="text-base font-black text-[#1a365d] flex items-center gap-3 font-outfit uppercase tracking-wider">
+                            <History className="text-blue-400" size={20} />
+                            My Processing History
+                        </h2>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest ml-8 leading-none">Tracking progress of your past decisions</p>
+                    </div>
+                </div>
+
+                {
+                    processedApprovals.length === 0 ? (
+                        <div className="bg-white border border-slate-200 border-dashed rounded-[2rem] p-12 text-center">
+                            <p className="text-slate-400 font-bold text-sm">No recently processed memos.</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {processedApprovals.map(memo => (
+                                <Link
+                                    key={memo.id}
+                                    href={`/dashboard/memos/${memo.uuid}`}
+                                    className="bg-white border border-slate-200 rounded-2xl p-5 hover:border-blue-500 transition-all group relative overflow-hidden flex flex-col justify-between"
+                                >
+                                    <div className={cn(
+                                        "absolute top-0 right-0 w-1 bg-emerald-500 h-full",
+                                        memo.my_decision === 'Rejected' && "bg-red-500"
+                                    )}></div>
+
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                                {memo.reference_number}
+                                            </span>
+                                            <div className="flex gap-1.5">
+                                                <span className={cn(
+                                                    "text-[8px] font-black px-2 py-0.5 rounded-md uppercase tracking-widest",
+                                                    memo.my_decision === 'Approved' ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600"
+                                                )}>
+                                                    You: {memo.my_decision}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <h4 className="font-bold text-[#1a365d] group-hover:text-blue-600 transition-colors uppercase tracking-tight line-clamp-1">
+                                            {memo.title}
+                                        </h4>
+
+                                        <div className="flex items-center justify-between pt-2 border-t border-slate-50">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[8px] font-black text-slate-400">
+                                                    {memo.creator_name[0]}
+                                                </div>
+                                                <span className="text-[10px] font-bold text-slate-500">{memo.creator_name}</span>
+                                            </div>
+                                            <div className={cn(
+                                                "text-[9px] font-black px-2 py-0.5 rounded-lg border uppercase tracking-wider",
+                                                memo.status === 'Draft' && "bg-slate-50 border-slate-200 text-slate-400",
+                                                memo.status === 'Distributed' && "bg-emerald-50 border-emerald-200 text-emerald-700",
+                                                !['Draft', 'Distributed'].includes(memo.status) && "bg-blue-50 border-blue-200 text-blue-700"
+                                            )}>
+                                                Current: {memo.status}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </Link>
+                            ))}
+                        </div>
+                    )
+                }
+            </section >
+        </div >
     );
 }
 

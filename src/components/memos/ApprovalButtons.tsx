@@ -15,14 +15,16 @@ export default function ApprovalButtons({ memoId, approvalId }: ApprovalButtonsP
     const [isLoading, setIsLoading] = useState(false);
     const [isCompleted, setIsCompleted] = useState(false);
     const [showRejectModal, setShowRejectModal] = useState(false);
+    const [showApproveModal, setShowApproveModal] = useState(false);
 
-    const handleApprove = async () => {
+    const handleApprove = async (comments: string = '') => {
         setIsLoading(true);
         try {
-            const result = await approveMemo(memoId, approvalId);
+            const result = await approveMemo(memoId, approvalId, comments);
             if (result.success) {
                 toast.success('Memo approved successfully');
                 setIsCompleted(true);
+                setShowApproveModal(false);
             } else {
                 toast.error((result as any).error || 'Failed to approve memo');
             }
@@ -67,17 +69,17 @@ export default function ApprovalButtons({ memoId, approvalId }: ApprovalButtonsP
             <button
                 onClick={() => setShowRejectModal(true)}
                 disabled={isLoading}
-                className="flex items-center gap-2 px-4 py-2 border border-destructive/20 text-destructive hover:bg-destructive/10 rounded-lg transition-colors font-medium disabled:opacity-50"
+                className="flex items-center gap-2 px-6 py-2 bg-red-600 text-white hover:bg-red-700 rounded-xl transition-all font-bold text-xs uppercase tracking-widest disabled:opacity-50 shadow-lg shadow-red-900/20"
             >
-                {isLoading ? <Loader2 className="animate-spin" size={18} /> : <XCircle size={18} />}
+                {isLoading ? <Loader2 className="animate-spin" size={14} /> : <XCircle size={14} />}
                 Reject
             </button>
             <button
-                onClick={handleApprove}
+                onClick={() => setShowApproveModal(true)}
                 disabled={isLoading}
-                className="flex items-center gap-2 px-6 py-2 bg-primary text-primary-foreground hover:opacity-90 rounded-lg shadow-md transition-all font-medium disabled:opacity-50"
+                className="flex items-center gap-2 px-8 py-2 bg-emerald-600 text-white hover:bg-emerald-700 rounded-xl transition-all font-bold text-xs uppercase tracking-widest disabled:opacity-50 shadow-lg shadow-emerald-900/20"
             >
-                {isLoading ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
+                {isLoading ? <Loader2 className="animate-spin" size={14} /> : <CheckCircle2 size={14} />}
                 Approve
             </button>
 
@@ -88,8 +90,19 @@ export default function ApprovalButtons({ memoId, approvalId }: ApprovalButtonsP
                 title="Reject Memo"
                 description="Please provide a brief explanation for the rejection. This will be visible in the history."
                 placeholder="Reason for rejection..."
-                confirmText="Reject Memo"
+                confirmText="Confirm Rejection"
                 required
+                isLoading={isLoading}
+            />
+
+            <PromptModal
+                isOpen={showApproveModal}
+                onClose={() => setShowApproveModal(false)}
+                onConfirm={handleApprove}
+                title="Approve Memo"
+                description="Optional: Add a signature note or administrative comment to this approval."
+                placeholder="Write a note (optional)..."
+                confirmText="Approve Memo"
                 isLoading={isLoading}
             />
         </div>

@@ -22,11 +22,19 @@ export default async function DashboardPage() {
     // High level metrics
     const stats = await query(`
         SELECT 
-            (SELECT COUNT(*) FROM memo_approvals WHERE approver_id = ? AND status = 'Pending') as pending_count,
-            (SELECT COUNT(*) FROM memo_recipients WHERE recipient_id = ? AND acknowledged_at IS NULL) as unread_count,
+            (
+                (SELECT COUNT(*) FROM memo_approvals WHERE approver_id = ? AND status = 'Pending') +
+                (SELECT COUNT(*) FROM memo_consultations c WHERE c.to_user_id = ? AND c.type = 'Forward' AND NOT EXISTS (
+                    SELECT 1 FROM memo_consultations r WHERE r.parent_id = c.id AND r.from_user_id = ? AND r.type = 'Response'
+                ))
+            ) as pending_count,
+            (SELECT COUNT(*) 
+             FROM memo_recipients mr 
+             JOIN memos m ON mr.memo_id = m.id 
+             WHERE mr.recipient_id = ? AND mr.acknowledged_at IS NULL AND m.status = 'Distributed') as unread_count,
             (SELECT COUNT(*) FROM memos WHERE created_by = ?) as my_total,
             (SELECT COUNT(*) FROM memos WHERE status = 'Distributed') as university_total
-    `, [userId, userId, userId]) as any[];
+    `, [userId, userId, userId, userId, userId]) as any[];
 
     const { pending_count, unread_count, my_total, university_total } = stats[0];
 

@@ -11,26 +11,53 @@ import {
 } from 'lucide-react';
 import { approveMemo, rejectMemo } from '@/lib/actions';
 import { cn } from '@/lib/utils';
-import ConfirmationModal from '@/components/ui/ConfirmationModal';
+import PromptModal from '@/components/ui/PromptModal';
 import toast from 'react-hot-toast';
 
 interface ReviewerDecisionPanelProps {
     memoId: number;
     approvalId: number;
     memoTitle: string;
+    memoUuid: string;
+    currentUserId: number;
+    currentUserName: string;
+    consultations: any[];
+    canForward: boolean;
+    canAdjustRouting?: boolean;
+    initialRecipients?: any[];
+    initialApprovers?: any[];
+    availableUsers?: any[];
+    availableManagers?: any[];
 }
 
-export default function ReviewerDecisionPanel({ memoId, approvalId, memoTitle }: ReviewerDecisionPanelProps) {
+import ConsultationThread from '@/components/memos/ConsultationThread';
+import LineManagerRoutingAdjustment from '@/components/memos/LineManagerRoutingAdjustment';
+
+export default function ReviewerDecisionPanel({
+    memoId,
+    approvalId,
+    memoTitle,
+    memoUuid,
+    currentUserId,
+    currentUserName,
+    consultations,
+    canForward,
+    canAdjustRouting,
+    initialRecipients,
+    initialApprovers,
+    availableUsers,
+    availableManagers
+}: ReviewerDecisionPanelProps) {
     const [isLoading, setIsLoading] = useState(false);
     const [isCompleted, setIsCompleted] = useState(false);
     const [showRejectionForm, setShowRejectionForm] = useState(false);
     const [rejectionComments, setRejectionComments] = useState('');
     const [showApproveConfirm, setShowApproveConfirm] = useState(false);
 
-    const handleApprove = async () => {
+    const handleApprove = async (comments: string = '') => {
         setIsLoading(true);
         try {
-            const result = await approveMemo(memoId, approvalId);
+            const result = await approveMemo(memoId, approvalId, comments);
             if (result.success) {
                 toast.success('Memo approved and distributed institutionally');
                 setIsCompleted(true);
@@ -70,58 +97,81 @@ export default function ReviewerDecisionPanel({ memoId, approvalId, memoTitle }:
 
     if (isCompleted) {
         return (
-            <div className="bg-emerald-600 rounded-[2.5rem] p-12 text-center space-y-6 shadow-2xl animate-in fade-in zoom-in-95 duration-500">
-                <div className="w-20 h-20 bg-white/20 rounded-3xl flex items-center justify-center mx-auto border border-white/30 text-white">
-                    <CheckCircle2 size={40} />
+            <div className="bg-emerald-600 rounded-2xl p-8 text-center space-y-4 shadow-xl animate-in fade-in zoom-in-95 duration-500">
+                <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto border border-white/30 text-white">
+                    <CheckCircle2 size={32} />
                 </div>
-                <div className="space-y-2">
-                    <h2 className="text-2xl font-black text-white font-outfit uppercase tracking-tight">Decision Recorded</h2>
-                    <p className="text-emerald-50/80 font-medium">The institutional workflow for this request has been successfully updated.</p>
+                <div className="space-y-1">
+                    <h2 className="text-xl font-black text-white font-outfit uppercase tracking-tight">Decision Recorded</h2>
+                    <p className="text-emerald-50/80 text-[11px] font-medium">The institutional workflow for this request has been successfully updated.</p>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="bg-[#1a365d] rounded-[3rem] shadow-2xl overflow-hidden relative group">
-            <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2 group-hover:bg-white/10 transition-colors duration-700"></div>
+        <div className="bg-[#1a365d] rounded-2xl shadow-xl overflow-hidden relative group">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2 group-hover:bg-white/10 transition-colors duration-700"></div>
 
-            <div className="p-12 relative z-10 space-y-10">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 border-b border-white/10 pb-10">
-                    <div className="flex items-center gap-6">
-                        <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center text-blue-400 border border-white/10 shadow-inner">
-                            <ShieldCheck size={32} />
+            <div className="p-8 relative z-10 space-y-8">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-white/10 pb-6 w-full">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center text-blue-400 border border-white/10 shadow-inner">
+                            <ShieldCheck size={24} />
                         </div>
                         <div className="space-y-1">
-                            <h3 className="text-2xl font-black text-white font-outfit uppercase tracking-tight">Final Decision Desk</h3>
-                            <p className="text-blue-100/60 font-medium flex items-center gap-2">
-                                <FileSignature size={14} />
+                            <h3 className="text-xl font-black text-white font-outfit uppercase tracking-tight">Final Decision Desk</h3>
+                            <p className="text-blue-100/60 text-[11px] font-medium flex items-center gap-2">
+                                <FileSignature size={12} />
                                 Formal authorization required for institutional broadcasting.
                             </p>
                         </div>
                     </div>
+                    <div className="flex items-center gap-4">
+                        {/* If they have adjusting power, show the routing component */}
+                        {canAdjustRouting && initialRecipients && initialApprovers && (
+                            <LineManagerRoutingAdjustment
+                                memoId={memoId}
+                                initialRecipients={initialRecipients}
+                                initialApprovers={initialApprovers}
+                                availableUsers={availableUsers || []}
+                                availableManagers={availableManagers || []}
+                            />
+                        )}
+                        {canForward && (
+                            <ConsultationThread
+                                memoId={memoId}
+                                memoUuid={memoUuid}
+                                currentUserId={currentUserId}
+                                currentUserName={currentUserName}
+                                consultations={consultations}
+                                canForward={canForward}
+                                buttonOnly
+                            />
+                        )}
+                    </div>
                 </div>
 
                 {!showRejectionForm ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <button
                             onClick={() => setShowRejectionForm(true)}
                             disabled={isLoading}
-                            className="flex flex-col items-center justify-center p-8 bg-white/5 border border-white/10 rounded-3xl hover:bg-red-500/10 hover:border-red-500/30 transition-all group/red"
+                            className="flex flex-col items-center justify-center p-6 bg-white/5 border border-white/10 rounded-2xl hover:bg-red-500/10 hover:border-red-500/30 transition-all group/red"
                         >
-                            <XCircle size={32} className="text-red-400 mb-4 group-hover/red:scale-110 transition-transform" />
-                            <span className="text-lg font-black text-white uppercase tracking-wider">Reject Request</span>
-                            <p className="text-xs text-blue-200/40 mt-2 text-center">Formal disapproval with required audit comments.</p>
+                            <XCircle size={28} className="text-red-400 mb-3 group-hover/red:scale-110 transition-transform" />
+                            <span className="text-base font-black text-white uppercase tracking-wider">Reject Request</span>
+                            <p className="text-[10px] text-blue-200/40 mt-1.5 text-center">Formal disapproval with required audit comments.</p>
                         </button>
 
                         <button
                             onClick={() => setShowApproveConfirm(true)}
                             disabled={isLoading}
-                            className="flex flex-col items-center justify-center p-8 bg-white text-[#1a365d] rounded-3xl hover:bg-blue-50 transition-all group/app shadow-xl shadow-black/20"
+                            className="flex flex-col items-center justify-center p-6 bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700 transition-all group/app shadow-xl shadow-emerald-900/40 border border-emerald-500/50"
                         >
-                            {isLoading ? <Loader2 size={32} className="animate-spin mb-4" /> : <CheckCircle2 size={32} className="text-emerald-600 mb-4 group-app:scale-110 transition-transform" />}
-                            <span className="text-lg font-black uppercase tracking-wider">Approve & Distribute</span>
-                            <p className="text-xs text-slate-400 mt-2 text-center">Digital signature for immediate institutional release.</p>
+                            {isLoading ? <Loader2 size={28} className="animate-spin mb-3 text-emerald-100" /> : <CheckCircle2 size={28} className="text-emerald-100 mb-3 group-app:scale-110 transition-transform" />}
+                            <span className="text-base font-black uppercase tracking-wider">Approve & Distribute</span>
+                            <p className="text-[10px] text-white/60 mt-1.5 text-center">Digital signature for immediate institutional release.</p>
                         </button>
                     </div>
                 ) : (
@@ -163,14 +213,14 @@ export default function ReviewerDecisionPanel({ memoId, approvalId, memoTitle }:
                 </div>
             </div>
 
-            <ConfirmationModal
+            <PromptModal
                 isOpen={showApproveConfirm}
                 onClose={() => setShowApproveConfirm(false)}
                 onConfirm={handleApprove}
                 title="Institutional Approval"
-                description={`Are you sure you want to provide FINAL approval for "${memoTitle}"? This will officially distribute the memo to all recipients and record your digital signature.`}
+                description={`Provide final authorization for "${memoTitle}". You may add an optional administrative note to this distribution.`}
                 confirmText="Approve & Distribute"
-                variant="info"
+                placeholder="Administrative note (optional)..."
                 isLoading={isLoading}
             />
         </div>

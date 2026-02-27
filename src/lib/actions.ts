@@ -9,18 +9,19 @@ import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 
 export async function createMemo(data: FormData, isDraft: boolean) {
+    console.log('--- Starting createMemo action ---');
     const session = await auth();
-    if (!session?.user) {
-        throw new Error('Unauthorized');
+    if (!session?.user?.id) {
+        console.error('createMemo: Unauthorized access attempt');
+        return { success: false, error: 'Unauthorized. Please log in again.' };
     }
 
-    const userId = session.user.id;
-
+    const userId = parseInt(session.user.id);
     const title = data.get('title') as string;
     const content = data.get('content') as string;
     const department = data.get('department') as string;
     const category = data.get('category') as string;
-    const priority = data.get('priority') as string;
+    const priority = (data.get('priority') as string) || 'Medium';
     const memo_type = data.get('memo_type') as string;
     const expiry_date = data.get('expiry_date') as string;
     const is_budget_memo = data.get('is_budget_memo') === 'true';
@@ -33,15 +34,18 @@ export async function createMemo(data: FormData, isDraft: boolean) {
     const recipient_ids = JSON.parse(data.get('recipient_ids') as string || '[]');
     const files = data.getAll('attachments') as File[];
 
-    const referenceNumber = await generateReferenceNumber(department);
-    const status = isDraft ? 'Draft' : 'Line Manager Review';
-    const uuid = crypto.randomUUID();
+    console.log(`createMemo: User ${userId} is creating a "${title}" memo (isDraft: ${isDraft})`);
 
     try {
+        const referenceNumber = await generateReferenceNumber(department);
+        const status = isDraft ? 'Draft' : 'Line Manager Review';
+        const uuid = crypto.randomUUID();
+
+        // 1. Insert Core Memo
         const result = await query(
             `INSERT INTO memos 
-      (uuid, reference_number, title, content, department, category, priority, memo_type, status, expiry_date, created_by) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             (uuid, reference_number, title, content, department, category, priority, memo_type, status, expiry_date, created_by) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 uuid,
                 referenceNumber,
@@ -49,7 +53,7 @@ export async function createMemo(data: FormData, isDraft: boolean) {
                 content,
                 department,
                 category,
-                priority || 'Medium',
+                priority,
                 memo_type,
                 status,
                 expiry_date || null,
@@ -58,8 +62,9 @@ export async function createMemo(data: FormData, isDraft: boolean) {
         ) as any;
 
         const memoId = result.insertId;
+        console.log(`createMemo: Memo inserted with ID ${memoId}`);
 
-        // Handle Budget Info
+        // 2. Handle Budget Info
         if (is_budget_memo) {
             await query(
                 `INSERT INTO memo_budget_info 
@@ -68,9 +73,8 @@ export async function createMemo(data: FormData, isDraft: boolean) {
                 [memoId, year_id, budget_category, other_category]
             );
 
-            // Insert each line item
             for (const item of budget_items) {
-                const subtotal = (item.quantity || 0) * (item.amount || 0);
+                const subtotal = (parseFloat(item.quantity) || 0) * (parseFloat(item.amount) || 0);
                 await query(
                     `INSERT INTO memo_budget_items 
                      (memo_id, name, description, quantity, amount, total) 
@@ -80,33 +84,33 @@ export async function createMemo(data: FormData, isDraft: boolean) {
             }
         }
 
-        // Handle Attachments
+        // 3. Handle Attachments
         if (files.length > 0) {
             const uploadDir = path.join(process.cwd(), 'public', 'uploads');
             try { await mkdir(uploadDir, { recursive: true }); } catch (e) { }
 
             for (const file of files) {
-                if (!file || file.size === 0) continue;
-                const buffer = Buffer.from(await file.arrayBuffer());
-                const fileName = `${uuid}-${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
+                if (!file || file.size === 0 || typeof file === 'string') continue;
+                const buffer = Buffer.from(await (file as File).arrayBuffer());
+                const fileName = `${uuid}-${Date.now()}-${(file as File).name.replace(/\s+/g, '_')}`;
                 const filePath = `/uploads/${fileName}`;
 
                 await writeFile(path.join(uploadDir, fileName), buffer);
 
                 await query(
                     'INSERT INTO attachments (memo_id, file_name, file_path, file_type, file_size) VALUES (?, ?, ?, ?, ?)',
-                    [memoId, file.name, filePath, file.type, file.size]
+                    [memoId, (file as File).name, filePath, (file as File).type, (file as File).size]
                 );
             }
         }
 
-        // Log the action
+        // 4. Log the action
         await query(
             'INSERT INTO audit_logs (user_id, action, table_name, record_id, new_value) VALUES (?, ?, ?, ?, ?)',
             [userId, 'CREATE_MEMO', 'memos', memoId, JSON.stringify({ referenceNumber, status })]
         );
 
-        // Insert recipients (Receivers)
+        // 5. Insert recipients
         if (recipient_ids && recipient_ids.length > 0) {
             for (const recipientId of recipient_ids) {
                 await query(
@@ -116,51 +120,45 @@ export async function createMemo(data: FormData, isDraft: boolean) {
             }
         }
 
-        // Setup sequential approvals
+        // 6. Setup sequential approvals
         if (!isDraft) {
-            const userRoles = (session.user as any).role || [];
-            const isLineManager = userRoles.includes('Line Manager');
-
-            let currentStep = 1;
-
-            // Step 1: Accountability Routing (Always route to the user's assigned Line Manager)
             const userResult = await query('SELECT line_manager_id FROM memo_system_users WHERE id = ?', [userId]) as any[];
             const managerId = userResult.length > 0 ? userResult[0].line_manager_id : null;
 
             if (managerId) {
                 await query(
                     'INSERT INTO memo_approvals (memo_id, approver_id, step_order, status) VALUES (?, ?, ?, ?)',
-                    [memoId, managerId, currentStep++, 'Pending']
+                    [memoId, managerId, 1, 'Pending']
                 );
 
                 await query('UPDATE memos SET status = "Line Manager Review" WHERE id = ?', [memoId]);
                 await query(
                     'INSERT INTO notifications (user_id, memo_id, message) VALUES (?, ?, ?)',
-                    [managerId, memoId, `A new memo "${title}" from ${session.user.name} requires your validation.`]
+                    [managerId, memoId, `A new memo "${title}" requires your validation.`]
                 );
             } else {
-                // Final safety: if no manager (should be impossible now), distribute directly
                 await query('UPDATE memos SET status = "Distributed" WHERE id = ?', [memoId]);
             }
         }
 
+        console.log(`createMemo: Finished successfully for memo ${uuid}`);
         revalidatePath('/dashboard');
         return { success: true, memoId, memoUuid: uuid };
-    } catch (error) {
-        console.error('Database Error:', error);
-        return { success: false, error: 'Failed to create memo.' };
+    } catch (error: any) {
+        console.error('createMemo Error:', error);
+        return { success: false, error: error.message || 'Failed to create memo.' };
     }
 }
 
-export async function approveMemo(memoId: number, approvalId: number) {
+export async function approveMemo(memoId: number, approvalId: number, comments: string = '') {
     const session = await auth();
     if (!session?.user) throw new Error('Unauthorized');
 
     try {
-        // Mark current step as approved
+        // Mark current step as approved with optional comments
         await query(
-            'UPDATE memo_approvals SET status = "Approved", processed_at = CURRENT_TIMESTAMP WHERE id = ?',
-            [approvalId]
+            'UPDATE memo_approvals SET status = "Approved", comments = ?, processed_at = CURRENT_TIMESTAMP WHERE id = ?',
+            [comments, approvalId]
         );
 
         // Find the next sequential step
@@ -206,8 +204,8 @@ export async function approveMemo(memoId: number, approvalId: number) {
         }
 
         await query(
-            'INSERT INTO audit_logs (user_id, action, table_name, record_id) VALUES (?, ?, ?, ?)',
-            [session.user.id, 'APPROVE_MEMO', 'memo_approvals', approvalId]
+            'INSERT INTO audit_logs (user_id, action, table_name, record_id, new_value) VALUES (?, ?, ?, ?, ?)',
+            [session.user.id, 'APPROVE_MEMO', 'memo_approvals', approvalId, JSON.stringify({ comments })]
         );
 
         revalidatePath(`/dashboard/memos/${memoId}`);
@@ -238,6 +236,11 @@ export async function rejectMemo(memoId: number, approvalId: number, comments?: 
             [memo[0].created_by, memoId, `Your memo "${memo[0].title}" was rejected by the review committee.`]
         );
 
+        await query(
+            'INSERT INTO audit_logs (user_id, action, table_name, record_id, new_value) VALUES (?, ?, ?, ?, ?)',
+            [session.user.id, 'REJECT_MEMO', 'memo_approvals', approvalId, JSON.stringify({ comments })]
+        );
+
         revalidatePath(`/dashboard/memos/${memoId}`);
         revalidatePath('/dashboard');
         return { success: true };
@@ -261,23 +264,24 @@ export async function markMemoAsRead(memoId: number) {
     }
 }
 
-export async function acknowledgeMemo(memoId: number) {
+export async function acknowledgeMemo(memoId: number, decision: 'Acknowledged' | 'Approved' | 'Rejected' = 'Acknowledged') {
     const session = await auth();
     if (!session?.user) throw new Error('Unauthorized');
 
     try {
         await query(
-            'UPDATE memo_recipients SET acknowledged_at = CURRENT_TIMESTAMP WHERE memo_id = ? AND recipient_id = ?',
-            [memoId, session.user.id]
+            'UPDATE memo_recipients SET acknowledged_at = CURRENT_TIMESTAMP, decision = ? WHERE memo_id = ? AND recipient_id = ?',
+            [decision, memoId, session.user.id]
         );
 
-        // Always notify the sender when any recipient acknowledges
+        // Always notify the sender when any recipient acts on it
         const memoRows = await query('SELECT created_by, title, uuid FROM memos WHERE id = ?', [memoId]) as any[];
         if (memoRows.length > 0) {
             const memo = memoRows[0];
+            const actionText = decision === 'Acknowledged' ? 'acknowledged' : decision.toLowerCase();
             await query(
                 'INSERT INTO notifications (user_id, memo_id, message) VALUES (?, ?, ?)',
-                [memo.created_by, memoId, `${session.user.name} has acknowledged your memo "${memo.title}".`]
+                [memo.created_by, memoId, `${session.user.name} has ${actionText} your memo "${memo.title}".`]
             );
         }
 
@@ -519,12 +523,20 @@ export async function toggleUserStatus(userId: number, currentStatus: boolean) {
 
 export async function getRecipients() {
     try {
-        const recipients = await query(`
-            SELECT u.id, u.username, u.department 
-            FROM memo_system_users u
-            WHERE u.is_active = 1
-        `) as any[];
-        return recipients;
+        const { unstable_cache } = require('next/cache');
+        const fetchRecipients = unstable_cache(
+            async () => {
+                const recipients = await query(`
+                    SELECT u.id, u.username, u.department 
+                    FROM memo_system_users u
+                    WHERE u.is_active = 1
+                `) as any[];
+                return recipients;
+            },
+            ['memo-recipients-list'],
+            { revalidate: 300, tags: ['recipients'] }
+        );
+        return await fetchRecipients();
     } catch (error) {
         console.error('Failed to fetch recipients:', error);
         return [];
@@ -615,6 +627,34 @@ export async function changePassword(formData: { currentPassword: string; newPas
     return { success: true };
 }
 
+export async function getBudgetItemNames() {
+    try {
+        const { unstable_cache } = require('next/cache');
+        const getNames = unstable_cache(
+            async () => {
+                const results = await query(`
+                    SELECT ItemName, MAX(Quantity) as Quantity, MAX(Amount) as Amount
+                    FROM hr_finance_budget_item 
+                    WHERE ItemName IS NOT NULL AND ItemName != ''
+                    GROUP BY ItemName
+                    ORDER BY ItemName ASC
+                `) as any[];
+                return results.map(r => ({
+                    name: r.ItemName,
+                    quantity: Number(r.Quantity) || 1,
+                    amount: Number(r.Amount) || 0
+                }));
+            },
+            ['budget-item-names-db'],
+            { revalidate: 3600, tags: ['budget-data'] }
+        );
+        return await getNames();
+    } catch (error) {
+        console.error('Failed to fetch budget item names:', error);
+        return [];
+    }
+}
+
 export async function getBudgetItems(searchTerm: string, yearId?: string) {
     const session = await auth();
     if (!session?.user) return [];
@@ -660,12 +700,20 @@ export async function getBudgetAccounts() {
 
 export async function getBudgetItemLists() {
     try {
-        const items = await query(`
-            SELECT EntryID as id, ItemName as name
-            FROM hr_finance_budget_item_list
-            ORDER BY ItemName ASC
-        `) as any[];
-        return items;
+        const { unstable_cache } = require('next/cache');
+        const fetchLists = unstable_cache(
+            async () => {
+                const items = await query(`
+                    SELECT EntryID as id, ItemName as name
+                    FROM hr_finance_budget_item_list
+                    ORDER BY ItemName ASC
+                `) as any[];
+                return items;
+            },
+            ['budget-category-list'],
+            { revalidate: 3600, tags: ['budget-data'] }
+        );
+        return await fetchLists();
     } catch (error) {
         console.error('Failed to fetch budget item list:', error);
         return [];
@@ -673,18 +721,297 @@ export async function getBudgetItemLists() {
 }
 export async function getBudgetYears() {
     try {
-        const years = await query(`
-            SELECT EntryID as id, StartDate, EndDate
-            FROM hr_finance_year
-            ORDER BY StartDate DESC
-        `) as any[];
+        const { unstable_cache } = require('next/cache');
+        const fetchYears = unstable_cache(
+            async () => {
+                const years = await query(`
+                    SELECT EntryID as id, StartDate, EndDate
+                    FROM hr_finance_year
+                    ORDER BY StartDate DESC
+                `) as any[];
 
-        return years.map(y => ({
-            id: y.id,
-            name: `${new Date(y.StartDate).toLocaleDateString()} - ${new Date(y.EndDate).toLocaleDateString()}`
-        }));
+                return years.map(y => ({
+                    id: y.id,
+                    name: `${new Date(y.StartDate).toLocaleDateString()} - ${new Date(y.EndDate).toLocaleDateString()}`
+                }));
+            },
+            ['budget-finance-years'],
+            { revalidate: 3600, tags: ['budget-data'] }
+        );
+        return await fetchYears();
     } catch (error) {
         console.error('Failed to fetch budget years:', error);
+        return [];
+    }
+}
+export async function updateMemoRouting(
+    memoId: number,
+    recipientIds: number[],
+    additionalApprovers: { id: number; name: string }[]
+) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error('Unauthorized');
+
+    try {
+        const userId = parseInt(session.user.id);
+
+        // Verify the user is a current pending approver for this memo
+        const pendingApprovals = await query(
+            'SELECT id FROM memo_approvals WHERE memo_id = ? AND approver_id = ? AND status = "Pending"',
+            [memoId, userId]
+        ) as any[];
+
+        if (pendingApprovals.length === 0) {
+            throw new Error('Only the current pending approver can modify routing.');
+        }
+
+        // 0. Fetch pre-change state for detailed logging
+        const originalRecipients = await query(
+            `SELECT u.username FROM memo_recipients mr JOIN memo_system_users u ON mr.recipient_id = u.id WHERE mr.memo_id = ?`,
+            [memoId]
+        ) as any[];
+        const oldRecipientNames = originalRecipients.map(r => r.username);
+
+        // 1. Update Recipients
+        await query('DELETE FROM memo_recipients WHERE memo_id = ?', [memoId]);
+
+        const newRecipientResults: string[] = [];
+        for (const rid of recipientIds) {
+            await query(
+                'INSERT INTO memo_recipients (memo_id, recipient_id) VALUES (?, ?)',
+                [memoId, rid]
+            );
+            const user = await query('SELECT username FROM memo_system_users WHERE id = ?', [rid]) as any[];
+            if (user.length > 0) newRecipientResults.push(user[0].username);
+        }
+
+        // Calculate deltas
+        const addedRecipients = newRecipientResults.filter(r => !oldRecipientNames.includes(r)).join(', ');
+        const removedRecipients = oldRecipientNames.filter(r => !newRecipientResults.includes(r)).join(', ');
+
+        // 2. Add Additional Approvers
+        const currentStepResult = await query(
+            'SELECT step_order FROM memo_approvals WHERE id = ?',
+            [pendingApprovals[0].id]
+        ) as any[];
+
+        let nextStepOrder = currentStepResult[0].step_order + 1;
+
+        if (additionalApprovers.length > 0) {
+            await query(
+                'UPDATE memo_approvals SET step_order = step_order + ? WHERE memo_id = ? AND step_order >= ?',
+                [additionalApprovers.length, memoId, nextStepOrder]
+            );
+
+            for (const approver of additionalApprovers) {
+                await query(
+                    'INSERT INTO memo_approvals (memo_id, approver_id, step_order, status) VALUES (?, ?, ?, ?)',
+                    [approver.id, memoId, nextStepOrder++, 'Pending']
+                );
+            }
+        }
+
+        const approverNames = additionalApprovers.map(a => a.name).join(', ');
+
+        const newRecipientNames = newRecipientResults.join(', ');
+        const oldRecipientNamesString = oldRecipientNames.join(', ');
+
+        // Log the action with rich details
+        await query(
+            'INSERT INTO audit_logs (user_id, action, table_name, record_id, new_value) VALUES (?, ?, ?, ?, ?)',
+            [
+                userId,
+                'ADJUST_ROUTING',
+                'memos',
+                memoId,
+                JSON.stringify({
+                    addedRecipients,
+                    removedRecipients,
+                    addedApprovers: approverNames,
+                    oldRecipients: oldRecipientNamesString,
+                    newRecipients: newRecipientNames
+                })
+            ]
+        );
+
+        // Create notification for the creator
+        const memoRows = await query('SELECT created_by, title FROM memos WHERE id = ?', [memoId]) as any[];
+        if (memoRows.length > 0) {
+            const creatorId = memoRows[0].created_by;
+            let message = `${session.user.name} has adjusted the routing for your memo "${memoRows[0].title}".`;
+
+            if (oldRecipientNamesString && newRecipientNames && oldRecipientNamesString !== newRecipientNames) {
+                message += ` Recipient changed from ${oldRecipientNamesString} to ${newRecipientNames}.`;
+            } else if (addedRecipients) {
+                message += ` Added recipients: ${addedRecipients}.`;
+            }
+
+            if (approverNames) {
+                message += ` Added ${approverNames} as an approver.`;
+            }
+
+            await query(
+                'INSERT INTO notifications (user_id, memo_id, message) VALUES (?, ?, ?)',
+                [creatorId, memoId, message]
+            );
+        }
+
+        revalidatePath(`/dashboard/memos/${memoId}`);
+        revalidatePath('/dashboard');
+
+        return { success: true };
+    } catch (error: any) {
+        console.error('Update Routing Error:', error);
+        return { success: false, error: error.message || 'Failed to update routing.' };
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MEMO CONSULTATION / FORWARDING SYSTEM
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Forward a memo to someone for consultation/input.
+ * parentId = null means it's a fresh forward from an approver.
+ * parentId = <id> means it's a response or sub-forward in an existing thread.
+ */
+export async function forwardMemoConsultation(
+    memoId: number,
+    toUserId: number,
+    message: string,
+    parentId: number | null = null
+) {
+    const session = await auth();
+    if (!session?.user?.id) return { success: false, error: 'Unauthorized' };
+    const fromUserId = parseInt(session.user.id);
+
+    try {
+        const result = await query(
+            `INSERT INTO memo_consultations (memo_id, from_user_id, to_user_id, message, parent_id, type)
+             VALUES (?, ?, ?, ?, ?, 'Forward')`,
+            [memoId, fromUserId, toUserId, message, parentId]
+        ) as any;
+
+        const consultationId = result.insertId;
+
+        // Fetch memo title and sender name for notifications
+        const memoRows = await query(
+            `SELECT m.title, m.uuid, u.username as sender_name 
+             FROM memos m JOIN memo_system_users u ON m.created_by = u.id 
+             WHERE m.id = ?`,
+            [memoId]
+        ) as any[];
+
+        if (memoRows.length > 0) {
+            const { title, sender_name } = memoRows[0];
+            await query(
+                'INSERT INTO notifications (user_id, memo_id, message) VALUES (?, ?, ?)',
+                [
+                    toUserId,
+                    memoId,
+                    `${session.user.name} has forwarded the memo "${title}" to you for your input. Please review and respond.`
+                ]
+            );
+        }
+
+        await query(
+            'INSERT INTO audit_logs (user_id, action, table_name, record_id, new_value) VALUES (?, ?, ?, ?, ?)',
+            [fromUserId, 'FORWARD_CONSULTATION', 'memo_consultations', consultationId,
+                JSON.stringify({ toUserId, parentId, preview: message.substring(0, 100) })]
+        );
+
+        revalidatePath(`/dashboard/memos/${memoId}`);
+        return { success: true, consultationId };
+    } catch (error: any) {
+        console.error('Forward consultation error:', error);
+        return { success: false, error: error.message || 'Failed to forward.' };
+    }
+}
+
+/**
+ * Respond to a consultation thread entry.
+ * Creates a 'Response' node linked back to the parent forward.
+ */
+export async function respondToConsultation(
+    memoId: number,
+    parentId: number,
+    toUserId: number,
+    message: string
+) {
+    const session = await auth();
+    if (!session?.user?.id) return { success: false, error: 'Unauthorized' };
+    const fromUserId = parseInt(session.user.id);
+
+    try {
+        const result = await query(
+            `INSERT INTO memo_consultations (memo_id, from_user_id, to_user_id, message, parent_id, type)
+             VALUES (?, ?, ?, ?, ?, 'Response')`,
+            [memoId, fromUserId, toUserId, message, parentId]
+        ) as any;
+
+        const memoRows = await query('SELECT title FROM memos WHERE id = ?', [memoId]) as any[];
+        if (memoRows.length > 0) {
+            await query(
+                'INSERT INTO notifications (user_id, memo_id, message) VALUES (?, ?, ?)',
+                [
+                    toUserId,
+                    memoId,
+                    `${session.user.name} has responded to your consultation request on memo "${memoRows[0].title}".`
+                ]
+            );
+        }
+
+        revalidatePath(`/dashboard/memos/${memoId}`);
+        return { success: true, consultationId: result.insertId };
+    } catch (error: any) {
+        console.error('Respond to consultation error:', error);
+        return { success: false, error: error.message || 'Failed to respond.' };
+    }
+}
+
+/**
+ * Fetch all consultation threads for a memo, with sender/recipient names.
+ */
+export async function getConsultations(memoId: number) {
+    try {
+        const rows = await query(
+            `SELECT 
+                mc.*,
+                fu.username as from_name,
+                tu.username as to_name
+             FROM memo_consultations mc
+             JOIN memo_system_users fu ON mc.from_user_id = fu.id
+             JOIN memo_system_users tu ON mc.to_user_id = tu.id
+             WHERE mc.memo_id = ?
+             ORDER BY mc.created_at ASC`,
+            [memoId]
+        ) as any[];
+        return rows;
+    } catch (error: any) {
+        console.error('Get consultations error:', error);
+        return [];
+    }
+}
+
+/**
+ * Search all active users (for the forward-to selector).
+ */
+export async function searchUsersForConsultation(searchTerm: string) {
+    const session = await auth();
+    if (!session?.user?.id) return [];
+    const currentUserId = parseInt(session.user.id);
+
+    try {
+        const users = await query(
+            `SELECT id, username, department 
+             FROM memo_system_users 
+             WHERE is_active = 1 AND id != ? AND (username LIKE ? OR department LIKE ?)
+             LIMIT 20`,
+            [currentUserId, `%${searchTerm}%`, `%${searchTerm}%`]
+        ) as any[];
+        return users;
+    } catch (error: any) {
+        console.error('Search users for consultation error:', error);
         return [];
     }
 }

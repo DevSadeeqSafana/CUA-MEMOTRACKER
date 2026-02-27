@@ -24,6 +24,9 @@ import MarkAsRead from '@/components/memos/MarkAsRead';
 import MemoHistory from '@/components/memos/MemoHistory';
 import ReviewerDecisionPanel from '@/components/memos/ReviewerDecisionPanel';
 import MemoRoutingTracker from '@/components/memos/MemoRoutingTracker';
+import LineManagerRoutingAdjustment from '@/components/memos/LineManagerRoutingAdjustment';
+import ConsultationThread from '@/components/memos/ConsultationThread';
+import { getRecipients, getManagers, getConsultations } from '@/lib/actions';
 
 export default async function MemoDetailsPage({
     params,
@@ -37,7 +40,7 @@ export default async function MemoDetailsPage({
 
     // Fetch memo with creator details and potential budget info
     const memos = await query(
-        `SELECT m.*, u.username as creator_name, u.email as creator_email,
+        `SELECT m.*, u.username as creator_name, u.email as creator_email, u.line_manager_id as creator_line_manager_id,
                 bi.year_id, bi.budget_category, bi.other_category
          FROM memos m 
          JOIN memo_system_users u ON m.created_by = u.id 
@@ -73,10 +76,22 @@ export default async function MemoDetailsPage({
 
     // Fetch all recipients for the history timeline
     const allRecipients = await query(
-        `SELECT mr.*, u.username as recipient_name 
+        `SELECT mr.*, u.username as recipient_name, u.department
          FROM memo_recipients mr 
          JOIN memo_system_users u ON mr.recipient_id = u.id 
          WHERE mr.memo_id = ?`,
+        [memo.id]
+    ) as any[];
+
+    // Fetch routing adjustment logs — CAST new_value as CHAR to ensure MySQL2 delivers it as a parseable string
+    const routingLogs = await query(
+        `SELECT al.id, al.user_id, al.action, al.timestamp,
+                CAST(al.new_value AS CHAR) as new_value,
+                u.username as action_by_name
+         FROM audit_logs al
+         JOIN memo_system_users u ON al.user_id = u.id
+         WHERE al.table_name = 'memos' AND al.record_id = ? AND al.action = 'ADJUST_ROUTING'
+         ORDER BY al.timestamp DESC`,
         [memo.id]
     ) as any[];
 
@@ -87,6 +102,22 @@ export default async function MemoDetailsPage({
     const isReviewer = !isCreator && (session.user as any).role?.includes('Reviewer');
     const recipientRecord = allRecipients.find(r => r.recipient_id === currentUserId);
     const isRecipient = !isCreator && !!recipientRecord;
+    const isApprover = approvals.some(a => a.approver_id === currentUserId);
+    const isCreatorsLineManager = memo.creator_line_manager_id === currentUserId;
+
+    // Role-specific power: allow ANY pending approver to adjust routing (added approvers, line managers, etc)
+    const canAdjustRouting = isPendingApprover;
+
+    // Fetch data for routing adjustment if authorized
+    const availableUsers = canAdjustRouting ? await getRecipients() : [];
+    const availableManagers = canAdjustRouting ? await getManagers() : [];
+
+    // Fetch consultation threads
+    const consultations = await getConsultations(memo.id);
+
+    // canForward: any pending approver OR anyone who has received a forward OR final recipients
+    const isForwardRecipient = consultations.some((c: any) => c.to_user_id === currentUserId);
+    const canForward = isPendingApprover || isForwardRecipient || isRecipient;
 
     return (
         <div className="max-w-7xl mx-auto space-y-8 pb-20 animate-in fade-in duration-700 font-sans">
@@ -149,7 +180,7 @@ export default async function MemoDetailsPage({
                         )}
                     </div>
 
-                    <h1 className="text-2xl md:text-3xl font-black leading-tight text-[#1a365d] font-outfit uppercase tracking-tight">{memo.title}</h1>
+                    <h1 className="text-xl md:text-2xl font-black leading-tight text-[#1a365d] font-outfit uppercase tracking-tight">{memo.title}</h1>
 
                     <div className="flex flex-wrap items-center gap-8 pt-6 border-t border-slate-50">
                         <div className="flex items-center gap-4">
@@ -218,7 +249,7 @@ export default async function MemoDetailsPage({
                                 </div>
                             </div>
 
-                            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm overflow-hidden">
+                            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm overflow-hidden">
                                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Financial Breakdown</h4>
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-left">
@@ -257,12 +288,53 @@ export default async function MemoDetailsPage({
                 </div>
             </div>
 
-            {/* ─── CREATOR VIEW: Live Routing Tracker ─── */}
-            {isCreator && (
+            {/* Routing Adjustment Notifications — compact inline style */}
+            {routingLogs.length > 0 && isCreator && (
+                <div className="border border-amber-200 bg-amber-50 rounded-xl px-4 py-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                        <Users size={13} className="text-amber-500 shrink-0" />
+                        <span className="text-[10px] font-black text-amber-700 uppercase tracking-widest">Routing Update(s)</span>
+                    </div>
+                    {routingLogs.slice(0, 3).map((log: any) => {
+                        let d: Record<string, any> = {};
+                        try {
+                            const raw = log.new_value;
+                            if (raw !== null && raw !== undefined) {
+                                d = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                            }
+                        } catch (e) { d = {}; }
+
+                        const actor = log.action_by_name || 'Your line manager';
+                        const oldR = (d.oldRecipients || '').trim();
+                        const newR = (d.newRecipients || '').trim();
+                        const approver = (d.addedApprovers || '').trim();
+
+                        let sentence = `${actor} adjusted this memo's routing.`;
+                        if (oldR && newR && oldR !== newR) sentence = `${actor} changed recipient from "${oldR}" → "${newR}".`;
+                        else if ((d.addedRecipients || '').trim()) sentence = `${actor} added "${(d.addedRecipients || '').trim()}" as recipient.`;
+                        else if ((d.removedRecipients || '').trim()) sentence = `${actor} removed "${(d.removedRecipients || '').trim()}" from distribution.`;
+                        if (approver) sentence += ` Added "${approver}" as approver.`;
+
+                        return (
+                            <div key={log.id} className="flex items-start gap-2">
+                                <span className="w-1 h-1 rounded-full bg-amber-400 mt-1.5 shrink-0" />
+                                <p className="text-[11px] font-medium text-amber-900 leading-snug">{sentence}</p>
+                            </div>
+                        );
+                    })}
+                    {routingLogs.length > 3 && (
+                        <p className="text-[9px] font-black text-amber-500 uppercase">+{routingLogs.length - 3} more in audit trail</p>
+                    )}
+                </div>
+            )}
+
+            {/* ─── Shared: Live Routing Tracker (Visible to all authorized parties) ─── */}
+            {(isCreator || isApprover || isRecipient || isCreatorsLineManager) && (
                 <MemoRoutingTracker
                     memo={memo}
                     approvals={approvals}
                     recipients={allRecipients}
+                    currentUserId={currentUserId}
                 />
             )}
 
@@ -273,21 +345,55 @@ export default async function MemoDetailsPage({
                         memoId={memo.id}
                         approvalId={currentApproval.id}
                         memoTitle={memo.title}
+                        memoUuid={memo.uuid}
+                        currentUserId={currentUserId}
+                        currentUserName={(session.user as any).name || ''}
+                        consultations={consultations}
+                        canForward={canForward}
+                        canAdjustRouting={canAdjustRouting}
+                        initialRecipients={allRecipients.map(r => ({ id: r.recipient_id, username: r.recipient_name, department: r.department }))}
+                        initialApprovers={approvals.map(a => ({ id: a.approver_id, username: a.approver_name, department: a.department }))}
+                        availableUsers={availableUsers}
+                        availableManagers={availableManagers}
                     />
                 ) : (
-                    <div className="bg-[#1a365d] border border-blue-900 rounded-[1.5rem] p-8 flex flex-col lg:flex-row items-center justify-between gap-8 shadow-2xl relative overflow-hidden group">
+                    <div className="bg-[#1a365d] border border-blue-900 rounded-2xl p-6 flex flex-col lg:flex-row items-center justify-between gap-6 shadow-xl relative overflow-hidden group">
                         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform"></div>
-                        <div className="flex items-center gap-6 text-white relative z-10">
-                            <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center text-blue-400 border border-white/10">
-                                <ShieldCheck size={32} />
+                        <div className="flex flex-col md:flex-row md:items-center gap-6 relative z-10 w-full lg:w-auto">
+                            <div className="flex items-center gap-4 text-white">
+                                <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center text-blue-400 border border-white/10 shrink-0">
+                                    <ShieldCheck size={24} />
+                                </div>
+                                <div className="space-y-1">
+                                    <h3 className="text-lg font-black font-outfit uppercase tracking-tight">Administrative Review</h3>
+                                    <p className="text-blue-100/70 font-medium text-[11px]">Verification required for internal routing.</p>
+                                </div>
                             </div>
-                            <div className="space-y-1">
-                                <h3 className="text-xl font-black font-outfit uppercase">Administrative Review</h3>
-                                <p className="text-blue-100/70 font-medium text-sm">Verification required for internal routing.</p>
-                            </div>
+
+                            {/* Forward for Input — right next to title */}
+                            {canForward && (
+                                <ConsultationThread
+                                    memoId={memo.id}
+                                    memoUuid={memo.uuid}
+                                    currentUserId={currentUserId}
+                                    currentUserName={(session.user as any).name || ''}
+                                    consultations={consultations}
+                                    canForward={canForward}
+                                    buttonOnly
+                                />
+                            )}
                         </div>
 
-                        <div className="relative z-10">
+                        <div className="flex flex-col sm:flex-row items-center gap-4 relative z-10 w-full lg:w-auto">
+                            {canAdjustRouting && (
+                                <LineManagerRoutingAdjustment
+                                    memoId={memo.id}
+                                    initialRecipients={allRecipients.map(r => ({ id: r.recipient_id, username: r.recipient_name, department: r.department }))}
+                                    initialApprovers={approvals.map(a => ({ id: a.approver_id, username: a.approver_name, department: a.department }))}
+                                    availableUsers={availableUsers}
+                                    availableManagers={availableManagers}
+                                />
+                            )}
                             <ApprovalButtons memoId={memo.id} approvalId={currentApproval.id} />
                         </div>
                     </div>
@@ -296,7 +402,7 @@ export default async function MemoDetailsPage({
 
             {/* ─── RECIPIENT VIEW: Acknowledge banner ─── */}
             {isRecipient && memo.status === 'Distributed' && (
-                <div className="bg-emerald-600 border border-emerald-700 rounded-[1.5rem] p-8 flex flex-col lg:flex-row items-center justify-between gap-8 shadow-2xl relative overflow-hidden group">
+                <div className="bg-emerald-600 border border-emerald-700 rounded-2xl p-6 flex flex-col lg:flex-row items-center justify-between gap-6 shadow-xl relative overflow-hidden group">
                     <MarkAsRead memoId={memo.id} />
                     <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform"></div>
                     <div className="flex items-center gap-6 text-white relative z-10">
@@ -309,10 +415,21 @@ export default async function MemoDetailsPage({
                         </div>
                     </div>
 
-                    <div className="relative z-10">
+                    <div className="relative z-10 flex flex-col sm:flex-row items-center gap-4">
+                        {canForward && (
+                            <ConsultationThread
+                                memoId={memo.id}
+                                memoUuid={memo.uuid}
+                                currentUserId={currentUserId}
+                                currentUserName={(session.user as any).name || ''}
+                                consultations={consultations}
+                                canForward={canForward}
+                                buttonOnly
+                            />
+                        )}
                         <AcknowledgeButton
                             memoId={memo.id}
-                            isAcknowledged={!!recipientRecord.acknowledged_at}
+                            decision={recipientRecord.decision}
                         />
                     </div>
                 </div>
@@ -328,20 +445,34 @@ export default async function MemoDetailsPage({
                             Official Statement Body
                         </h2>
                         <div
-                            className="prose prose-slate prose-xl max-w-none text-slate-800 leading-relaxed font-sans"
+                            className="prose prose-slate prose-lg max-w-none text-slate-800 leading-relaxed font-sans"
                             dangerouslySetInnerHTML={{ __html: memo.content }}
                         />
                     </div>
 
                     {/* Full Dedicated History Timeline */}
-                    <MemoHistory memo={memo} approvals={approvals} recipients={allRecipients} />
+                    <MemoHistory memo={memo} approvals={approvals} recipients={allRecipients} routingLogs={routingLogs} consultations={consultations} />
+
+                    {/* Consultation Thread — read-only view below audit trail */}
+                    {consultations.length > 0 && (
+                        <ConsultationThread
+                            memoId={memo.id}
+                            memoUuid={memo.uuid}
+                            currentUserId={currentUserId}
+                            currentUserName={(session.user as any).name || ''}
+                            consultations={consultations}
+                            canForward={isForwardRecipient}
+                            buttonOnly={false}
+                        />
+                    )}
+
                 </div>
 
                 {/* Sidebar Context */}
                 <div className="lg:col-span-4 space-y-6">
                     {/* Security Info Card */}
-                    <div className="bg-slate-900 border border-slate-800 rounded-[1.5rem] p-8 shadow-2xl space-y-8 text-white">
-                        <h3 className="text-[10px] font-black text-blue-500 uppercase tracking-[0.3em] border-b border-white/5 pb-4">Encryption & Standards</h3>
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6 text-white">
+                        <h3 className="text-[9px] font-black text-blue-500 uppercase tracking-[0.3em] border-b border-white/5 pb-3">Encryption & Standards</h3>
 
                         <div className="space-y-6">
                             <div className="flex items-center justify-between">

@@ -1,13 +1,15 @@
-import { query } from './src/lib/db';
+import * as dotenv from 'dotenv';
+dotenv.config({ path: '.env.local' });
 
-async function run() {
+async function migrate() {
+    const { query } = await import('./src/lib/db.js');
+    console.log("Adding decision column to memo_recipients");
     try {
-        await query("ALTER TABLE memo_system_users ADD COLUMN line_manager_staff_id VARCHAR(50);");
-        console.log("Migration successful");
-    } catch (e) {
-        console.error("Migration failed:", e);
+        await query("ALTER TABLE memo_recipients ADD COLUMN decision VARCHAR(20) DEFAULT NULL");
+        console.log("Added decision column.");
+    } catch (e: any) {
+        console.log("Maybe already added?", e.message);
     }
-    process.exit();
+    process.exit(0);
 }
-
-run();
+migrate().catch(console.error);

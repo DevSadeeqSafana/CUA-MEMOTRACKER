@@ -26,9 +26,11 @@ interface MemoHistoryProps {
     memo: any;
     approvals: any[];
     recipients: any[];
+    routingLogs?: any[];
+    consultations?: any[];
 }
 
-export default function MemoHistory({ memo, approvals, recipients }: MemoHistoryProps) {
+export default function MemoHistory({ memo, approvals, recipients, routingLogs = [], consultations = [] }: MemoHistoryProps) {
     // Build timeline events
     const events: TimelineEvent[] = [];
 
@@ -41,6 +43,56 @@ export default function MemoHistory({ memo, approvals, recipients }: MemoHistory
         timestamp: memo.created_at,
         status: 'completed',
         user: memo.creator_name
+    });
+
+    routingLogs.forEach((log) => {
+        // MySQL JSON columns may already be parsed as objects by the driver
+        let details: Record<string, any> = {};
+        try {
+            if (log.new_value === null || log.new_value === undefined) {
+                details = {};
+            } else if (typeof log.new_value === 'string') {
+                details = JSON.parse(log.new_value);
+            } else if (typeof log.new_value === 'object') {
+                details = log.new_value;
+            }
+        } catch (e) {
+            details = {};
+        }
+
+        const actor = log.action_by_name || 'Your line manager';
+
+        let descriptions: string[] = [];
+
+        // Recipient change with full from/to context (preferred path)
+        const oldR = (details.oldRecipients || '').trim();
+        const newR = (details.newRecipients || '').trim();
+        if (oldR && newR && oldR !== newR) {
+            descriptions.push(`${actor} changed the recipient from "${oldR}" to "${newR}".`);
+        } else if ((details.addedRecipients || '').trim()) {
+            descriptions.push(`${actor} added "${details.addedRecipients.trim()}" as recipient(s).`);
+        } else if ((details.removedRecipients || '').trim()) {
+            descriptions.push(`${actor} removed "${details.removedRecipients.trim()}" from the distribution.`);
+        }
+
+        // Approver addition
+        if ((details.addedApprovers || '').trim()) {
+            descriptions.push(`${actor} added "${details.addedApprovers.trim()}" as an approver to this memo.`);
+        }
+
+        const desc = descriptions.length > 0
+            ? descriptions.join(' ')
+            : `Routing was adjusted by ${actor}.`;
+
+        events.push({
+            id: `routing-${log.id}`,
+            type: 'approval',
+            title: 'Routing Adjusted by Manager',
+            description: desc,
+            timestamp: log.timestamp,
+            status: 'completed',
+            user: log.action_by_name
+        });
     });
 
     // 2. Approvals
@@ -58,7 +110,22 @@ export default function MemoHistory({ memo, approvals, recipients }: MemoHistory
         });
     });
 
-    // 3. Distribution
+    // 3. Consultations / Forwards
+    consultations.forEach((c) => {
+        events.push({
+            id: `consult-${c.id}`,
+            type: 'approval',
+            title: c.type === 'Forward' ? 'Forwarded for Input' : 'Consultation Response',
+            description: c.type === 'Forward'
+                ? `${c.from_name} forwarded this memo to ${c.to_name} for input.`
+                : `${c.from_name} responded to ${c.to_name}'s request for input.`,
+            timestamp: c.created_at,
+            status: 'completed',
+            user: c.from_name
+        });
+    });
+
+    // 4. Distribution
     if (memo.status === 'Distributed') {
         events.push({
             id: 'distribution',
@@ -70,15 +137,17 @@ export default function MemoHistory({ memo, approvals, recipients }: MemoHistory
         });
     }
 
-    // 4. Acknowledgments
+    // 5. Acknowledgments
+    // 5. Acknowledgments & Decisions
     recipients.filter(r => r.acknowledged_at).forEach((rec) => {
+        const decisionText = rec.decision || 'Acknowledged';
         events.push({
             id: `ack-${rec.recipient_id}`,
-            type: 'acknowledgment',
-            title: 'Memo Acknowledged',
-            description: `${rec.recipient_name} has received and acknowledged this communication.`,
+            type: decisionText === 'Rejected' ? 'rejection' : 'acknowledgment',
+            title: `Memo ${decisionText}`,
+            description: `${rec.recipient_name} has received and ${decisionText.toLowerCase()} this communication.`,
             timestamp: rec.acknowledged_at,
-            status: 'completed',
+            status: decisionText === 'Rejected' ? 'failed' : 'completed',
             user: rec.recipient_name
         });
     });
@@ -91,11 +160,11 @@ export default function MemoHistory({ memo, approvals, recipients }: MemoHistory
     });
 
     return (
-        <div className="bg-white border border-slate-200 rounded-[1.5rem] p-6 shadow-sm space-y-6">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div>
-                    <h3 className="text-xl font-black text-[#1a365d] font-outfit uppercase tracking-tight">Institutional Audit Trail</h3>
-                    <p className="text-xs text-slate-400 font-medium mt-1">Immutable lifecycle tracking for Reference {memo.reference_number}</p>
+                    <h3 className="text-lg font-black text-[#1a365d] font-outfit uppercase tracking-tight">Audit Trail</h3>
+                    <p className="text-[10px] text-slate-400 font-medium mt-0.5">Reference {memo.reference_number}</p>
                 </div>
             </div>
 

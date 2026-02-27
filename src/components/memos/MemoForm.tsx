@@ -23,7 +23,8 @@ import {
 import RichTextEditor from './RichTextEditor';
 import { cn } from '@/lib/utils';
 import { MemoPriority, MemoType } from '@/types/memo';
-import { getBudgetItems, getBudgetYears, getBudgetItemLists } from '@/lib/actions';
+import { getBudgetItems, getBudgetYears, getBudgetItemLists, getBudgetItemNames } from '@/lib/actions';
+import toast from 'react-hot-toast';
 
 const memoSchema = z.object({
     title: z.string().min(5, 'Title must be at least 5 characters'),
@@ -39,20 +40,30 @@ const memoSchema = z.object({
     budget_category: z.string().optional(),
     other_category: z.string().optional(),
     budget_items: z.array(z.object({
-        name: z.string().min(1, 'Item name is required'),
+        name: z.string(),
         description: z.string().optional(),
         quantity: z.number().min(1),
         amount: z.number().min(0),
         total: z.number().optional(),
     })).optional(),
-}).refine(data => {
+}).superRefine((data, ctx) => {
     if (data.is_budget_memo) {
-        return !!data.year_id && !!data.budget_category && (data.budget_items?.length || 0) > 0;
+        if (!data.year_id) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Budget Year is required", path: ["year_id"] });
+        }
+        if (!data.budget_category) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Budget Category is required", path: ["budget_category"] });
+        }
+        if (!data.budget_items || data.budget_items.length === 0) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "At least one budget item is required", path: ["year_id"] });
+        } else {
+            data.budget_items.forEach((item, idx) => {
+                if (!item.name || item.name.trim().length === 0) {
+                    ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Item #${idx + 1} name is required`, path: ["budget_items", idx, "name"] });
+                }
+            });
+        }
     }
-    return true;
-}, {
-    message: "Budget details (Year, Category, and Items) are required",
-    path: ["year_id"]
 });
 
 type MemoFormValues = z.infer<typeof memoSchema>;
@@ -74,6 +85,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
     const [selectedBudgetItem, setSelectedBudgetItem] = useState<any>(null);
     const [budgetYears, setBudgetYears] = useState<any[]>([]);
     const [budgetCategories, setBudgetCategories] = useState<any[]>([]);
+    const [budgetItemNames, setBudgetItemNames] = useState<{ name: string, quantity: number, amount: number }[]>([]);
 
     const {
         register,
@@ -97,7 +109,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
             year_id: initialData?.year_id || '',
             budget_category: initialData?.budget_category || '',
             other_category: initialData?.other_category || '',
-            budget_items: initialData?.budget_items || [{ name: '', description: '', quantity: 1, amount: 0, total: 0 }],
+            budget_items: initialData?.budget_items || [],
         },
     });
 
@@ -108,15 +120,23 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
 
     const isBudgetMemo = watch('is_budget_memo');
 
+    useEffect(() => {
+        if (Object.keys(errors).length > 0) {
+            console.log('Form Validation Errors:', errors);
+        }
+    }, [errors]);
+
 
     useEffect(() => {
         const fetchInitialData = async () => {
-            const [years, categories] = await Promise.all([
+            const [years, categories, names] = await Promise.all([
                 getBudgetYears(),
-                getBudgetItemLists()
+                getBudgetItemLists(),
+                getBudgetItemNames()
             ]);
             setBudgetYears(years);
             setBudgetCategories(categories);
+            setBudgetItemNames(names);
         };
         fetchInitialData();
     }, []);
@@ -170,6 +190,29 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
         onSubmit({ ...data, attachments }, isDraft);
     };
 
+    const onInvalid = (errors: any) => {
+        console.error('Validation Errors:', errors);
+
+        // Helper to find the first message in a potentially nested error object
+        const findMessage = (errObj: any): string | null => {
+            if (!errObj) return null;
+            if (errObj.message) return errObj.message;
+
+            for (const key in errObj) {
+                const nested = findMessage(errObj[key]);
+                if (nested) return nested;
+            }
+            return null;
+        };
+
+        const message = findMessage(errors);
+        if (message) {
+            toast.error(message);
+        } else {
+            toast.error('Please complete all required fields correctly.');
+        }
+    };
+
     return (
         <form className="space-y-8 max-w-6xl mx-auto pb-20 font-sans">
             {/* Header with Tab Switcher */}
@@ -185,7 +228,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                     <div className="flex gap-4">
                         <button
                             type="button"
-                            onClick={handleSubmit(data => handleSubmission(data, true))}
+                            onClick={handleSubmit(data => handleSubmission(data, true), onInvalid)}
                             disabled={isLoading}
                             className="flex items-center gap-3 px-4 py-2 border border-slate-200 rounded-xl font-bold text-xs text-slate-600 hover:bg-slate-50 transition-all disabled:opacity-50"
                         >
@@ -194,7 +237,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                         </button>
                         <button
                             type="button"
-                            onClick={handleSubmit(data => handleSubmission(data, false))}
+                            onClick={handleSubmit(data => handleSubmission(data, false), onInvalid)}
                             disabled={isLoading}
                             className="flex items-center gap-3 px-5 py-2 bg-[#1a365d] text-white rounded-xl font-bold text-xs shadow-xl shadow-blue-900/20 hover:bg-[#2c5282] transition-all disabled:opacity-50 outline-none"
                         >
@@ -371,8 +414,24 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Item Name (Search or Type)</label>
                                                         <div className="relative">
                                                             <Target className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={14} />
+                                                            <datalist id={`budget-item-names-${index}`}>
+                                                                {budgetItemNames.map((item, idx) => (
+                                                                    <option key={idx} value={item.name} />
+                                                                ))}
+                                                            </datalist>
                                                             <input
-                                                                {...register(`budget_items.${index}.name`)}
+                                                                {...register(`budget_items.${index}.name`, {
+                                                                    onChange: (e) => {
+                                                                        const val = e.target.value;
+                                                                        const matched = budgetItemNames.find(i => i.name === val);
+                                                                        if (matched) {
+                                                                            setValue(`budget_items.${index}.quantity`, matched.quantity);
+                                                                            setValue(`budget_items.${index}.amount`, matched.amount);
+                                                                            setValue(`budget_items.${index}.total`, matched.quantity * matched.amount);
+                                                                        }
+                                                                    }
+                                                                })}
+                                                                list={`budget-item-names-${index}`}
                                                                 className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-xs font-bold focus:border-emerald-500 outline-none transition-all"
                                                                 placeholder="e.g. Office Equipment Procurement"
                                                             />
@@ -580,6 +639,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                     <option value="Faculty of Computing" className="text-slate-900">Faculty of Computing</option>
                                     <option value="Faculty of Arts & Social Sciences" className="text-slate-900">Faculty of Arts & Social Sciences</option>
                                 </select>
+                                {errors.department && <p className="text-[10px] text-red-400 font-bold flex items-center gap-1.5 ml-1 mt-2 tracking-tight"><AlertCircle size={12} /> {errors.department.message}</p>}
                             </div>
 
                             <div className="space-y-3">
@@ -589,6 +649,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                     className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-3.5 text-sm font-bold focus:bg-white/10 focus:border-blue-400 transition-all outline-none"
                                     placeholder="e.g. Strategic Policy"
                                 />
+                                {errors.category && <p className="text-[10px] text-red-400 font-bold flex items-center gap-1.5 ml-1 mt-2 tracking-tight"><AlertCircle size={12} /> {errors.category.message}</p>}
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
