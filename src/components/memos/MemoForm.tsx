@@ -218,19 +218,19 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
             {/* Header with Tab Switcher */}
             <div className="flex flex-col gap-4">
                 {/* Top Action Bar */}
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-4 rounded-[1.5rem] border border-slate-200 shadow-sm relative overflow-hidden">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 bg-white p-5 md:p-6 rounded-[1.5rem] md:rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-2 h-full bg-[#1a365d]"></div>
-                    <div className="ml-4">
-                        <h2 className="text-xl font-black text-[#1a365d] font-outfit uppercase tracking-tighter">Memo Drafting Station</h2>
+                    <div className="ml-2 md:ml-4">
+                        <h2 className="text-xl md:text-2xl font-black text-[#1a365d] font-outfit uppercase tracking-tighter">Memo Drafting Station</h2>
                         <p className="text-[9px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1 italic">Institutional Communication & Financial Workflow</p>
                     </div>
 
-                    <div className="flex gap-4">
+                    <div className="flex flex-col sm:flex-row gap-3">
                         <button
                             type="button"
                             onClick={handleSubmit(data => handleSubmission(data, true), onInvalid)}
                             disabled={isLoading}
-                            className="flex items-center gap-3 px-4 py-2 border border-slate-200 rounded-xl font-bold text-xs text-slate-600 hover:bg-slate-50 transition-all disabled:opacity-50"
+                            className="flex-1 flex items-center justify-center gap-3 px-6 py-3 border border-slate-200 rounded-xl font-bold text-xs text-slate-600 hover:bg-slate-50 transition-all disabled:opacity-50"
                         >
                             <Save size={14} />
                             Save Draft
@@ -239,7 +239,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                             type="button"
                             onClick={handleSubmit(data => handleSubmission(data, false), onInvalid)}
                             disabled={isLoading}
-                            className="flex items-center gap-3 px-5 py-2 bg-[#1a365d] text-white rounded-xl font-bold text-xs shadow-xl shadow-blue-900/20 hover:bg-[#2c5282] transition-all disabled:opacity-50 outline-none"
+                            className="flex-1 flex items-center justify-center gap-3 px-6 py-3 bg-[#1a365d] text-white rounded-xl font-bold text-xs shadow-xl shadow-blue-900/20 hover:bg-[#2c5282] transition-all disabled:opacity-50 outline-none"
                         >
                             <Send size={14} />
                             Route for Approval
@@ -248,12 +248,12 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                 </div>
 
                 {/* Template Selection Tabs */}
-                <div className="flex items-center gap-3 bg-white/80 p-1.5 rounded-2xl border border-slate-200 shadow-sm max-w-fit">
+                <div className="flex flex-wrap items-center gap-2 md:gap-3 bg-white/80 p-1.5 rounded-2xl border border-slate-200 shadow-sm w-full sm:w-fit">
                     <button
                         type="button"
                         onClick={() => setValue('is_budget_memo', false)}
                         className={cn(
-                            "flex items-center gap-3 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300",
+                            "flex-1 sm:flex-none flex items-center justify-center gap-3 px-4 md:px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300",
                             !isBudgetMemo
                                 ? "bg-[#1a365d] text-white shadow-xl shadow-blue-900/20"
                                 : "text-slate-400 hover:text-slate-600 hover:bg-slate-50"
@@ -266,7 +266,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                         type="button"
                         onClick={() => setValue('is_budget_memo', true)}
                         className={cn(
-                            "flex items-center gap-3 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300",
+                            "flex-1 sm:flex-none flex items-center justify-center gap-3 px-4 md:px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300",
                             isBudgetMemo
                                 ? "bg-emerald-600 text-white shadow-xl shadow-emerald-900/20"
                                 : "text-slate-400 hover:text-slate-600 hover:bg-slate-50"
@@ -489,15 +489,15 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                     </div>
 
                                     {/* Grand Total Display */}
-                                    <div className="mt-8 pt-6 border-t border-slate-100 flex items-center justify-between">
-                                        <div>
+                                    <div className="mt-8 pt-6 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                                        <div className="space-y-1">
                                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Cumulative Financial Commitment</p>
                                             <p className="text-xs text-slate-400 font-medium italic">Aggregate total of all listed items above.</p>
                                         </div>
-                                        <div className="text-right">
-                                            <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest block mb-2">Grand Total</span>
-                                            <div className="bg-[#1a365d] text-white px-8 py-4 rounded-[1.5rem] shadow-2xl shadow-blue-900/30">
-                                                <span className="text-2xl font-black">
+                                        <div className="flex flex-col items-start sm:items-end">
+                                            <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest block mb-2 sm:text-right">Grand Total</span>
+                                            <div className="bg-[#1a365d] text-white px-8 py-4 rounded-[1.5rem] shadow-2xl shadow-blue-900/30 w-full sm:w-auto text-center">
+                                                <span className="text-2xl md:text-3xl font-black">
                                                     ₦{(watch('budget_items') || []).reduce((acc, item) => acc + ((item.quantity || 0) * (item.amount || 0)), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                                 </span>
                                             </div>
@@ -717,6 +717,6 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                     </div>
                 </div>
             </div>
-        </form >
+        </form>
     );
 }

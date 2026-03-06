@@ -61,16 +61,16 @@ export default async function DashboardPage() {
     const maxCount = Math.max(...chartData.map(d => d.count), 1);
 
     return (
-        <div className="space-y-12 animate-in fade-in duration-1000 font-sans">
+        <div className="space-y-6 md:space-y-12 animate-in fade-in duration-1000 font-sans">
             {/* Executive Greeting */}
-            <div className="relative overflow-hidden bg-[#1a365d] rounded-[2rem] p-8 text-white shadow-2xl">
+            <div className="relative overflow-hidden bg-[#1a365d] rounded-[1.5rem] md:rounded-[2rem] p-5 md:p-8 text-white shadow-2xl">
                 <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2"></div>
                 <div className="relative z-10 space-y-4">
                     <div className="flex items-center gap-3 text-blue-300">
                         <Activity size={18} className="animate-pulse" />
                         <span className="text-[10px] font-black uppercase tracking-[0.3em]">CUA Institutional Monitor</span>
                     </div>
-                    <h1 className="text-2xl md:text-3xl font-black font-outfit leading-none tracking-tight">
+                    <h1 className="text-xl sm:text-2xl md:text-3xl font-black font-outfit leading-none tracking-tight">
                         Greetings, <br />
                         <span className="text-blue-400">{session.user.name}</span>
                     </h1>
@@ -81,64 +81,64 @@ export default async function DashboardPage() {
             </div>
 
             {/* Performance Grids */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <Link href="/dashboard/tasks" className="group bg-white border border-slate-200 rounded-[1.5rem] p-6 shadow-sm hover:border-blue-500 transition-all hover:-translate-y-1">
-                    <div className="flex items-start justify-between mb-6">
-                        <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-all">
-                            <Clock size={28} />
+            <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
+                <Link href="/dashboard/tasks" className="group bg-white border border-slate-200 rounded-[1.25rem] md:rounded-[1.5rem] p-4 md:p-6 shadow-sm hover:border-blue-500 transition-all hover:-translate-y-1">
+                    <div className="flex items-start justify-between mb-4 md:mb-6">
+                        <div className="w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-all">
+                            <Clock size={20} className="md:hidden" /><Clock size={28} className="hidden md:block" />
                         </div>
-                        <TrendingUp size={16} className="text-blue-500" />
+                        <TrendingUp size={14} className="text-blue-500 md:w-4" />
                     </div>
-                    <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Decision Queue</h3>
-                    <p className="text-xl font-black text-[#1a365d] tracking-tighter">{pending_count}</p>
-                    <div className="mt-6 flex items-center gap-2 text-xs font-bold text-blue-600 group-hover:gap-4 transition-all uppercase tracking-widest">
-                        Process Tasks <ArrowRight size={14} />
+                    <h3 className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Decision Queue</h3>
+                    <p className="text-lg md:text-xl font-black text-[#1a365d] tracking-tighter">{pending_count}</p>
+                    <div className="mt-3 md:mt-6 flex items-center gap-2 text-[10px] md:text-xs font-bold text-blue-600 group-hover:gap-4 transition-all uppercase tracking-widest">
+                        Process <ArrowRight size={12} />
                     </div>
                 </Link>
 
-                <Link href="/dashboard/tasks" className="group bg-white border border-slate-200 rounded-[1.5rem] p-6 shadow-sm hover:border-emerald-500 transition-all hover:-translate-y-1">
-                    <div className="flex items-start justify-between mb-6">
-                        <div className="w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-all">
-                            <Layers size={28} />
+                <Link href="/dashboard/tasks" className="group bg-white border border-slate-200 rounded-[1.25rem] md:rounded-[1.5rem] p-4 md:p-6 shadow-sm hover:border-emerald-500 transition-all hover:-translate-y-1">
+                    <div className="flex items-start justify-between mb-4 md:mb-6">
+                        <div className="w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-all">
+                            <Layers size={20} className="md:hidden" /><Layers size={28} className="hidden md:block" />
                         </div>
                         <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
                     </div>
-                    <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Institutional Inbox</h3>
-                    <p className="text-xl font-black text-[#1a365d] tracking-tighter">{unread_count}</p>
-                    <div className="mt-6 flex items-center gap-2 text-xs font-bold text-emerald-600 group-hover:gap-4 transition-all uppercase tracking-widest">
-                        Open Academy <ArrowRight size={14} />
+                    <h3 className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Inbox</h3>
+                    <p className="text-lg md:text-xl font-black text-[#1a365d] tracking-tighter">{unread_count}</p>
+                    <div className="mt-3 md:mt-6 flex items-center gap-2 text-[10px] md:text-xs font-bold text-emerald-600 group-hover:gap-4 transition-all uppercase tracking-widest">
+                        Open <ArrowRight size={12} />
                     </div>
                 </Link>
 
-                <div className="bg-white border border-slate-200 rounded-[1.5rem] p-6 shadow-sm">
-                    <div className="flex items-start justify-between mb-6">
-                        <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400">
-                            <Send size={28} />
+                <div className="bg-white border border-slate-200 rounded-[1.25rem] md:rounded-[1.5rem] p-4 md:p-6 shadow-sm">
+                    <div className="flex items-start justify-between mb-4 md:mb-6">
+                        <div className="w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400">
+                            <Send size={20} className="md:hidden" /><Send size={28} className="hidden md:block" />
                         </div>
                     </div>
-                    <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Initiated Memos</h3>
-                    <p className="text-xl font-black text-[#1a365d] tracking-tighter">{my_total}</p>
-                    <div className="mt-6 flex items-center gap-2 text-[10px] font-black text-slate-300 uppercase tracking-widest leading-none">
-                        Personal History
+                    <h3 className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">My Memos</h3>
+                    <p className="text-lg md:text-xl font-black text-[#1a365d] tracking-tighter">{my_total}</p>
+                    <div className="mt-3 md:mt-6 flex items-center gap-2 text-[9px] font-black text-slate-300 uppercase tracking-widest leading-none">
+                        History
                     </div>
                 </div>
 
-                <div className="bg-white border border-slate-200 rounded-[1.5rem] p-6 shadow-sm">
-                    <div className="flex items-start justify-between mb-6">
-                        <div className="w-14 h-14 rounded-2xl bg-[#1a365d] flex items-center justify-center text-white">
-                            <ShieldCheck size={28} />
+                <div className="bg-white border border-slate-200 rounded-[1.25rem] md:rounded-[1.5rem] p-4 md:p-6 shadow-sm">
+                    <div className="flex items-start justify-between mb-4 md:mb-6">
+                        <div className="w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-2xl bg-[#1a365d] flex items-center justify-center text-white">
+                            <ShieldCheck size={20} className="md:hidden" /><ShieldCheck size={28} className="hidden md:block" />
                         </div>
                     </div>
-                    <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Total Broadcasts</h3>
-                    <p className="text-xl font-black text-[#1a365d] tracking-tighter">{university_total}</p>
-                    <div className="mt-6 flex items-center gap-2 text-[10px] font-black text-slate-300 uppercase tracking-widest leading-none">
-                        Archived Records
+                    <h3 className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Broadcasts</h3>
+                    <p className="text-lg md:text-xl font-black text-[#1a365d] tracking-tighter">{university_total}</p>
+                    <div className="mt-3 md:mt-6 flex items-center gap-2 text-[9px] font-black text-slate-300 uppercase tracking-widest leading-none">
+                        Records
                     </div>
                 </div>
             </div>
 
             {/* University Analytics Preview */}
-            <div className="bg-white border border-slate-200 rounded-[2rem] p-8 shadow-sm">
+            <div className="bg-white border border-slate-200 rounded-[1.5rem] md:rounded-[2rem] p-5 md:p-8 shadow-sm">
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8 mb-12">
                     <div className="space-y-1">
                         <h2 className="text-base font-black text-[#1a365d] font-outfit uppercase tracking-wider">Communication Activity</h2>
@@ -154,18 +154,18 @@ export default async function DashboardPage() {
                     </div>
                 </div>
 
-                <div className="h-64 flex items-end gap-3 justify-between px-4 pb-4">
+                <div className="h-48 md:h-64 flex items-end gap-1 md:gap-3 justify-between px-2 md:px-4 pt-4 pb-8">
                     {chartData.map((d, i) => (
                         <div key={i} className="flex-grow group relative h-full flex flex-col justify-end">
                             <div
-                                className="w-full bg-slate-100 rounded-2xl group-hover:bg-blue-500 transition-all duration-700 relative cursor-pointer"
+                                className="w-full bg-slate-100 rounded-lg md:rounded-2xl group-hover:bg-blue-500 transition-all duration-700 relative cursor-pointer"
                                 style={{ height: `${(d.count / maxCount) * 100}%` }}
                             >
                                 <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[9px] font-black py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20">
                                     {d.count} Memos
                                 </div>
                             </div>
-                            <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[8px] font-black text-slate-300 uppercase">{d.label}</span>
+                            <span className="absolute bottom-[-22px] left-1/2 -translate-x-1/2 text-[7px] md:text-[8px] font-black text-slate-300 uppercase">{d.label}</span>
                         </div>
                     ))}
                 </div>

@@ -93,7 +93,7 @@ export default async function TaskCenterPage() {
 
     return (
         <div className="space-y-10 animate-in fade-in duration-700 font-sans">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 md:gap-6 bg-white p-5 md:p-8 rounded-2xl md:rounded-3xl border border-slate-200 shadow-sm">
                 <div className="space-y-1">
                     <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
@@ -105,7 +105,7 @@ export default async function TaskCenterPage() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-10">
                 {/* Critical Approvals Column */}
                 <section className="space-y-6">
                     <div className="flex items-center justify-between px-2">
@@ -259,14 +259,14 @@ export default async function TaskCenterPage() {
             </div >
 
             {/* ─── NEW: Institutional Tracking (For Managers/Reviewers) ─── */}
-            < section className="space-y-6 pt-10 border-t border-slate-100" >
+            <section className="space-y-6 pt-10 border-t border-slate-100">
                 <div className="flex items-center justify-between px-2">
                     <div className="space-y-1">
-                        <h2 className="text-base font-black text-[#1a365d] flex items-center gap-3 font-outfit uppercase tracking-wider">
-                            <History className="text-blue-400" size={20} />
+                        <h2 className="text-sm md:text-base font-black text-[#1a365d] flex items-center gap-3 font-outfit uppercase tracking-wider">
+                            <History className="text-blue-400" size={18} />
                             My Processing History
                         </h2>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest ml-8 leading-none">Tracking progress of your past decisions</p>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest ml-7 md:ml-8 leading-none">Tracking progress of your past decisions</p>
                     </div>
                 </div>
 
@@ -329,8 +329,8 @@ export default async function TaskCenterPage() {
                         </div>
                     )
                 }
-            </section >
-        </div >
+            </section>
+        </div>
     );
 }
 

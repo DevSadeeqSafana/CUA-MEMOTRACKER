@@ -122,13 +122,14 @@ export default async function MemoDetailsPage({
     return (
         <div className="max-w-7xl mx-auto space-y-8 pb-20 animate-in fade-in duration-700 font-sans">
             {/* Top Navigation Bar */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
                 <Link
                     href="/dashboard"
-                    className="flex items-center gap-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 hover:text-[#1a365d] transition-all group px-4 py-2 bg-white border border-slate-200 rounded-2xl shadow-sm"
+                    className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 hover:text-[#1a365d] transition-all group px-3 md:px-4 py-2 bg-white border border-slate-200 rounded-2xl shadow-sm"
                 >
                     <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
-                    Back to Cockpit
+                    Back
+                    <span className="hidden sm:inline">to Cockpit</span>
                 </Link>
 
                 <div className="flex items-center gap-6">
@@ -140,21 +141,22 @@ export default async function MemoDetailsPage({
             </div>
 
             {/* Premium Header Card */}
-            <div className="bg-white border border-slate-200 rounded-[1.5rem] p-6 shadow-sm relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-6 flex flex-col items-end gap-3 z-10">
+            <div className="bg-white border border-slate-200 rounded-[1.5rem] p-5 md:p-6 shadow-sm relative overflow-hidden">
+                {/* Status Badge — inline on mobile, absolute on desktop */}
+                <div className="flex justify-end mb-4 md:mb-0 md:absolute md:top-0 md:right-0 md:p-6 md:flex md:flex-col md:items-end md:gap-3 z-10">
                     <div className={cn(
-                        "text-[10px] font-black uppercase tracking-[0.2em] px-4 py-2 rounded-xl border-2 shadow-sm",
+                        "text-[10px] font-black uppercase tracking-[0.2em] px-3 md:px-4 py-1.5 md:py-2 rounded-xl border-2 shadow-sm",
                         memo.status === 'Draft' && "bg-slate-50 border-slate-200 text-slate-400",
                         memo.status === 'Line Manager Review' && "bg-amber-50 border-amber-200 text-amber-700",
                         memo.status === 'Reviewer Approval' && "bg-blue-50 border-blue-200 text-blue-700",
                         memo.status === 'Distributed' && "bg-emerald-50 border-emerald-200 text-emerald-700",
                     )}>
-                        Workflow: {memo.status}
+                        <span className="hidden sm:inline">Workflow: </span>{memo.status}
                     </div>
                 </div>
 
-                <div className="space-y-6 max-w-4xl relative z-10">
-                    <div className="flex items-center gap-4">
+                <div className="space-y-4 md:space-y-6 max-w-4xl relative z-10">
+                    <div className="flex flex-wrap items-center gap-2 md:gap-4">
                         <div className={cn(
                             "flex items-center gap-2 text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg border-2",
                             memo.priority === 'High' ? "bg-red-50 border-red-200 text-red-600" :
@@ -180,9 +182,9 @@ export default async function MemoDetailsPage({
                         )}
                     </div>
 
-                    <h1 className="text-xl md:text-2xl font-black leading-tight text-[#1a365d] font-outfit uppercase tracking-tight">{memo.title}</h1>
+                    <h1 className="text-lg md:text-xl lg:text-2xl font-black leading-tight text-[#1a365d] font-outfit uppercase tracking-tight">{memo.title}</h1>
 
-                    <div className="flex flex-wrap items-center gap-8 pt-6 border-t border-slate-50">
+                    <div className="flex flex-wrap items-center gap-4 md:gap-8 pt-4 md:pt-6 border-t border-slate-50">
                         <div className="flex items-center gap-4">
                             <div className="w-10 h-10 rounded-xl bg-[#1a365d] flex items-center justify-center text-white text-base font-black shadow-xl shadow-blue-900/40">
                                 {creatorInitial}
@@ -357,15 +359,15 @@ export default async function MemoDetailsPage({
                         availableManagers={availableManagers}
                     />
                 ) : (
-                    <div className="bg-[#1a365d] border border-blue-900 rounded-2xl p-6 flex flex-col lg:flex-row items-center justify-between gap-6 shadow-xl relative overflow-hidden group">
+                    <div className="bg-[#1a365d] border border-blue-900 rounded-2xl p-5 md:p-6 flex flex-col items-start gap-5 shadow-xl relative overflow-hidden group">
                         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform"></div>
-                        <div className="flex flex-col md:flex-row md:items-center gap-6 relative z-10 w-full lg:w-auto">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-4 relative z-10 w-full">
                             <div className="flex items-center gap-4 text-white">
                                 <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center text-blue-400 border border-white/10 shrink-0">
                                     <ShieldCheck size={24} />
                                 </div>
                                 <div className="space-y-1">
-                                    <h3 className="text-lg font-black font-outfit uppercase tracking-tight">Administrative Review</h3>
+                                    <h3 className="text-base md:text-lg font-black font-outfit uppercase tracking-tight">Administrative Review</h3>
                                     <p className="text-blue-100/70 font-medium text-[11px]">Verification required for internal routing.</p>
                                 </div>
                             </div>
@@ -384,7 +386,7 @@ export default async function MemoDetailsPage({
                             )}
                         </div>
 
-                        <div className="flex flex-col sm:flex-row items-center gap-4 relative z-10 w-full lg:w-auto">
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 relative z-10 w-full">
                             {canAdjustRouting && (
                                 <LineManagerRoutingAdjustment
                                     memoId={memo.id}
@@ -402,20 +404,20 @@ export default async function MemoDetailsPage({
 
             {/* ─── RECIPIENT VIEW: Acknowledge banner ─── */}
             {isRecipient && memo.status === 'Distributed' && (
-                <div className="bg-emerald-600 border border-emerald-700 rounded-2xl p-6 flex flex-col lg:flex-row items-center justify-between gap-6 shadow-xl relative overflow-hidden group">
+                <div className="bg-emerald-600 border border-emerald-700 rounded-2xl p-5 md:p-6 flex flex-col gap-5 shadow-xl relative overflow-hidden group">
                     <MarkAsRead memoId={memo.id} />
                     <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform"></div>
-                    <div className="flex items-center gap-6 text-white relative z-10">
-                        <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center text-emerald-200 border border-white/10">
-                            <CheckCircle2 size={32} />
+                    <div className="flex items-center gap-4 md:gap-6 text-white relative z-10">
+                        <div className="w-12 h-12 md:w-16 md:h-16 rounded-xl md:rounded-2xl bg-white/10 flex items-center justify-center text-emerald-200 border border-white/10 shrink-0">
+                            <CheckCircle2 size={24} className="md:hidden" /><CheckCircle2 size={32} className="hidden md:block" />
                         </div>
                         <div className="space-y-1">
-                            <h3 className="text-xl font-black font-outfit uppercase">Institutional Broadcast</h3>
-                            <p className="text-emerald-50/70 font-medium text-sm">Formal acknowledgment of this communication is mandatory.</p>
+                            <h3 className="text-base md:text-xl font-black font-outfit uppercase">Institutional Broadcast</h3>
+                            <p className="text-emerald-50/70 font-medium text-xs md:text-sm">Formal acknowledgment of this communication is mandatory.</p>
                         </div>
                     </div>
 
-                    <div className="relative z-10 flex flex-col sm:flex-row items-center gap-4">
+                    <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center gap-3">
                         {canForward && (
                             <ConsultationThread
                                 memoId={memo.id}

@@ -161,7 +161,7 @@ export default function MemoHistory({ memo, approvals, recipients, routingLogs =
 
     return (
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-6">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
                 <div>
                     <h3 className="text-lg font-black text-[#1a365d] font-outfit uppercase tracking-tight">Audit Trail</h3>
                     <p className="text-[10px] text-slate-400 font-medium mt-0.5">Reference {memo.reference_number}</p>
@@ -186,7 +186,7 @@ export default function MemoHistory({ memo, approvals, recipients, routingLogs =
                         </div>
 
                         <div className="flex-grow space-y-0.5 pt-0.5">
-                            <div className="flex items-center justify-between">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
                                 <h4 className={cn(
                                     "font-black text-xs uppercase tracking-wider",
                                     event.status === 'completed' ? "text-[#1a365d]" :
@@ -195,7 +195,7 @@ export default function MemoHistory({ memo, approvals, recipients, routingLogs =
                                 )}>
                                     {event.title}
                                 </h4>
-                                <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
+                                <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100 shrink-0 self-start sm:self-center">
                                     {event.timestamp ? formatDate(event.timestamp) : 'Pending Action'}
                                 </span>
                             </div>

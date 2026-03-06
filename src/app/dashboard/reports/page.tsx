@@ -53,12 +53,12 @@ export default async function ReportsPage() {
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
             <div>
-                <h1 className="text-3xl font-bold tracking-tight">System Reports & Analytics</h1>
+                <h1 className="text-2xl md:text-3xl font-bold tracking-tight">System Reports & Analytics</h1>
                 <p className="text-muted-foreground mt-1">Detailed overview of memo lifecycle and organizational compliance.</p>
             </div>
 
             {/* Metric Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
                 <div className="bg-card border rounded-2xl p-6 shadow-sm">
                     <div className="flex items-center gap-3 mb-2 text-primary font-bold">
                         <TrendingUp size={18} />
@@ -97,7 +97,7 @@ export default async function ReportsPage() {
 
             {/* Detailed Table */}
             <div className="bg-card border rounded-2xl shadow-sm overflow-hidden">
-                <div className="p-6 border-b flex items-center justify-between bg-muted/20">
+                <div className="p-4 md:p-6 border-b flex flex-wrap items-center justify-between gap-3 bg-muted/20">
                     <h2 className="text-lg font-bold">Memo Lifecycle Distribution</h2>
                     <ExportButton data={memoList} />
                 </div>

@@ -40,10 +40,10 @@ export default function SettingsTabs({ user, roles }: SettingsTabsProps) {
     ];
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-10">
             {/* Sidebar Navigation */}
             <div className="space-y-4">
-                <nav className="flex flex-col space-y-2">
+                <nav className="flex flex-row md:flex-col gap-2 overflow-x-auto pb-1 md:pb-0 scrollbar-hide">
                     {tabs.map((tab) => {
                         const Icon = tab.icon;
                         return (
@@ -51,14 +51,14 @@ export default function SettingsTabs({ user, roles }: SettingsTabsProps) {
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
                                 className={cn(
-                                    "flex items-center gap-3 px-6 py-4 text-sm font-bold rounded-2xl text-left transition-all",
+                                    "flex items-center gap-2 md:gap-3 px-4 md:px-6 py-3 md:py-4 text-xs md:text-sm font-bold rounded-xl md:rounded-2xl text-left transition-all shrink-0",
                                     activeTab === tab.id
                                         ? "bg-[#1a365d] text-white shadow-lg shadow-blue-900/10"
-                                        : "text-slate-500 hover:bg-slate-100"
+                                        : "text-slate-500 hover:bg-slate-100 bg-white border border-slate-200 md:border-0"
                                 )}
                             >
-                                <Icon size={20} />
-                                {tab.label}
+                                <Icon size={16} className="md:w-5 md:h-5" />
+                                <span className="whitespace-nowrap">{tab.label}</span>
                             </button>
                         );
                     })}
@@ -69,7 +69,7 @@ export default function SettingsTabs({ user, roles }: SettingsTabsProps) {
             <div className="md:col-span-2 space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
                 {activeTab === 'profile' && (
                     <>
-                        <div className="bg-white border border-slate-200 rounded-3xl p-10 shadow-sm space-y-8">
+                        <div className="bg-white border border-slate-200 rounded-3xl p-6 md:p-10 shadow-sm space-y-8">
                             <div className="border-b border-slate-100 pb-6">
                                 <h2 className="text-xl font-black text-[#1a365d] font-outfit">Official Profile</h2>
                                 <p className="text-sm text-slate-400 font-medium">Verified information from the University Human Resources database.</p>
@@ -95,7 +95,7 @@ export default function SettingsTabs({ user, roles }: SettingsTabsProps) {
                             </div>
                         </div>
 
-                        <div className="bg-white border border-slate-200 rounded-3xl p-10 shadow-sm space-y-8">
+                        <div className="bg-white border border-slate-200 rounded-3xl p-6 md:p-10 shadow-sm space-y-8">
                             <div className="border-b border-slate-100 pb-6">
                                 <h2 className="text-xl font-black text-[#1a365d] font-outfit">Access Control</h2>
                                 <p className="text-sm text-slate-400 font-medium">Your authorized roles within the Internal Memo Tracker System.</p>
@@ -118,7 +118,7 @@ export default function SettingsTabs({ user, roles }: SettingsTabsProps) {
 
                 {activeTab === 'security' && (
                     <div className="space-y-8">
-                        <div className="bg-white border border-slate-200 rounded-3xl p-10 shadow-sm space-y-8">
+                        <div className="bg-white border border-slate-200 rounded-3xl p-6 md:p-10 shadow-sm space-y-8">
                             <div className="border-b border-slate-100 pb-6">
                                 <h2 className="text-xl font-black text-[#1a365d] font-outfit">Security Settings</h2>
                                 <p className="text-sm text-slate-400 font-medium">Manage your password and authentication methods.</p>
@@ -161,7 +161,7 @@ export default function SettingsTabs({ user, roles }: SettingsTabsProps) {
                         </div>
 
                         {isChangingPassword && (
-                            <div className="bg-white border border-blue-200 rounded-3xl p-10 shadow-xl space-y-8 animate-in slide-in-from-top-4 duration-300">
+                            <div className="bg-white border border-blue-200 rounded-3xl p-6 md:p-10 shadow-xl space-y-8 animate-in slide-in-from-top-4 duration-300">
                                 <div className="flex items-center justify-between border-b border-slate-100 pb-6">
                                     <h3 className="text-xl font-black text-[#1a365d] font-outfit">Update Password</h3>
                                     <button onClick={() => { setIsChangingPassword(false); setPwdStatus({ loading: false, error: null, success: false }); }} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
@@ -253,7 +253,7 @@ export default function SettingsTabs({ user, roles }: SettingsTabsProps) {
                 )}
 
                 {activeTab === 'notifications' && (
-                    <div className="bg-white border border-slate-200 rounded-3xl p-10 shadow-sm space-y-8">
+                    <div className="bg-white border border-slate-200 rounded-3xl p-6 md:p-10 shadow-sm space-y-8">
                         <div className="border-b border-slate-100 pb-6">
                             <h2 className="text-xl font-black text-[#1a365d] font-outfit">Notification Preferences</h2>
                             <p className="text-sm text-slate-400 font-medium">Choose how and when you want to be notified.</p>
@@ -287,7 +287,7 @@ export default function SettingsTabs({ user, roles }: SettingsTabsProps) {
                 )}
 
                 {/* Global Policy Note */}
-                <div className="bg-amber-50 border border-amber-200 rounded-3xl p-8 flex items-start gap-5 shadow-sm">
+                <div className="bg-amber-50 border border-amber-200 rounded-3xl p-6 md:p-8 flex items-start gap-4 md:gap-5 shadow-sm">
                     <AlertIcon className="text-amber-600 shrink-0 mt-1" size={24} />
                     <div className="space-y-2">
                         <h3 className="text-lg font-black text-amber-900 font-outfit">Data Integrity Policy</h3>

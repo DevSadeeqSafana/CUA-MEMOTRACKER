@@ -82,9 +82,9 @@ export default async function ApprovalsPage() {
                                         <h3 className="font-black text-[#1a365d] font-outfit text-base truncate group-hover:text-blue-600 transition-colors uppercase tracking-tight">
                                             {item.title}
                                         </h3>
-                                        <div className="text-[10px] text-slate-400 flex items-center gap-2 font-medium mt-0.5">
+                                        <div className="text-[10px] text-slate-400 flex flex-wrap items-center gap-2 font-medium mt-0.5">
                                             <span className="uppercase tracking-wider">From: <span className="font-bold text-slate-700">{item.creator_name}</span></span>
-                                            <span>•</span>
+                                            <span className="hidden sm:inline">•</span>
                                             <span className="uppercase tracking-wider">{item.department}</span>
                                         </div>
                                     </div>
@@ -144,10 +144,10 @@ export default async function ApprovalsPage() {
                                         <h3 className="font-black text-slate-700 font-outfit text-base truncate group-hover:text-blue-600 transition-colors uppercase tracking-tight">
                                             {item.title}
                                         </h3>
-                                        <div className="text-[10px] text-slate-400 flex items-center gap-2 font-medium mt-0.5">
+                                        <div className="text-[10px] text-slate-400 flex flex-wrap items-center gap-2 font-medium mt-0.5">
                                             <span className="uppercase tracking-wider">Status: <span className="font-bold text-blue-600">{item.status}</span></span>
-                                            <span>•</span>
-                                            <span className="uppercase tracking-wider">From: {item.creator_name}</span>
+                                            <span className="hidden sm:inline">•</span>
+                                            <span className="uppercase tracking-wider truncate max-w-[150px]">From: {item.creator_name}</span>
                                         </div>
                                     </div>
                                 </div>

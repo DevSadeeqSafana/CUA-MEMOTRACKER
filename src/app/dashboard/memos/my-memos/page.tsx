@@ -50,7 +50,7 @@ export default async function MyMemosPage() {
                         <Link
                             key={memo.id}
                             href={`/dashboard/memos/${memo.uuid}`}
-                            className="group bg-white border border-slate-200 rounded-xl p-4 hover:border-blue-500 transition-all hover:shadow-md flex items-center gap-4"
+                            className="group bg-white border border-slate-200 rounded-xl p-3 md:p-4 hover:border-blue-500 transition-all hover:shadow-md flex items-center gap-3 md:gap-4"
                         >
                             <div className={cn(
                                 "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
@@ -76,14 +76,14 @@ export default async function MyMemosPage() {
                                 <h3 className="font-black text-[#1a365d] font-outfit text-base truncate group-hover:text-blue-600 transition-colors uppercase tracking-tight">
                                     {memo.title}
                                 </h3>
-                                <div className="flex items-center gap-3 text-[10px] text-slate-400 font-medium mt-0.5">
+                                <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-400 font-medium mt-0.5">
                                     <span className="flex items-center gap-1 uppercase tracking-wider">
                                         <Clock size={12} />
                                         {formatDate(memo.created_at)}
                                     </span>
-                                    <span>•</span>
-                                    <span className="uppercase tracking-wider">{memo.department}</span>
-                                    <span>•</span>
+                                    <span className="hidden sm:inline">•</span>
+                                    <span className="uppercase tracking-wider hidden sm:inline">{memo.department}</span>
+                                    <span className="hidden sm:inline">•</span>
                                     <span className="uppercase tracking-wider">{memo.memo_type}</span>
                                     {memo.is_budget_memo === 1 && (
                                         <>
@@ -97,16 +97,17 @@ export default async function MyMemosPage() {
                                 </div>
                             </div>
 
-                            <div className="flex flex-col items-end gap-2 shrink-0">
+                            <div className="flex flex-col items-end gap-1.5 shrink-0">
                                 <div className={cn(
-                                    "text-[9px] font-black px-2 py-0.5 rounded-lg border uppercase tracking-wider",
+                                    "text-[8px] md:text-[9px] font-black px-2 py-0.5 rounded-lg border uppercase tracking-wider whitespace-nowrap",
                                     memo.status === 'Draft' && "bg-slate-50 border-slate-200 text-slate-400",
                                     memo.status === 'Line Manager Review' && "bg-amber-50 border-amber-200 text-amber-700",
                                     memo.status === 'Reviewer Approval' && "bg-blue-50 border-blue-200 text-blue-700",
                                     memo.status === 'Distributed' && "bg-emerald-50 border-emerald-200 text-emerald-700",
                                     memo.status === 'Archived' && "bg-gray-100 border-gray-200 text-gray-500",
                                 )}>
-                                    {memo.status}
+                                    <span className="hidden sm:inline">{memo.status}</span>
+                                    <span className="sm:hidden">{memo.status.split(' ')[0]}</span>
                                 </div>
                                 <ChevronRight size={16} className="text-slate-300 group-hover:translate-x-1 transition-transform group-hover:text-blue-500" />
                             </div>

@@ -91,7 +91,7 @@ export default function LoginPage() {
       </div>
 
       {/* Right Side: Login Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 lg:p-12 bg-slate-50">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-5 sm:p-8 lg:p-12 bg-slate-50">
         <div className="w-full max-w-md space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500 text-slate-900">
           <div className="text-center lg:text-left space-y-6">
             <div className="flex justify-center lg:justify-start">
@@ -100,8 +100,8 @@ export default function LoginPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <h1 className="text-5xl font-black tracking-tight text-[#1a365d] font-outfit">Staff Sign In</h1>
-              <p className="text-slate-500 font-medium text-lg leading-relaxed">Enter your university credentials to access the internal portal.</p>
+              <h1 className="text-3xl md:text-5xl font-black tracking-tight text-[#1a365d] font-outfit">Staff Sign In</h1>
+              <p className="text-slate-500 font-medium text-sm md:text-lg leading-relaxed">Enter your university credentials to access the internal portal.</p>
             </div>
           </div>
 

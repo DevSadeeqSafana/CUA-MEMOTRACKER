@@ -59,7 +59,7 @@ export default async function UserManagementPage({
 
     return (
         <div className="space-y-10 animate-in fade-in duration-700 font-sans">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 md:gap-6 bg-white p-5 md:p-6 rounded-2xl md:rounded-3xl border border-slate-200 shadow-sm">
                 <div className="space-y-1">
                     <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#1a365d] flex items-center justify-center border border-blue-100">
@@ -74,10 +74,10 @@ export default async function UserManagementPage({
             </div>
 
             {/* Controls */}
-            <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex flex-col sm:flex-row gap-3">
                 <UserSearch />
-                <button className="flex items-center gap-2 px-6 py-4 bg-white border border-slate-200 rounded-2xl text-slate-500 font-bold hover:bg-slate-50 transition-all shadow-sm">
-                    <Filter size={18} />
+                <button className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 rounded-2xl text-slate-500 font-bold hover:bg-slate-50 transition-all shadow-sm shrink-0">
+                    <Filter size={16} />
                     Filters
                 </button>
             </div>
@@ -88,13 +88,13 @@ export default async function UserManagementPage({
                     <table className="w-full text-left border-collapse min-w-[1200px]">
                         <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
                             <tr>
-                                <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">Staff Identity</th>
-                                <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">University Email</th>
-                                <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">Department</th>
-                                <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">Reporting To</th>
-                                <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">Status</th>
-                                <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">System Roles</th>
-                                <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] text-right bg-slate-50">Actions</th>
+                                <th className="px-4 md:px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">Staff Identity</th>
+                                <th className="px-4 md:px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">University Email</th>
+                                <th className="px-4 md:px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">Department</th>
+                                <th className="px-4 md:px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">Reporting To</th>
+                                <th className="px-4 md:px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">Status</th>
+                                <th className="px-4 md:px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">System Roles</th>
+                                <th className="px-4 md:px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] text-right bg-slate-50">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -103,7 +103,7 @@ export default async function UserManagementPage({
                                     "group hover:bg-slate-50/50 transition-colors",
                                     !user.is_active && "opacity-60 bg-slate-50/30"
                                 )}>
-                                    <td className="px-8 py-6">
+                                    <td className="px-4 md:px-8 py-6">
                                         <div className="flex items-center gap-4">
                                             <div className={cn(
                                                 "w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm",
@@ -117,19 +117,19 @@ export default async function UserManagementPage({
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="px-8 py-6">
+                                    <td className="px-4 md:px-8 py-6">
                                         <div className="flex items-center gap-2 text-slate-500 font-medium">
                                             <Mail size={14} className="opacity-40" />
                                             <span className="text-sm">{user.email}</span>
                                         </div>
                                     </td>
-                                    <td className="px-8 py-6">
+                                    <td className="px-4 md:px-8 py-6">
                                         <div className="flex items-center gap-2">
                                             <Building size={14} className="text-slate-300" />
                                             <span className="text-sm font-bold text-slate-700">{user.department}</span>
                                         </div>
                                     </td>
-                                    <td className="px-8 py-6">
+                                    <td className="px-4 md:px-8 py-6">
                                         <div className="flex items-center gap-2">
                                             {user.manager_name ? (
                                                 <>
@@ -143,7 +143,7 @@ export default async function UserManagementPage({
                                             )}
                                         </div>
                                     </td>
-                                    <td className="px-8 py-6">
+                                    <td className="px-4 md:px-8 py-6">
                                         <div className={cn(
                                             "inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border",
                                             user.is_active
@@ -154,7 +154,7 @@ export default async function UserManagementPage({
                                             {user.is_active ? "Authorized" : "Inactive"}
                                         </div>
                                     </td>
-                                    <td className="px-8 py-6">
+                                    <td className="px-4 md:px-8 py-6">
                                         <div className="flex flex-wrap gap-2">
                                             {user.roles.map((role: string) => (
                                                 <span key={role} className="px-3 py-1 bg-blue-50 text-blue-700 text-[9px] font-black uppercase tracking-wider rounded-lg border border-blue-100">
@@ -164,7 +164,7 @@ export default async function UserManagementPage({
                                             {user.roles.length === 0 && <span className="text-[9px] text-slate-400 italic">No role</span>}
                                         </div>
                                     </td>
-                                    <td className="px-8 py-6 text-right">
+                                    <td className="px-4 md:px-8 py-6 text-right">
                                         <UserTableActions user={user} managers={managers} />
                                     </td>
                                 </tr>
