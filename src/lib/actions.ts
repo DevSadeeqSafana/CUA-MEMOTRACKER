@@ -87,19 +87,61 @@ export async function createMemo(data: FormData, isDraft: boolean) {
         // 3. Handle Attachments
         if (files.length > 0) {
             const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+            const uploadApiUrl = process.env.UPLOAD_API_URL;
+            const uploadSecretToken = process.env.UPLOAD_SECRET_TOKEN;
+            
             try { await mkdir(uploadDir, { recursive: true }); } catch (e) { }
 
             for (const file of files) {
                 if (!file || file.size === 0 || typeof file === 'string') continue;
-                const buffer = Buffer.from(await (file as File).arrayBuffer());
-                const fileName = `${uuid}-${Date.now()}-${(file as File).name.replace(/\s+/g, '_')}`;
-                const filePath = `/uploads/${fileName}`;
+                
+                let filePath = '';
+                
+                // Try remote upload
+                if (uploadApiUrl && uploadSecretToken) {
+                    try {
+                        const formData = new FormData();
+                        formData.append('file', file as File);
+                        
+                        const response = await fetch(uploadApiUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${uploadSecretToken}`
+                            },
+                            body: formData
+                        });
+                        
+                        if (response.ok) {
+                            const result = await response.json();
+                            if (result.success && result.file && result.file.url) {
+                                filePath = result.file.url;
+                            }
+                        } else {
+                            console.error(`Upload failed for ${(file as File).name}: HTTP ${response.status}`);
+                        }
+                    } catch (e) {
+                        console.error('External upload error:', e);
+                    }
+                }
+                
+                // Fallback to local
+                if (!filePath) {
+                    const buffer = Buffer.from(await (file as File).arrayBuffer());
+                    const fileName = `${uuid}-${Date.now()}-${(file as File).name.replace(/\s+/g, '_')}`;
+                    filePath = `/uploads/${fileName}`;
 
-                await writeFile(path.join(uploadDir, fileName), buffer);
+                    await writeFile(path.join(uploadDir, fileName), buffer);
+                }
 
                 await query(
                     'INSERT INTO attachments (memo_id, file_name, file_path, file_type, file_size) VALUES (?, ?, ?, ?, ?)',
-                    [memoId, (file as File).name, filePath, (file as File).type, (file as File).size]
+                    [
+                        memoId, 
+                        (file as File).name.substring(0, 255), 
+                        filePath.substring(0, 255), 
+                        (file as File).type.substring(0, 255), 
+                        (file as File).size
+                    ]
                 );
             }
         }

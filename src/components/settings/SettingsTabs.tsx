@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { changePassword } from '@/lib/actions';
+import toast from 'react-hot-toast';
 
 interface SettingsTabsProps {
     user: any;
@@ -27,10 +28,8 @@ export default function SettingsTabs({ user, roles }: SettingsTabsProps) {
     const [activeTab, setActiveTab] = useState('profile');
     const [isChangingPassword, setIsChangingPassword] = useState(false);
     const [passwordData, setPasswordData] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
-    const [pwdStatus, setPwdStatus] = useState<{ loading: boolean; error: string | null; success: boolean }>({
+    const [pwdStatus, setPwdStatus] = useState<{ loading: boolean }>({
         loading: false,
-        error: null,
-        success: false
     });
 
     const tabs = [
@@ -164,36 +163,27 @@ export default function SettingsTabs({ user, roles }: SettingsTabsProps) {
                             <div className="bg-white border border-blue-200 rounded-3xl p-6 md:p-10 shadow-xl space-y-8 animate-in slide-in-from-top-4 duration-300">
                                 <div className="flex items-center justify-between border-b border-slate-100 pb-6">
                                     <h3 className="text-xl font-black text-[#1a365d] font-outfit">Update Password</h3>
-                                    <button onClick={() => { setIsChangingPassword(false); setPwdStatus({ loading: false, error: null, success: false }); }} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+                                    <button onClick={() => { setIsChangingPassword(false); setPwdStatus({ loading: false }); }} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
                                 </div>
-
-                                {pwdStatus.error && (
-                                    <div className="p-4 bg-red-50 border border-red-100 text-red-600 rounded-2xl text-xs font-bold flex items-center gap-2">
-                                        <ShieldAlert size={16} /> {pwdStatus.error}
-                                    </div>
-                                )}
-
-                                {pwdStatus.success && (
-                                    <div className="p-4 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-2xl text-xs font-bold flex items-center gap-2">
-                                        <ShieldCheck size={16} /> Password updated successfully!
-                                    </div>
-                                )}
 
                                 <form className="space-y-6" onSubmit={async (e) => {
                                     e.preventDefault();
                                     if (passwordData.newPassword !== passwordData.confirmPassword) {
-                                        return setPwdStatus({ ...pwdStatus, error: "Passwords do not match." });
+                                        toast.error("Passwords do not match.");
+                                        return;
                                     }
-                                    setPwdStatus({ ...pwdStatus, loading: true, error: null });
+                                    setPwdStatus({ loading: true });
                                     const result = await changePassword({
                                         currentPassword: passwordData.currentPassword,
                                         newPassword: passwordData.newPassword
                                     });
                                     if (result.success) {
-                                        setPwdStatus({ loading: false, error: null, success: true });
+                                        toast.success('Password updated successfully!');
+                                        setPwdStatus({ loading: false });
                                         setTimeout(() => setIsChangingPassword(false), 2000);
                                     } else {
-                                        setPwdStatus({ loading: false, error: result.error || "Update failed", success: false });
+                                        toast.error(result.error || "Update failed");
+                                        setPwdStatus({ loading: false });
                                     }
                                 }}>
                                     <div className="space-y-4">

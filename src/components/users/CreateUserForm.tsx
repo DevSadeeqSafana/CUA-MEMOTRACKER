@@ -24,7 +24,6 @@ interface CreateUserFormProps {
 
 export default function CreateUserForm({ onClose }: CreateUserFormProps) {
     const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
 
     const [hrSearchTerm, setHrSearchTerm] = useState('');
@@ -162,20 +161,19 @@ export default function CreateUserForm({ onClose }: CreateUserFormProps) {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!formData.staff_id) {
-            setError('Selection error: Please identify and select a verified staff member from the HR digital directory.');
+            toast.error('Selection error: Please identify and select a verified staff member from the HR digital directory.');
             return;
         }
         if (formData.roles.length === 0) {
-            setError('Governance error: At least one administrative or operational role must be assigned.');
+            toast.error('Governance error: At least one administrative or operational role must be assigned.');
             return;
         }
         if (!formData.line_manager_id) {
-            setError('Accountability error: Every user must be assigned a Line Manager for memo validation.');
+            toast.error('Accountability error: Every user must be assigned a Line Manager for memo validation.');
             return;
         }
 
         setIsLoading(true);
-        setError(null);
 
         try {
             const result = await createUser(formData);
@@ -184,12 +182,10 @@ export default function CreateUserForm({ onClose }: CreateUserFormProps) {
                 toast.success(`Account for ${formData.username} created!`);
                 setTimeout(() => onClose(), 2000);
             } else {
-                setError(result.error || 'Failed to create user account.');
-                toast.error(result.error || 'Provisioning failed');
+                toast.error(result.error || 'Failed to create user account.');
             }
         } catch (err) {
-            setError('An unexpected system error occurred while provisioning the account.');
-            toast.error('System error occurred');
+            toast.error('An unexpected system error occurred while provisioning the account.');
         } finally {
             setIsLoading(false);
         }
@@ -218,8 +214,7 @@ export default function CreateUserForm({ onClose }: CreateUserFormProps) {
                         <h2 className="text-xl font-black text-[#1a365d] font-outfit uppercase tracking-tight">Account Provisioning</h2>
                         <p className="text-[9px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1 italic">Security & Hierarchy Configuration</p>
                     </div>
-                </div>
-                <button onClick={onClose} className="p-2 hover:bg-slate-50 rounded-xl transition-all text-slate-300 hover:text-slate-600">
+                </div>                <button onClick={onClose} className="p-2 hover:bg-slate-50 rounded-xl transition-all text-slate-300 hover:text-slate-600">
                     <X size={20} />
                 </button>
             </div>
@@ -253,13 +248,6 @@ export default function CreateUserForm({ onClose }: CreateUserFormProps) {
                             <p className="text-xs text-amber-700 font-bold mt-2">→ Use the Edit button on their existing profile to update roles or status.</p>
                         </div>
                     </div>
-                </div>
-            )}
-
-            {error && (
-                <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-5 rounded-2xl flex items-center gap-4 text-sm animate-in slide-in-from-top-2 font-bold uppercase tracking-wide">
-                    <AlertCircle size={20} className="shrink-0" />
-                    {error}
                 </div>
             )}
 

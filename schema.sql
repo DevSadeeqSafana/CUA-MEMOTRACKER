@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS attachments (
     memo_id INT NOT NULL,
     file_name VARCHAR(255) NOT NULL,
     file_path VARCHAR(255) NOT NULL,
-    file_type VARCHAR(50),
+    file_type VARCHAR(255),
     file_size INT,
     uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (memo_id) REFERENCES memos(id) ON DELETE CASCADE

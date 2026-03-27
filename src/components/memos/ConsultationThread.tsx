@@ -12,6 +12,7 @@ import {
     ChevronDown,
     ChevronUp
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { cn, formatDate } from '@/lib/utils';
 import {
     forwardMemoConsultation,
@@ -108,14 +109,20 @@ function ConsultationModal({
     const submit = () => {
         if (!selectedUser || !message.trim()) return;
         startTransition(async () => {
-            if (actionType === 'Response' && parentId !== null) {
-                // responding in thread
-                await respondToConsultation(memoId, parentId, selectedUser.id, message);
-            } else {
-                // new forward (top-level or child thread)
-                await forwardMemoConsultation(memoId, selectedUser.id, message, parentId);
+            try {
+                if (actionType === 'Response' && parentId !== null) {
+                    // responding in thread
+                    await respondToConsultation(memoId, parentId, selectedUser.id, message);
+                    toast.success('Response sent successfully');
+                } else {
+                    // new forward (top-level or child thread)
+                    await forwardMemoConsultation(memoId, selectedUser.id, message, parentId);
+                    toast.success('Memo forwarded for consultation');
+                }
+                onDone();
+            } catch (error) {
+                toast.error('Failed to send message. Please try again.');
             }
-            onDone();
         });
     };
 

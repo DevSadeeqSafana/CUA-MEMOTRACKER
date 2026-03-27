@@ -4,19 +4,18 @@ import { useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { Loader2, AlertCircle, ArrowRight, ShieldCheck, GraduationCap, CheckCircle2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import Image from 'next/image';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setError(null);
 
     try {
       const result = await signIn('credentials', {
@@ -26,12 +25,12 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
-        setError('Invalid credentials. Please contact the ICT department if the issue persists.');
+        toast.error('Invalid credentials. Please contact the ICT department if the issue persists.');
       } else {
         router.push('/dashboard');
       }
     } catch (err) {
-      setError('A system error occurred. Please try again later.');
+      toast.error('A system error occurred. Please try again later.');
     } finally {
       setIsLoading(false);
     }
@@ -104,13 +103,6 @@ export default function LoginPage() {
               <p className="text-slate-500 font-medium text-sm md:text-lg leading-relaxed">Enter your university credentials to access the internal portal.</p>
             </div>
           </div>
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-2xl flex items-center gap-3 text-sm animate-in shake-in shadow-sm font-bold">
-              <AlertCircle size={20} className="shrink-0" />
-              {error}
-            </div>
-          )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-5">

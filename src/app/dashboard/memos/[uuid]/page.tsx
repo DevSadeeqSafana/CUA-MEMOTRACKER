@@ -26,6 +26,7 @@ import ReviewerDecisionPanel from '@/components/memos/ReviewerDecisionPanel';
 import MemoRoutingTracker from '@/components/memos/MemoRoutingTracker';
 import LineManagerRoutingAdjustment from '@/components/memos/LineManagerRoutingAdjustment';
 import ConsultationThread from '@/components/memos/ConsultationThread';
+import DocumentPreviewModal from '@/components/memos/DocumentPreviewModal';
 import { getRecipients, getManagers, getConsultations } from '@/lib/actions';
 
 export default async function MemoDetailsPage({
@@ -58,6 +59,12 @@ export default async function MemoDetailsPage({
     // Fetch budget items if it's a budget memo
     const budgetItems = await query(
         `SELECT * FROM memo_budget_items WHERE memo_id = ?`,
+        [memo.id]
+    ) as any[];
+
+    // Fetch attachments
+    const attachments = await query(
+        `SELECT * FROM attachments WHERE memo_id = ?`,
         [memo.id]
     ) as any[];
 
@@ -451,6 +458,27 @@ export default async function MemoDetailsPage({
                             dangerouslySetInnerHTML={{ __html: memo.content }}
                         />
                     </div>
+
+                    {/* Attachments Section */}
+                    {attachments.length > 0 && (
+                        <div className="bg-white border border-slate-200 rounded-[1.5rem] p-8 shadow-sm">
+                            <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-300 border-b border-slate-100 pb-6 mb-6 flex items-center gap-3">
+                                <Paperclip size={16} className="opacity-30" />
+                                Accompanying Documents
+                            </h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {attachments.map((file: any) => (
+                                    <DocumentPreviewModal 
+                                        key={file.id}
+                                        fileUrl={file.file_path}
+                                        fileName={file.file_name}
+                                        fileType={file.file_type}
+                                        fileSize={file.file_size}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Full Dedicated History Timeline */}
                     <MemoHistory memo={memo} approvals={approvals} recipients={allRecipients} routingLogs={routingLogs} consultations={consultations} />

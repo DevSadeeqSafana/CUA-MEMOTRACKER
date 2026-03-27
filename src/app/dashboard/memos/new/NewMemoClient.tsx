@@ -4,6 +4,7 @@ import { useState } from 'react';
 import MemoForm from '@/components/memos/MemoForm';
 import { createMemo } from '@/lib/actions';
 import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 
 interface NewMemoClientProps {
     recipients: any[];
@@ -11,12 +12,10 @@ interface NewMemoClientProps {
 
 export default function NewMemoClient({ recipients }: NewMemoClientProps) {
     const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
     const router = useRouter();
 
     const handleFormSubmit = async (data: any, isDraft: boolean) => {
         setIsLoading(true);
-        setError(null);
 
         try {
             const formData = new FormData();
@@ -48,12 +47,13 @@ export default function NewMemoClient({ recipients }: NewMemoClientProps) {
             const result = await createMemo(formData, isDraft);
 
             if (result.success) {
+                toast.success(isDraft ? 'Draft saved successfully' : 'Memo routed for approval');
                 router.push(`/dashboard/memos/${result.memoUuid}`);
             } else {
-                setError(result.error || 'Something went wrong');
+                toast.error(result.error || 'Something went wrong');
             }
         } catch (err) {
-            setError('An unexpected error occurred');
+            toast.error('An unexpected error occurred');
             console.error(err);
         } finally {
             setIsLoading(false);
@@ -62,11 +62,6 @@ export default function NewMemoClient({ recipients }: NewMemoClientProps) {
 
     return (
         <>
-            {error && (
-                <div className="mb-6 p-4 bg-destructive/10 border border-destructive/20 text-destructive rounded-lg flex items-center gap-2">
-                    <span className="font-bold">Error:</span> {error}
-                </div>
-            )}
 
             <MemoForm
                 onSubmit={handleFormSubmit}

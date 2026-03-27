@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { updateUser, searchManagers } from '@/lib/actions';
+import toast from 'react-hot-toast';
 
 interface EditUserFormProps {
     user: any;
@@ -27,7 +28,6 @@ interface EditUserFormProps {
 
 export default function EditUserForm({ user, managers, onClose }: EditUserFormProps) {
     const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
     const [formData, setFormData] = useState({
         username: user.username,
@@ -82,27 +82,27 @@ export default function EditUserForm({ user, managers, onClose }: EditUserFormPr
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (formData.roles.length === 0) {
-            setError('Please select at least one role.');
+            toast.error('Please select at least one role.');
             return;
         }
         if (!formData.line_manager_id) {
-            setError('Please assign a Line Manager for this user.');
+            toast.error('Please assign a Line Manager for this user.');
             return;
         }
 
         setIsLoading(true);
-        setError(null);
 
         try {
             const result = await updateUser(user.id, formData);
             if (result.success) {
                 setSuccess(true);
+                toast.success('User updated successfully!');
                 setTimeout(() => onClose(), 1500);
             } else {
-                setError(result.error || 'Failed to update user.');
+                toast.error(result.error || 'Failed to update user.');
             }
         } catch (err) {
-            setError('An unexpected error occurred.');
+            toast.error('An unexpected error occurred.');
         } finally {
             setIsLoading(false);
         }
@@ -136,13 +136,6 @@ export default function EditUserForm({ user, managers, onClose }: EditUserFormPr
                     <X size={20} />
                 </button>
             </div>
-
-            {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-2xl flex items-center gap-3 text-sm animate-in shake-in font-medium">
-                    <AlertCircle size={20} className="shrink-0" />
-                    {error}
-                </div>
-            )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-slate-900">
