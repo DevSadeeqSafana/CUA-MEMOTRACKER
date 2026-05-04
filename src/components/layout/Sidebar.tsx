@@ -28,7 +28,7 @@ export default function Sidebar({ user, userRoles, handleSignOut }: { user: any,
 
     const navLinks = [
         { href: '/dashboard', label: 'Overview', icon: Inbox, roles: [] },
-        { href: '/dashboard/tasks', label: 'Task Center', icon: CheckSquare, roles: [] },
+        { href: '/dashboard/tasks', label: 'Memo Center', icon: CheckSquare, roles: [] },
         { href: '/dashboard/approvals', label: 'Signatures Queue', icon: PlusCircle, roles: ['Line Manager', 'Reviewer'], special: 'amber' },
         { href: '/dashboard/memos/new', label: 'New Memo', icon: PlusCircle, roles: [], isButton: true },
         { href: '/dashboard/memos/my-memos', label: 'My Memos', icon: FileText, roles: [] },

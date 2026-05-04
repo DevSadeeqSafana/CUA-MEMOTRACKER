@@ -34,7 +34,17 @@ export default function NewMemoClient({ recipients }: NewMemoClientProps) {
                 formData.append('year_id', data.year_id || '');
                 formData.append('budget_category', data.budget_category || '');
                 formData.append('other_category', data.other_category || '');
-                formData.append('budget_items', JSON.stringify(data.budget_items || []));
+                
+                // Process budget items: append files separately and remove from JSON
+                const cleanedItems = data.budget_items?.map((item: any, index: number) => {
+                    if (item.file) {
+                        formData.append(`budget_item_file_${index}`, item.file);
+                    }
+                    const { file, ...rest } = item;
+                    return rest;
+                }) || [];
+                
+                formData.append('budget_items', JSON.stringify(cleanedItems));
             }
 
             // Append files

@@ -75,7 +75,7 @@ export default async function DashboardPage() {
                         <span className="text-blue-400">{session.user.name}</span>
                     </h1>
                     <p className="text-blue-100/60 font-medium max-w-xl text-sm">
-                        University communications are operating within standard parameters. You have {pending_count + unread_count} items requiring attention in your Task Center.
+                        University communications are operating within standard parameters. You have {pending_count + unread_count} items requiring attention in your Memo Center.
                     </p>
                 </div>
             </div>

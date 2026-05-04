@@ -18,7 +18,7 @@ import {
 import Link from 'next/link';
 import { cn, formatDate } from '@/lib/utils';
 
-export default async function TaskCenterPage() {
+export default async function MemoCenterPage() {
     const session = await auth();
     if (!session?.user) return null;
     const userId = session.user.id;
@@ -99,7 +99,7 @@ export default async function TaskCenterPage() {
                         <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
                             <Inbox size={18} />
                         </div>
-                        <h1 className="text-2xl font-black tracking-tight text-[#1a365d] font-outfit">Task Center</h1>
+                        <h1 className="text-2xl font-black tracking-tight text-[#1a365d] font-outfit">Memo Center</h1>
                     </div>
                     <p className="text-xs text-slate-500 font-medium ml-[44px]">Aggregated institutional actions and received communications.</p>
                 </div>

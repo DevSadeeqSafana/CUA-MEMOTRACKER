@@ -73,65 +73,33 @@ export async function createMemo(data: FormData, isDraft: boolean) {
                 [memoId, year_id, budget_category, other_category]
             );
 
-            for (const item of budget_items) {
+            for (let i = 0; i < budget_items.length; i++) {
+                const item = budget_items[i];
                 const subtotal = (parseFloat(item.quantity) || 0) * (parseFloat(item.amount) || 0);
+                
+                // Handle item-specific attachment
+                let itemAttachmentPath = null;
+                const itemFile = data.get(`budget_item_file_${i}`) as File;
+                
+                if (itemFile && itemFile.size > 0) {
+                    itemAttachmentPath = await uploadFile(itemFile, uuid);
+                }
+
                 await query(
                     `INSERT INTO memo_budget_items 
-                     (memo_id, name, description, quantity, amount, total) 
-                     VALUES (?, ?, ?, ?, ?, ?)`,
-                    [memoId, item.name, item.description || '', item.quantity || 1, item.amount || 0, subtotal]
+                     (memo_id, name, description, quantity, amount, total, attachment_path) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                    [memoId, item.name, item.description || '', item.quantity || 1, item.amount || 0, subtotal, itemAttachmentPath]
                 );
             }
         }
 
-        // 3. Handle Attachments
+        // 3. Handle Attachments (General)
         if (files.length > 0) {
-            const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-            const uploadApiUrl = process.env.UPLOAD_API_URL;
-            const uploadSecretToken = process.env.UPLOAD_SECRET_TOKEN;
-            
-            try { await mkdir(uploadDir, { recursive: true }); } catch (e) { }
-
             for (const file of files) {
                 if (!file || file.size === 0 || typeof file === 'string') continue;
                 
-                let filePath = '';
-                
-                // Try remote upload
-                if (uploadApiUrl && uploadSecretToken) {
-                    try {
-                        const formData = new FormData();
-                        formData.append('file', file as File);
-                        
-                        const response = await fetch(uploadApiUrl, {
-                            method: 'POST',
-                            headers: {
-                                'Authorization': `Bearer ${uploadSecretToken}`
-                            },
-                            body: formData
-                        });
-                        
-                        if (response.ok) {
-                            const result = await response.json();
-                            if (result.success && result.file && result.file.url) {
-                                filePath = result.file.url;
-                            }
-                        } else {
-                            console.error(`Upload failed for ${(file as File).name}: HTTP ${response.status}`);
-                        }
-                    } catch (e) {
-                        console.error('External upload error:', e);
-                    }
-                }
-                
-                // Fallback to local
-                if (!filePath) {
-                    const buffer = Buffer.from(await (file as File).arrayBuffer());
-                    const fileName = `${uuid}-${Date.now()}-${(file as File).name.replace(/\s+/g, '_')}`;
-                    filePath = `/uploads/${fileName}`;
-
-                    await writeFile(path.join(uploadDir, fileName), buffer);
-                }
+                const filePath = await uploadFile(file, uuid);
 
                 await query(
                     'INSERT INTO attachments (memo_id, file_name, file_path, file_type, file_size) VALUES (?, ?, ?, ?, ?)',
@@ -555,11 +523,62 @@ export async function toggleUserStatus(userId: number, currentStatus: boolean) {
             [session.user.id, 'TOGGLE_USER_STATUS', 'users', userId, JSON.stringify({ is_active: !currentStatus })]
         );
 
-        revalidatePath('/dashboard/users');
+        revalidatePath('/dashboard');
         return { success: true };
     } catch (error) {
         console.error('Toggle status error:', error);
         return { success: false };
+    }
+}
+
+export async function getDepartments() {
+    try {
+        const departments = await query(`
+            SELECT DISTINCT DepartmentName as name 
+            FROM hr_department 
+            WHERE DepartmentName IS NOT NULL 
+            ORDER BY DepartmentName ASC
+        `) as any[];
+        return departments;
+    } catch (error) {
+        console.error('Failed to fetch departments:', error);
+        return [];
+    }
+}
+
+export async function getCurrentFiscalYear() {
+    try {
+        const rows = await query(`
+            SELECT EntryID as id, StartDate, EndDate
+            FROM hr_finance_year
+            WHERE CURRENT_DATE BETWEEN StartDate AND EndDate
+            LIMIT 1
+        `) as any[];
+        if (rows.length > 0) {
+            const y = rows[0];
+            return {
+                id: y.id.toString(),
+                name: `${new Date(y.StartDate).getFullYear()} - ${new Date(y.EndDate).getFullYear()} Fiscal Year`
+            };
+        }
+        // Fallback to latest
+        const latest = await query(`
+            SELECT EntryID as id, StartDate, EndDate
+            FROM hr_finance_year
+            ORDER BY StartDate DESC
+            LIMIT 1
+        `) as any[];
+        if (latest.length > 0) {
+            const y = latest[0];
+            return {
+                id: y.id.toString(),
+                name: `${new Date(y.StartDate).getFullYear()} - ${new Date(y.EndDate).getFullYear()} Fiscal Year`
+            };
+        }
+        return null;
+    } catch (error) {
+        console.error('Failed to fetch current fiscal year:', error);
+        return null;
     }
 }
 
@@ -1056,4 +1075,51 @@ export async function searchUsersForConsultation(searchTerm: string) {
         console.error('Search users for consultation error:', error);
         return [];
     }
+}
+
+async function uploadFile(file: File, uuid: string): Promise<string> {
+    const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+    const uploadApiUrl = process.env.UPLOAD_API_URL;
+    const uploadSecretToken = process.env.UPLOAD_SECRET_TOKEN;
+
+    try { await mkdir(uploadDir, { recursive: true }); } catch (e) { }
+
+    let filePath = '';
+
+    // Try remote upload
+    if (uploadApiUrl && uploadSecretToken) {
+        try {
+            const formData = new FormData();
+            formData.append('file', file as File);
+
+            const response = await fetch(uploadApiUrl, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${uploadSecretToken}`
+                },
+                body: formData
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                if (result.success && result.file && result.file.url) {
+                    filePath = result.file.url;
+                }
+            } else {
+                console.error(`Upload failed for ${(file as File).name}: HTTP ${response.status}`);
+            }
+        } catch (e) {
+            console.error('External upload error:', e);
+        }
+    }
+
+    // Fallback to local
+    if (!filePath) {
+        const buffer = Buffer.from(await (file as File).arrayBuffer());
+        const fileName = `${uuid}-${Date.now()}-${(file as File).name.replace(/\s+/g, '_')}`;
+        filePath = `/uploads/${fileName}`;
+        await writeFile(path.join(uploadDir, fileName), buffer);
+    }
+
+    return filePath;
 }

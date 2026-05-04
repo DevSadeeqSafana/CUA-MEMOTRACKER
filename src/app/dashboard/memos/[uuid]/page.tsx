@@ -268,6 +268,7 @@ export default async function MemoDetailsPage({
                                                 <th className="pb-4 text-[9px] font-black text-[#1a365d] uppercase tracking-widest text-center">Qty</th>
                                                 <th className="pb-4 text-[9px] font-black text-[#1a365d] uppercase tracking-widest text-right">Unit (₦)</th>
                                                 <th className="pb-4 text-[9px] font-black text-[#1a365d] uppercase tracking-widest text-right">Subtotal (₦)</th>
+                                                <th className="pb-4 text-[9px] font-black text-[#1a365d] uppercase tracking-widest text-center">Doc</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-50">
@@ -280,13 +281,28 @@ export default async function MemoDetailsPage({
                                                     <td className="py-4 text-xs font-bold text-slate-600 text-center">{item.quantity}</td>
                                                     <td className="py-4 text-xs font-bold text-slate-600 text-right">₦{parseFloat(item.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                                     <td className="py-4 text-xs font-black text-[#1a365d] text-right">₦{parseFloat(item.total).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                                    <td className="py-4 text-center">
+                                                        {item.attachment_path ? (
+                                                            <a 
+                                                                href={item.attachment_path} 
+                                                                target="_blank" 
+                                                                rel="noopener noreferrer"
+                                                                className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-blue-100 transition-colors border border-blue-100"
+                                                            >
+                                                                <Paperclip size={12} />
+                                                                View
+                                                            </a>
+                                                        ) : (
+                                                            <span className="text-[8px] text-slate-300 font-black uppercase tracking-widest">None</span>
+                                                        )}
+                                                    </td>
                                                 </tr>
                                             ))}
                                         </tbody>
                                         <tfoot>
                                             <tr className="border-t border-slate-100 bg-slate-50/50">
                                                 <td colSpan={3} className="py-4 pl-4 text-[10px] font-black text-[#1a365d] uppercase tracking-widest text-right">Aggregate Total</td>
-                                                <td className="py-4 pr-4 text-sm font-black text-emerald-600 text-right">₦{budgetGrandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                                <td colSpan={2} className="py-4 pr-4 text-sm font-black text-emerald-600 text-right">₦{budgetGrandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                             </tr>
                                         </tfoot>
                                     </table>

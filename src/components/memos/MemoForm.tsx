@@ -23,7 +23,7 @@ import {
 import RichTextEditor from './RichTextEditor';
 import { cn } from '@/lib/utils';
 import { MemoPriority, MemoType } from '@/types/memo';
-import { getBudgetItems, getBudgetYears, getBudgetItemLists, getBudgetItemNames } from '@/lib/actions';
+import { getBudgetItems, getBudgetYears, getBudgetItemLists, getBudgetItemNames, getDepartments, getCurrentFiscalYear } from '@/lib/actions';
 import toast from 'react-hot-toast';
 
 const memoSchema = z.object({
@@ -31,7 +31,7 @@ const memoSchema = z.object({
     department: z.string().min(1, 'Department is required'),
     category: z.string().min(1, 'Category is required'),
     priority: z.enum(['Low', 'Medium', 'High']),
-    memo_type: z.enum(['Informational', 'Approval', 'Action']),
+    memo_type: z.enum(['Informational', 'Action']),
     expiry_date: z.string().optional(),
     content: z.string().min(20, 'Content is too short'),
     recipient_ids: z.array(z.number()).min(1, 'Please select at least one recipient'),
@@ -45,6 +45,7 @@ const memoSchema = z.object({
         quantity: z.number().min(1),
         amount: z.number().min(0),
         total: z.number().optional(),
+        file: z.any().optional(),
     })).optional(),
 }).superRefine((data, ctx) => {
     if (data.is_budget_memo) {
@@ -55,7 +56,7 @@ const memoSchema = z.object({
             ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Budget Category is required", path: ["budget_category"] });
         }
         if (!data.budget_items || data.budget_items.length === 0) {
-            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "At least one budget item is required", path: ["year_id"] });
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "At least one budget item is required", path: ["budget_items"] });
         } else {
             data.budget_items.forEach((item, idx) => {
                 if (!item.name || item.name.trim().length === 0) {
@@ -86,6 +87,8 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
     const [budgetYears, setBudgetYears] = useState<any[]>([]);
     const [budgetCategories, setBudgetCategories] = useState<any[]>([]);
     const [budgetItemNames, setBudgetItemNames] = useState<{ name: string, quantity: number, amount: number }[]>([]);
+    const [departments, setDepartments] = useState<{ name: string }[]>([]);
+    const [currentYear, setCurrentYear] = useState<{ id: string, name: string } | null>(null);
 
     const {
         register,
@@ -109,7 +112,9 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
             year_id: initialData?.year_id || '',
             budget_category: initialData?.budget_category || '',
             other_category: initialData?.other_category || '',
-            budget_items: initialData?.budget_items || [],
+            budget_items: initialData?.budget_items && initialData.budget_items.length > 0
+                ? initialData.budget_items
+                : [{ name: '', description: '', quantity: 1, amount: 0, total: 0 }],
         },
     });
 
@@ -129,17 +134,25 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
 
     useEffect(() => {
         const fetchInitialData = async () => {
-            const [years, categories, names] = await Promise.all([
+            const [years, categories, names, depts, curYear] = await Promise.all([
                 getBudgetYears(),
                 getBudgetItemLists(),
-                getBudgetItemNames()
+                getBudgetItemNames(),
+                getDepartments(),
+                getCurrentFiscalYear()
             ]);
             setBudgetYears(years);
             setBudgetCategories(categories);
             setBudgetItemNames(names);
+            setDepartments(depts);
+            setCurrentYear(curYear);
+
+            if (curYear) {
+                setValue('year_id', curYear.id);
+            }
         };
         fetchInitialData();
-    }, []);
+    }, [setValue]);
 
     const selectedYear = watch('year_id');
 
@@ -332,20 +345,13 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                 <div className="space-y-2">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Budget Year</label>
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Current Fiscal Year</label>
                                     <div className="relative">
-                                        <select
-                                            {...register('year_id')}
-                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-3 text-sm font-bold focus:border-blue-500 transition-all outline-none appearance-none"
-                                        >
-                                            <option value="">Select Fiscal Year...</option>
-                                            {budgetYears.map(year => (
-                                                <option key={year.id} value={year.id.toString()}>{year.name}</option>
-                                            ))}
-                                        </select>
-                                        <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                                            <ChevronRight size={14} className="rotate-90" />
+                                        <div className="w-full bg-slate-100/50 border border-slate-200 rounded-xl px-5 py-3 text-sm font-bold text-slate-500 flex items-center gap-3">
+                                            <Check size={14} className="text-emerald-500" />
+                                            {currentYear?.name || 'Loading Fiscal Period...'}
                                         </div>
+                                        <input type="hidden" {...register('year_id')} />
                                     </div>
                                 </div>
 
@@ -481,6 +487,43 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-[#1a365d]">Sub-Total (₦)</label>
                                                         <div className="w-full bg-emerald-50/50 border border-emerald-100 rounded-xl px-4 py-2.5 text-xs font-black text-emerald-700 flex items-center">
                                                             ₦{((watch(`budget_items.${index}.quantity`) || 0) * (watch(`budget_items.${index}.amount`) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                        </div>
+                                                    </div>
+                                                    <div className="md:col-span-12 space-y-2">
+                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Item-Specific Attachment (Optional)</label>
+                                                        <div className="flex items-center gap-4">
+                                                            <input
+                                                                type="file"
+                                                                id={`budget-item-file-${index}`}
+                                                                className="hidden"
+                                                                onChange={(e) => {
+                                                                    const file = e.target.files?.[0];
+                                                                    if (file) {
+                                                                        setValue(`budget_items.${index}.file`, file);
+                                                                    }
+                                                                }}
+                                                            />
+                                                            <label
+                                                                htmlFor={`budget-item-file-${index}`}
+                                                                className={cn(
+                                                                    "flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-bold uppercase tracking-widest cursor-pointer transition-all",
+                                                                    watch(`budget_items.${index}.file`)
+                                                                        ? "bg-emerald-50 border-emerald-200 text-emerald-600"
+                                                                        : "bg-white border-slate-200 text-slate-400 hover:bg-slate-50"
+                                                                )}
+                                                            >
+                                                                <Paperclip size={12} />
+                                                                {watch(`budget_items.${index}.file`)?.name || 'Attach Invoice/Doc'}
+                                                            </label>
+                                                            {watch(`budget_items.${index}.file`) && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setValue(`budget_items.${index}.file`, null)}
+                                                                    className="p-2 text-red-400 hover:bg-red-50 rounded-lg"
+                                                                >
+                                                                    <X size={14} />
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -630,25 +673,29 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                     {...register('department')}
                                     className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-3.5 text-sm font-bold focus:bg-white/10 focus:border-blue-400 transition-all outline-none appearance-none"
                                 >
-                                    <option value="" className="text-slate-900">Select...</option>
-                                    <option value="Directorate of ICT" className="text-slate-900">Directorate of ICT</option>
-                                    <option value="Office of the Registrar" className="text-slate-900">Office of the Registrar</option>
-                                    <option value="Human Resources" className="text-slate-900">Human Resources</option>
-                                    <option value="Student Affairs" className="text-slate-900">Student Affairs</option>
-                                    <option value="Bursary (Finance)" className="text-slate-900">Bursary (Finance)</option>
-                                    <option value="Faculty of Computing" className="text-slate-900">Faculty of Computing</option>
-                                    <option value="Faculty of Arts & Social Sciences" className="text-slate-900">Faculty of Arts & Social Sciences</option>
+                                    <option value="" className="text-slate-900">Select Department...</option>
+                                    {departments.map((dept, idx) => (
+                                        <option key={idx} value={dept.name} className="text-slate-900">{dept.name}</option>
+                                    ))}
                                 </select>
                                 {errors.department && <p className="text-[10px] text-red-400 font-bold flex items-center gap-1.5 ml-1 mt-2 tracking-tight"><AlertCircle size={12} /> {errors.department.message}</p>}
                             </div>
 
                             <div className="space-y-3">
                                 <label className="text-[9px] font-black text-blue-300 uppercase tracking-[0.2em] ml-1">Classification</label>
-                                <input
+                                <select
                                     {...register('category')}
-                                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-3.5 text-sm font-bold focus:bg-white/10 focus:border-blue-400 transition-all outline-none"
-                                    placeholder="e.g. Strategic Policy"
-                                />
+                                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-3.5 text-sm font-bold focus:bg-white/10 focus:border-blue-400 transition-all outline-none appearance-none"
+                                >
+                                    <option value="" className="text-slate-900">Select Classification...</option>
+                                    <option value="Maintenance" className="text-slate-900">Maintenance</option>
+                                    <option value="Exams" className="text-slate-900">Exams</option>
+                                    <option value="Plumbing" className="text-slate-900">Plumbing</option>
+                                    <option value="Leave Request" className="text-slate-900">Leave Request</option>
+                                    <option value="Strategic Policy" className="text-slate-900">Strategic Policy</option>
+                                    <option value="General" className="text-slate-900">General</option>
+                                    <option value="Others" className="text-slate-900">Others</option>
+                                </select>
                                 {errors.category && <p className="text-[10px] text-red-400 font-bold flex items-center gap-1.5 ml-1 mt-2 tracking-tight"><AlertCircle size={12} /> {errors.category.message}</p>}
                             </div>
 
@@ -671,20 +718,11 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                         className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-3.5 text-xs font-bold focus:bg-white/10 focus:border-blue-400 transition-all outline-none appearance-none"
                                     >
                                         <option value="Informational" className="text-slate-900">Info</option>
-                                        <option value="Approval" className="text-slate-900">Approval</option>
                                         <option value="Action" className="text-slate-900">Action</option>
                                     </select>
                                 </div>
                             </div>
 
-                            <div className="space-y-3">
-                                <label className="text-[9px] font-black text-blue-300 uppercase tracking-[0.2em] ml-1">Archival Limit (Optional)</label>
-                                <input
-                                    type="date"
-                                    {...register('expiry_date')}
-                                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-3.5 text-sm font-bold focus:bg-white/10 focus:border-blue-400 transition-all outline-none"
-                                />
-                            </div>
                         </div>
 
                         <div className="pt-8 border-t border-white/5 space-y-4">
