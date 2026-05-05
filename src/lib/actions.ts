@@ -8,6 +8,23 @@ import { redirect } from 'next/navigation';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 
+async function getVCUserId() {
+    try {
+        const rows = await query(`
+            SELECT u.id 
+            FROM memo_system_users u
+            JOIN user_roles ur ON u.id = ur.user_id
+            JOIN roles r ON ur.role_id = r.id
+            WHERE r.name = 'VC'
+            LIMIT 1
+        `) as any[];
+        return rows.length > 0 ? rows[0].id : null;
+    } catch (error) {
+        console.error('Failed to get VC user ID:', error);
+        return null;
+    }
+}
+
 export async function createMemo(data: FormData, isDraft: boolean) {
     console.log('--- Starting createMemo action ---');
     const session = await auth();
@@ -20,7 +37,13 @@ export async function createMemo(data: FormData, isDraft: boolean) {
     const title = data.get('title') as string;
     const content = data.get('content') as string;
     const department = data.get('department') as string;
-    const category = data.get('category') as string;
+    let category = data.get('category') as string;
+    const custom_category = data.get('custom_category') as string;
+    
+    if (category === 'Others' && custom_category) {
+        category = custom_category;
+    }
+
     const priority = (data.get('priority') as string) || 'Medium';
     const memo_type = data.get('memo_type') as string;
     const expiry_date = data.get('expiry_date') as string;
@@ -32,6 +55,8 @@ export async function createMemo(data: FormData, isDraft: boolean) {
     const budget_items = budget_items_raw ? JSON.parse(budget_items_raw) : [];
 
     const recipient_ids = JSON.parse(data.get('recipient_ids') as string || '[]');
+    const cc_ids = JSON.parse(data.get('cc_ids') as string || '[]');
+    const bcc_ids = JSON.parse(data.get('bcc_ids') as string || '[]');
     const files = data.getAll('attachments') as File[];
 
     console.log(`createMemo: User ${userId} is creating a "${title}" memo (isDraft: ${isDraft})`);
@@ -120,14 +145,18 @@ export async function createMemo(data: FormData, isDraft: boolean) {
             [userId, 'CREATE_MEMO', 'memos', memoId, JSON.stringify({ referenceNumber, status })]
         );
 
-        // 5. Insert recipients
-        if (recipient_ids && recipient_ids.length > 0) {
-            for (const recipientId of recipient_ids) {
-                await query(
-                    'INSERT IGNORE INTO memo_recipients (memo_id, recipient_id) VALUES (?, ?)',
-                    [memoId, recipientId]
-                );
-            }
+        // 5. Insert recipients (To, CC, BCC)
+        const allRecipients = [
+            ...recipient_ids.map((id: number) => ({ id, type: 'To' })),
+            ...cc_ids.map((id: number) => ({ id, type: 'CC' })),
+            ...bcc_ids.map((id: number) => ({ id, type: 'BCC' }))
+        ];
+
+        for (const recipient of allRecipients) {
+            await query(
+                'INSERT IGNORE INTO memo_recipients (memo_id, recipient_id, recipient_type) VALUES (?, ?, ?)',
+                [memoId, recipient.id, recipient.type]
+            );
         }
 
         // 6. Setup sequential approvals
@@ -205,6 +234,23 @@ export async function approveMemo(memoId: number, approvalId: number, comments: 
 
             // Notify all recipients
             const recipients = await query('SELECT recipient_id FROM memo_recipients WHERE memo_id = ?', [memoId]) as any[];
+            
+            // --- VC Logic: Ensure VC has a copy at the end ---
+            const vcId = await getVCUserId();
+            if (vcId) {
+                // Check if VC is already a recipient
+                const isAlreadyRecipient = recipients.some((r: any) => r.recipient_id === vcId);
+                if (!isAlreadyRecipient) {
+                    await query(
+                        'INSERT IGNORE INTO memo_recipients (memo_id, recipient_id, recipient_type) VALUES (?, ?, ?)',
+                        [memoId, vcId, 'To']
+                    );
+                    // Add VC to the list for notifications
+                    recipients.push({ recipient_id: vcId });
+                }
+            }
+            // ------------------------------------------------
+
             for (const recipient of recipients) {
                 await query(
                     'INSERT INTO notifications (user_id, memo_id, message) VALUES (?, ?, ?)',
@@ -465,6 +511,25 @@ export async function updateUser(userId: number, formData: any) {
     } catch (error) {
         console.error('Update user error:', error);
         return { success: false, error: 'Failed to update user.' };
+    }
+}
+
+export async function updateLineManager(userId: number, managerId: number | null) {
+    const session = await auth();
+    if (!session?.user || !(session.user as any).role?.includes('Administrator')) {
+        return { success: false, error: 'Unauthorized' };
+    }
+
+    try {
+        await query(
+            'UPDATE memo_system_users SET line_manager_id = ? WHERE id = ?',
+            [managerId, userId]
+        );
+        revalidatePath('/dashboard/users');
+        return { success: true };
+    } catch (error) {
+        console.error('Update line manager error:', error);
+        return { success: false, error: 'Database error' };
     }
 }
 

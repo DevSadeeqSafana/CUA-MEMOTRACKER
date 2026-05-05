@@ -86,7 +86,8 @@ export default async function MemoDetailsPage({
         `SELECT mr.*, u.username as recipient_name, u.department
          FROM memo_recipients mr 
          JOIN memo_system_users u ON mr.recipient_id = u.id 
-         WHERE mr.memo_id = ?`,
+         WHERE mr.memo_id = ?
+         ORDER BY FIELD(mr.recipient_type, 'To', 'CC', 'BCC'), u.username ASC`,
         [memo.id]
     ) as any[];
 
@@ -551,23 +552,36 @@ export default async function MemoDetailsPage({
                             <Users size={16} className="text-blue-500" />
                             Target Distribution
                         </h3>
-                        <div className="space-y-3">
-                            {allRecipients.map((rec) => (
-                                <div key={rec.recipient_id} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                                    <div className="flex items-center gap-3 overflow-hidden">
-                                        <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-[10px] font-black text-slate-400">
-                                            {rec.recipient_name[0]}
-                                        </div>
-                                        <span className="text-xs font-bold text-slate-600 truncate">{rec.recipient_name}</span>
+                        
+                        {['To', 'CC', 'BCC'].map(type => {
+                            const group = allRecipients.filter(r => (r.recipient_type || 'To') === type);
+                            if (group.length === 0) return null;
+                            
+                            return (
+                                <div key={type} className="space-y-3">
+                                    <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1">{type === 'To' ? 'Primary' : type}</h4>
+                                    <div className="space-y-2">
+                                        {group.map((rec) => (
+                                            <div key={rec.recipient_id} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                                                <div className="flex items-center gap-3 overflow-hidden">
+                                                    <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-[10px] font-black text-slate-400">
+                                                        {rec.recipient_name[0]}
+                                                    </div>
+                                                    <span className="text-xs font-bold text-slate-600 truncate">{rec.recipient_name}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    {rec.acknowledged_at ? (
+                                                        <CheckCircle2 size={14} className="text-emerald-500" />
+                                                    ) : (
+                                                        <Clock size={14} className="text-slate-200" />
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
-                                    {rec.acknowledged_at ? (
-                                        <CheckCircle2 size={14} className="text-emerald-500" />
-                                    ) : (
-                                        <Clock size={14} className="text-slate-200" />
-                                    )}
                                 </div>
-                            ))}
-                        </div>
+                            );
+                        })}
                     </div>
                 </div>
             </div>

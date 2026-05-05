@@ -21,6 +21,7 @@ export interface Memo {
 export interface MemoRecipient {
     memo_id: number;
     recipient_id: number;
+    recipient_type: 'To' | 'CC' | 'BCC';
     read_at?: string;
     acknowledged_at?: string;
     action_completed_at?: string;

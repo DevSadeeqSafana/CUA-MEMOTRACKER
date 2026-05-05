@@ -1,26 +1,29 @@
-export const dynamic = 'force-dynamic';
 import { auth } from '@/auth';
 import { query } from '@/lib/db';
 import {
     Users as UsersIcon,
-    Search,
-    Building,
-    Mail,
     Filter,
-    Activity
 } from 'lucide-react';
 import CreateUserFormWrapper from '@/components/users/CreateUserFormWrapper';
-import UserTableActions from '@/components/users/UserTableActions';
-import { cn } from '@/lib/utils';
 import { getManagers } from '@/lib/actions';
 import UserSearch from '@/components/users/UserSearch';
+import UserRow from '@/components/users/UserRow';
+import SortableHeader from '@/components/users/SortableHeader';
+import Pagination from '@/components/ui/Pagination';
 
 export default async function UserManagementPage({
     searchParams
 }: {
-    searchParams: Promise<{ q?: string }>;
+    searchParams: Promise<{ q?: string; page?: string; sort?: string; order?: string }>;
 }) {
-    const { q } = await searchParams;
+    const params = await searchParams;
+    const q = params.q || '';
+    const page = parseInt(params.page || '1');
+    const sort = params.sort || 'u.username';
+    const order = (params.order as 'asc' | 'desc') || 'asc';
+    const limit = 25;
+    const offset = (page - 1) * limit;
+
     const session = await auth();
     if (!session?.user || !(session.user as any).role?.includes('Administrator')) {
         return (
@@ -33,11 +36,33 @@ export default async function UserManagementPage({
 
     const queryStr = q ? `%${q}%` : null;
 
-    // Fetch live users from database with manager names and active status
+    // Fetch total count for pagination
+    const countResult = await query(`
+        SELECT COUNT(DISTINCT u.id) as total
+        FROM memo_system_users u
+        WHERE (? IS NULL OR u.username LIKE ? OR u.email LIKE ? OR u.staff_id LIKE ?)
+    `, [queryStr, queryStr, queryStr, queryStr]) as any[];
+    
+    const totalUsers = countResult[0]?.total || 0;
+    const totalPages = Math.ceil(totalUsers / limit);
+
+    // Fetch users with sorting and pagination
+    // Note: Using a safe set of allowed sort columns to prevent SQL injection
+    const allowedSortCols: Record<string, string> = {
+        'username': 'u.username',
+        'email': 'u.email',
+        'department': 'u.department',
+        'staff_id': 'u.staff_id',
+        'manager': 'manager_name',
+        'status': 'u.is_active'
+    };
+    
+    const orderBy = allowedSortCols[sort] || 'u.username';
+
     const users = await query(`
         SELECT u.id, u.uuid, u.username, u.email, u.department, u.is_active, u.staff_id, u.line_manager_id,
                COALESCE(m_mgr_explicit.username, m_mgr_hr.username) as manager_name,
-               GROUP_CONCAT(r.name) as roles_list
+               GROUP_CONCAT(DISTINCT r.name) as roles_list
         FROM memo_system_users u
         LEFT JOIN hr_staff hr ON u.staff_id = hr.StaffID
         LEFT JOIN memo_system_users m_mgr_hr ON hr.LineManagerID = m_mgr_hr.staff_id
@@ -46,7 +71,8 @@ export default async function UserManagementPage({
         LEFT JOIN roles r ON ur.role_id = r.id
         WHERE (? IS NULL OR u.username LIKE ? OR u.email LIKE ? OR u.staff_id LIKE ?)
         GROUP BY u.id, u.uuid, u.username, u.email, u.department, u.is_active, u.staff_id, u.line_manager_id, manager_name
-        ORDER BY u.created_at DESC
+        ORDER BY ${orderBy} ${order === 'desc' ? 'DESC' : 'ASC'}
+        LIMIT ${limit} OFFSET ${offset}
     `, [queryStr, queryStr, queryStr, queryStr]) as any[];
 
     const formattedUsers = users.map(u => ({
@@ -80,101 +106,41 @@ export default async function UserManagementPage({
                     <Filter size={16} />
                     Filters
                 </button>
+                <div className="flex-grow" />
+                <div className="bg-slate-50 border border-slate-200 px-4 py-2 rounded-2xl flex items-center gap-3">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Users</span>
+                    <span className="text-sm font-black text-[#1a365d]">{totalUsers}</span>
+                </div>
             </div>
 
             {/* Table Interface */}
             <div className="bg-white border border-slate-200 rounded-[2rem] shadow-sm overflow-hidden text-slate-900">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse min-w-[1200px]">
-                        <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
+                        <thead>
                             <tr>
-                                <th className="px-4 md:px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">Staff Identity</th>
-                                <th className="px-4 md:px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">University Email</th>
-                                <th className="px-4 md:px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">Department</th>
-                                <th className="px-4 md:px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">Reporting To</th>
-                                <th className="px-4 md:px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">Status</th>
+                                <SortableHeader label="Staff Identity" sortKey="username" currentSort={sort} currentOrder={order} />
+                                <SortableHeader label="University Email" sortKey="email" currentSort={sort} currentOrder={order} />
+                                <SortableHeader label="Department" sortKey="department" currentSort={sort} currentOrder={order} />
+                                <SortableHeader label="Reporting To" sortKey="manager" currentSort={sort} currentOrder={order} />
+                                <SortableHeader label="Status" sortKey="status" currentSort={sort} currentOrder={order} />
                                 <th className="px-4 md:px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">System Roles</th>
                                 <th className="px-4 md:px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] text-right bg-slate-50">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {formattedUsers.map((user) => (
-                                <tr key={user.id} className={cn(
-                                    "group hover:bg-slate-50/50 transition-colors",
-                                    !user.is_active && "opacity-60 bg-slate-50/30"
-                                )}>
-                                    <td className="px-4 md:px-8 py-6">
-                                        <div className="flex items-center gap-4">
-                                            <div className={cn(
-                                                "w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm",
-                                                user.is_active ? "bg-[#1a365d] text-white" : "bg-slate-200 text-slate-500"
-                                            )}>
-                                                {user.username?.[0] || 'U'}
-                                            </div>
-                                            <div className="space-y-0.5">
-                                                <p className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors uppercase tracking-tight text-sm">{user.username}</p>
-                                                <p className="text-[9px] text-slate-400 font-black uppercase tracking-wider">{user.staff_id || `#CUA-${String(user.id).padStart(5, '0')}`}</p>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td className="px-4 md:px-8 py-6">
-                                        <div className="flex items-center gap-2 text-slate-500 font-medium">
-                                            <Mail size={14} className="opacity-40" />
-                                            <span className="text-sm">{user.email}</span>
-                                        </div>
-                                    </td>
-                                    <td className="px-4 md:px-8 py-6">
-                                        <div className="flex items-center gap-2">
-                                            <Building size={14} className="text-slate-300" />
-                                            <span className="text-sm font-bold text-slate-700">{user.department}</span>
-                                        </div>
-                                    </td>
-                                    <td className="px-4 md:px-8 py-6">
-                                        <div className="flex items-center gap-2">
-                                            {user.manager_name ? (
-                                                <>
-                                                    <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-black text-slate-500">
-                                                        {user.manager_name[0]}
-                                                    </div>
-                                                    <span className="text-sm font-medium text-slate-600">{user.manager_name}</span>
-                                                </>
-                                            ) : (
-                                                <span className="text-[10px] text-slate-300 font-black uppercase tracking-widest italic">N/A</span>
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td className="px-4 md:px-8 py-6">
-                                        <div className={cn(
-                                            "inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border",
-                                            user.is_active
-                                                ? "bg-emerald-50 border-emerald-100 text-emerald-600"
-                                                : "bg-slate-100 border-slate-200 text-slate-400"
-                                        )}>
-                                            <Activity size={10} className={user.is_active ? "animate-pulse" : ""} />
-                                            {user.is_active ? "Authorized" : "Inactive"}
-                                        </div>
-                                    </td>
-                                    <td className="px-4 md:px-8 py-6">
-                                        <div className="flex flex-wrap gap-2">
-                                            {user.roles.map((role: string) => (
-                                                <span key={role} className="px-3 py-1 bg-blue-50 text-blue-700 text-[9px] font-black uppercase tracking-wider rounded-lg border border-blue-100">
-                                                    {role}
-                                                </span>
-                                            ))}
-                                            {user.roles.length === 0 && <span className="text-[9px] text-slate-400 italic">No role</span>}
-                                        </div>
-                                    </td>
-                                    <td className="px-4 md:px-8 py-6 text-right">
-                                        <UserTableActions user={user} managers={managers} />
-                                    </td>
-                                </tr>
+                                <UserRow key={user.id} user={user} managers={managers} />
                             ))}
                         </tbody>
                     </table>
                 </div>
-                {/* Add a spacer at the bottom to ensure the last row's dropdown has space if needed */}
-                <div className="h-20" />
+                
+                {/* Pagination */}
+                <Pagination totalPages={totalPages} currentPage={page} />
             </div>
+            
+            <div className="h-10" />
         </div>
     );
 }

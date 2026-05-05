@@ -23,10 +23,13 @@ export default function NewMemoClient({ recipients }: NewMemoClientProps) {
             formData.append('content', data.content);
             formData.append('department', data.department);
             formData.append('category', data.category);
+            formData.append('custom_category', data.custom_category || '');
             formData.append('priority', data.priority);
             formData.append('memo_type', data.memo_type);
             formData.append('expiry_date', data.expiry_date || '');
             formData.append('recipient_ids', JSON.stringify(data.recipient_ids));
+            formData.append('cc_ids', JSON.stringify(data.cc_ids || []));
+            formData.append('bcc_ids', JSON.stringify(data.bcc_ids || []));
 
             // Budget Fields
             formData.append('is_budget_memo', data.is_budget_memo ? 'true' : 'false');

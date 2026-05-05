@@ -17,6 +17,7 @@ import {
     Wallet,
     Target,
     Loader2,
+    Search,
     FileText as FileTextIcon,
     Trash2
 } from 'lucide-react';
@@ -31,14 +32,17 @@ const memoSchema = z.object({
     department: z.string().min(1, 'Department is required'),
     category: z.string().min(1, 'Category is required'),
     priority: z.enum(['Low', 'Medium', 'High']),
-    memo_type: z.enum(['Informational', 'Action']),
+    memo_type: z.enum(['Informational', 'Approval', 'Action']),
     expiry_date: z.string().optional(),
     content: z.string().min(20, 'Content is too short'),
-    recipient_ids: z.array(z.number()).min(1, 'Please select at least one recipient'),
+    recipient_ids: z.array(z.number()).min(1, 'Please select at least one primary recipient'),
+    cc_ids: z.array(z.number()).default([]),
+    bcc_ids: z.array(z.number()).default([]),
     is_budget_memo: z.boolean().default(false),
     year_id: z.string().optional(),
     budget_category: z.string().optional(),
     other_category: z.string().optional(),
+    custom_category: z.string().optional(),
     budget_items: z.array(z.object({
         name: z.string(),
         description: z.string().optional(),
@@ -65,6 +69,9 @@ const memoSchema = z.object({
             });
         }
     }
+    if (data.category === 'Others' && (!data.custom_category || data.custom_category.trim().length === 0)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Please specify the classification", path: ["custom_category"] });
+    }
 });
 
 type MemoFormValues = z.infer<typeof memoSchema>;
@@ -79,6 +86,8 @@ interface MemoFormProps {
 export default function MemoForm({ initialData, onSubmit, isLoading, recipients = [] }: MemoFormProps) {
     const [attachments, setAttachments] = useState<File[]>([]);
     const [searchRecipient, setSearchRecipient] = useState('');
+    const [searchCC, setSearchCC] = useState('');
+    const [searchBCC, setSearchBCC] = useState('');
 
     const [budgetSearchTerm, setBudgetSearchTerm] = useState('');
     const [budgetItems, setBudgetItems] = useState<any[]>([]);
@@ -108,10 +117,13 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
             expiry_date: initialData?.expiry_date || '',
             content: initialData?.content || '',
             recipient_ids: initialData?.recipient_ids || [],
+            cc_ids: (initialData as any)?.cc_ids || [],
+            bcc_ids: (initialData as any)?.bcc_ids || [],
             is_budget_memo: initialData?.is_budget_memo || false,
             year_id: initialData?.year_id || '',
             budget_category: initialData?.budget_category || '',
             other_category: initialData?.other_category || '',
+            custom_category: (initialData as any)?.custom_category || '',
             budget_items: initialData?.budget_items && initialData.budget_items.length > 0
                 ? initialData.budget_items
                 : [{ name: '', description: '', quantity: 1, amount: 0, total: 0 }],
@@ -172,7 +184,9 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
         return () => clearTimeout(delayDebounceFn);
     }, [budgetSearchTerm, selectedYear]);
 
-    const selectedRecipientIds = watch('recipient_ids');
+    const selectedRecipientIds = watch('recipient_ids') || [];
+    const selectedCCIds = watch('cc_ids') || [];
+    const selectedBCCIds = watch('bcc_ids') || [];
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {
@@ -185,12 +199,12 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
         setAttachments(prev => prev.filter((_, i) => i !== idx));
     };
 
-    const toggleRecipient = (id: number) => {
-        const current = selectedRecipientIds || [];
+    const toggleRecipient = (id: number, type: 'recipient_ids' | 'cc_ids' | 'bcc_ids') => {
+        const current = watch(type) || [];
         if (current.includes(id)) {
-            setValue('recipient_ids', current.filter(rid => rid !== id));
+            setValue(type, current.filter((rid: number) => rid !== id));
         } else {
-            setValue('recipient_ids', [...current, id]);
+            setValue(type, [...current, id]);
         }
     };
 
@@ -469,7 +483,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                                     </div>
 
                                                     <div className="md:col-span-4 space-y-2">
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Unit Price (₦)</label>
+                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Unit Price (NGN )</label>
                                                         <input
                                                             type="number"
                                                             step="0.01"
@@ -484,9 +498,9 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                                     </div>
 
                                                     <div className="md:col-span-5 space-y-2">
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-[#1a365d]">Sub-Total (₦)</label>
+                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-[#1a365d]">Sub-Total (NGN )</label>
                                                         <div className="w-full bg-emerald-50/50 border border-emerald-100 rounded-xl px-4 py-2.5 text-xs font-black text-emerald-700 flex items-center">
-                                                            ₦{((watch(`budget_items.${index}.quantity`) || 0) * (watch(`budget_items.${index}.amount`) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                            NGN {((watch(`budget_items.${index}.quantity`) || 0) * (watch(`budget_items.${index}.amount`) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                                         </div>
                                                     </div>
                                                     <div className="md:col-span-12 space-y-2">
@@ -541,7 +555,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                             <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest block mb-2 sm:text-right">Grand Total</span>
                                             <div className="bg-[#1a365d] text-white px-8 py-4 rounded-[1.5rem] shadow-2xl shadow-blue-900/30 w-full sm:w-auto text-center">
                                                 <span className="text-2xl md:text-3xl font-black">
-                                                    ₦{(watch('budget_items') || []).reduce((acc, item) => acc + ((item.quantity || 0) * (item.amount || 0)), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                    NGN {(watch('budget_items') || []).reduce((acc, item) => acc + ((item.quantity || 0) * (item.amount || 0)), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                                 </span>
                                             </div>
                                         </div>
@@ -553,68 +567,241 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                     )}
 
                     {/* Recipient Selection Section */}
-                    <div className="bg-white border border-slate-200 rounded-[1.5rem] p-6 shadow-sm space-y-6">
-                        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-                            <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-                                    <UsersIcon size={16} />
+                    <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 shadow-sm space-y-10">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-6">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shadow-inner">
+                                    <UsersIcon size={24} />
                                 </div>
                                 <div>
-                                    <h3 className="text-base font-black text-[#1a365d] font-outfit uppercase tracking-wider">Distribution List</h3>
-                                    <p className="text-[10px] text-slate-400 font-medium">Select authorized recipients for this memo.</p>
+                                    <h3 className="text-xl font-black text-[#1a365d] font-outfit uppercase tracking-tight">Institutional Distribution</h3>
+                                    <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mt-1">Authorized communication flow & visibility</p>
                                 </div>
                             </div>
-                            <div className="text-right">
-                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Total Selected</span>
-                                <span className="text-base font-black text-blue-600">{selectedRecipientIds.length} Persons</span>
+                            <div className="text-right bg-slate-50 px-5 py-2.5 rounded-2xl border border-slate-100">
+                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">Total Recipients</span>
+                                <span className="text-lg font-black text-blue-600">{(selectedRecipientIds.length + selectedCCIds.length + selectedBCCIds.length)} Persons</span>
                             </div>
                         </div>
 
-                        <div className="space-y-4">
-                            <div className="relative">
-                                <input
-                                    type="text"
-                                    placeholder="Filter by name or department..."
-                                    value={searchRecipient}
-                                    onChange={(e) => setSearchRecipient(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-5 text-xs font-medium outline-none focus:border-blue-500 transition-all"
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[400px] overflow-y-auto p-1">
-                                {filteredRecipients.map(user => (
-                                    <button
-                                        key={user.id}
-                                        type="button"
-                                        onClick={() => toggleRecipient(user.id)}
-                                        className={cn(
-                                            "flex items-center gap-4 p-4 rounded-2xl border transition-all text-left group",
-                                            selectedRecipientIds.includes(user.id)
-                                                ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-900/20"
-                                                : "bg-white border-slate-200 hover:border-blue-300"
+                        <div className="grid grid-cols-1 gap-10">
+                            {/* To Recipients */}
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-2">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-blue-600"></div>
+                                        Primary Recipients (To)
+                                    </label>
+                                    <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">{selectedRecipientIds.length}</span>
+                                </div>
+                                
+                                <div className="flex gap-3">
+                                    <div className="relative flex-grow group">
+                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={16} />
+                                        <input
+                                            type="text"
+                                            placeholder="Search by name or department..."
+                                            value={searchRecipient}
+                                            onChange={(e) => setSearchRecipient(e.target.value)}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3.5 pl-12 pr-5 text-sm font-bold text-[#1a365d] focus:bg-white focus:border-blue-500 transition-all outline-none"
+                                        />
+                                        
+                                        {searchRecipient.length > 0 && (
+                                            <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 max-h-[300px] overflow-y-auto p-2 animate-in fade-in slide-in-from-top-2">
+                                                {recipients.filter(r => 
+                                                    !selectedRecipientIds.includes(r.id) && 
+                                                    (r.username.toLowerCase().includes(searchRecipient.toLowerCase()) || r.department.toLowerCase().includes(searchRecipient.toLowerCase()))
+                                                ).length === 0 ? (
+                                                    <div className="p-4 text-center text-xs text-slate-400 font-bold uppercase tracking-widest italic">No matches found</div>
+                                                ) : (
+                                                    recipients.filter(r => 
+                                                        !selectedRecipientIds.includes(r.id) && 
+                                                        (r.username.toLowerCase().includes(searchRecipient.toLowerCase()) || r.department.toLowerCase().includes(searchRecipient.toLowerCase()))
+                                                    ).map(user => (
+                                                        <button
+                                                            key={user.id}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                toggleRecipient(user.id, 'recipient_ids');
+                                                                setSearchRecipient('');
+                                                            }}
+                                                            className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 text-left transition-all group/item"
+                                                        >
+                                                            <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center font-black text-[10px] group-hover/item:bg-blue-100 group-hover/item:text-blue-600 transition-colors">
+                                                                {user.username[0]}
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-xs font-bold text-slate-700">{user.username}</p>
+                                                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{user.department}</p>
+                                                            </div>
+                                                            <Plus size={14} className="ml-auto text-slate-300 group-hover/item:text-blue-500" />
+                                                        </button>
+                                                    ))
+                                                )}
+                                            </div>
                                         )}
+                                    </div>
+                                    <button 
+                                        type="button"
+                                        className="px-6 py-3.5 bg-[#1a365d] text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-blue-900/10 hover:bg-[#2c5282] transition-all whitespace-nowrap flex items-center gap-2"
+                                        onClick={() => setSearchRecipient(searchRecipient || ' ')}
                                     >
-                                        <div className={cn(
-                                            "w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm",
-                                            selectedRecipientIds.includes(user.id) ? "bg-white/20" : "bg-slate-100 text-slate-500"
-                                        )}>
-                                            {selectedRecipientIds.includes(user.id) ? <Check size={20} /> : user.username[0]}
-                                        </div>
-                                        <div className="flex-grow overflow-hidden">
-                                            <p className={cn(
-                                                "font-bold text-sm truncate",
-                                                selectedRecipientIds.includes(user.id) ? "text-white" : "text-slate-900"
-                                            )}>{user.username}</p>
-                                            <p className={cn(
-                                                "text-[10px] font-black uppercase tracking-widest truncate mt-1 opacity-60",
-                                                selectedRecipientIds.includes(user.id) ? "text-blue-100" : "text-slate-400"
-                                            )}>{user.department || 'General'}</p>
-                                        </div>
+                                        <Plus size={14} />
+                                        Add Recipient
                                     </button>
-                                ))}
+                                </div>
+
+                                {selectedRecipientIds.length > 0 && (
+                                    <div className="flex flex-wrap gap-2 pt-2">
+                                        {selectedRecipientIds.map(id => {
+                                            const user = recipients.find(r => r.id === id);
+                                            return user ? (
+                                                <div key={id} className="flex items-center gap-2 bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-xl animate-in zoom-in-95">
+                                                    <span className="text-[11px] font-bold text-blue-700">{user.username}</span>
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={() => toggleRecipient(id, 'recipient_ids')}
+                                                        className="p-1 hover:bg-blue-100 rounded-lg text-blue-400 hover:text-blue-600 transition-all"
+                                                    >
+                                                        <X size={12} />
+                                                    </button>
+                                                </div>
+                                            ) : null;
+                                        })}
+                                    </div>
+                                )}
                             </div>
-                            {errors.recipient_ids && <p className="text-xs text-red-500 font-medium flex items-center gap-1.5 ml-1"><AlertCircle size={14} /> {errors.recipient_ids.message}</p>}
+
+                            {/* CC & BCC Grid */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                {/* CC Recipients */}
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-2">
+                                            Carbon Copy (CC)
+                                        </label>
+                                        <span className="text-[9px] font-black text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">{selectedCCIds.length}</span>
+                                    </div>
+                                    <div className="relative group">
+                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-slate-500" size={14} />
+                                        <input
+                                            type="text"
+                                            placeholder="Add CC..."
+                                            value={searchCC}
+                                            onChange={(e) => setSearchCC(e.target.value)}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-11 pr-4 text-xs font-bold text-slate-700 focus:bg-white focus:border-slate-400 transition-all outline-none"
+                                        />
+                                        
+                                        {searchCC.length > 0 && (
+                                            <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl z-40 max-h-[200px] overflow-y-auto p-2">
+                                                {recipients.filter(r => 
+                                                    !selectedCCIds.includes(r.id) && !selectedRecipientIds.includes(r.id) &&
+                                                    (r.username.toLowerCase().includes(searchCC.toLowerCase()) || r.department.toLowerCase().includes(searchCC.toLowerCase()))
+                                                ).map(user => (
+                                                    <button
+                                                        key={user.id}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            toggleRecipient(user.id, 'cc_ids');
+                                                            setSearchCC('');
+                                                        }}
+                                                        className="w-full flex items-center gap-3 p-2.5 rounded-lg hover:bg-slate-50 text-left transition-all"
+                                                    >
+                                                        <div className="w-7 h-7 rounded-lg bg-slate-100 text-slate-400 flex items-center justify-center font-black text-[9px]">
+                                                            {user.username[0]}
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-[11px] font-bold text-slate-600">{user.username}</p>
+                                                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{user.department}</p>
+                                                        </div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {selectedCCIds.map(id => {
+                                            const user = recipients.find(r => r.id === id);
+                                            return user ? (
+                                                <div key={id} className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-2 py-1 rounded-lg animate-in zoom-in-95">
+                                                    <span className="text-[10px] font-bold text-slate-600">{user.username}</span>
+                                                    <button type="button" onClick={() => toggleRecipient(id, 'cc_ids')} className="text-slate-400 hover:text-red-500">
+                                                        <X size={10} />
+                                                    </button>
+                                                </div>
+                                            ) : null;
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* BCC Recipients */}
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-2">
+                                            Blind Copy (BCC)
+                                        </label>
+                                        <span className="text-[9px] font-black text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">{selectedBCCIds.length}</span>
+                                    </div>
+                                    <div className="relative group">
+                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-slate-500" size={14} />
+                                        <input
+                                            type="text"
+                                            placeholder="Add BCC..."
+                                            value={searchBCC}
+                                            onChange={(e) => setSearchBCC(e.target.value)}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-11 pr-4 text-xs font-bold text-slate-700 focus:bg-white focus:border-slate-400 transition-all outline-none"
+                                        />
+                                        
+                                        {searchBCC.length > 0 && (
+                                            <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl z-40 max-h-[200px] overflow-y-auto p-2">
+                                                {recipients.filter(r => 
+                                                    !selectedBCCIds.includes(r.id) && !selectedRecipientIds.includes(r.id) && !selectedCCIds.includes(r.id) &&
+                                                    (r.username.toLowerCase().includes(searchBCC.toLowerCase()) || r.department.toLowerCase().includes(searchBCC.toLowerCase()))
+                                                ).map(user => (
+                                                    <button
+                                                        key={user.id}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            toggleRecipient(user.id, 'bcc_ids');
+                                                            setSearchBCC('');
+                                                        }}
+                                                        className="w-full flex items-center gap-3 p-2.5 rounded-lg hover:bg-slate-50 text-left transition-all"
+                                                    >
+                                                        <div className="w-7 h-7 rounded-lg bg-slate-100 text-slate-400 flex items-center justify-center font-black text-[9px]">
+                                                            {user.username[0]}
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-[11px] font-bold text-slate-600">{user.username}</p>
+                                                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{user.department}</p>
+                                                        </div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {selectedBCCIds.map(id => {
+                                            const user = recipients.find(r => r.id === id);
+                                            return user ? (
+                                                <div key={id} className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-2 py-1 rounded-lg animate-in zoom-in-95">
+                                                    <span className="text-[10px] font-bold text-slate-600">{user.username}</span>
+                                                    <button type="button" onClick={() => toggleRecipient(id, 'bcc_ids')} className="text-slate-400 hover:text-red-500">
+                                                        <X size={10} />
+                                                    </button>
+                                                </div>
+                                            ) : null;
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
                         </div>
+
+                        {errors.recipient_ids && (
+                            <div className="bg-red-50 border border-red-100 p-4 rounded-2xl flex items-center gap-3 animate-pulse">
+                                <AlertCircle size={18} className="text-red-500" />
+                                <p className="text-xs text-red-600 font-bold uppercase tracking-tight">{errors.recipient_ids.message}</p>
+                            </div>
+                        )}
                     </div>
 
                     <div className="bg-white border border-slate-200 rounded-[1.5rem] p-6 shadow-sm">
@@ -699,6 +886,18 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                 {errors.category && <p className="text-[10px] text-red-400 font-bold flex items-center gap-1.5 ml-1 mt-2 tracking-tight"><AlertCircle size={12} /> {errors.category.message}</p>}
                             </div>
 
+                            {watch('category') === 'Others' && (
+                                <div className="space-y-3 animate-in slide-in-from-top-2">
+                                    <label className="text-[9px] font-black text-blue-300 uppercase tracking-[0.2em] ml-1">Specify Classification</label>
+                                    <input
+                                        {...register('custom_category')}
+                                        placeholder="Enter custom category..."
+                                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-3.5 text-sm font-bold focus:bg-white/10 focus:border-blue-400 transition-all outline-none"
+                                    />
+                                    {errors.custom_category && <p className="text-[10px] text-red-400 font-bold flex items-center gap-1.5 ml-1 mt-2 tracking-tight"><AlertCircle size={12} /> {errors.custom_category.message}</p>}
+                                </div>
+                            )}
+
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-3">
                                     <label className="text-[9px] font-black text-blue-300 uppercase tracking-[0.2em] ml-1">Priority</label>
@@ -718,6 +917,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                         className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-3.5 text-xs font-bold focus:bg-white/10 focus:border-blue-400 transition-all outline-none appearance-none"
                                     >
                                         <option value="Informational" className="text-slate-900">Info</option>
+                                        <option value="Approval" className="text-slate-900">Approval</option>
                                         <option value="Action" className="text-slate-900">Action</option>
                                     </select>
                                 </div>
