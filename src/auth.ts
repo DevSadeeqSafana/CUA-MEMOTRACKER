@@ -7,7 +7,12 @@ import { z } from 'zod';
 
 async function getUser(email: string) {
     try {
-        const users = await query('SELECT * FROM memo_system_users WHERE email = ?', [email]) as any[];
+        const users = await query(`
+            SELECT u.*, COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as full_name
+            FROM memo_system_users u
+            LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+            WHERE u.email = ?
+        `, [email]) as any[];
         return users[0];
     } catch (error) {
         console.error('Failed to fetch user:', error);
@@ -41,7 +46,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                         return {
                             id: user.id.toString(),
                             email: user.email,
-                            name: user.username,
+                            name: user.full_name,
                             department: user.department,
                             role: roles.map(r => r.name),
                         };

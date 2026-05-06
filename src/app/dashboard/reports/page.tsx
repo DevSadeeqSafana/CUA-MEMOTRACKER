@@ -44,10 +44,12 @@ export default async function ReportsPage() {
 
     // Lifecycle analytics
     const memoList = await query(
-        `SELECT m.id, m.reference_number, m.title, m.status, m.department, m.created_at, u.username as creator_name
-     FROM memos m
-     JOIN memo_system_users u ON m.created_by = u.id
-     ORDER BY m.created_at DESC`
+        `SELECT m.id, m.reference_number, m.title, m.status, m.department, m.created_at, 
+                COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as creator_name
+         FROM memos m
+         JOIN memo_system_users u ON m.created_by = u.id
+         LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+         ORDER BY m.created_at DESC`
     ) as any[];
 
     return (

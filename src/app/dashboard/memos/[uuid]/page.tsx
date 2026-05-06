@@ -41,10 +41,13 @@ export default async function MemoDetailsPage({
 
     // Fetch memo with creator details and potential budget info
     const memos = await query(
-        `SELECT m.*, u.username as creator_name, u.email as creator_email, u.line_manager_id as creator_line_manager_id,
+        `SELECT m.*, 
+                COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as creator_name, 
+                u.email as creator_email, u.line_manager_id as creator_line_manager_id,
                 bi.year_id, bi.budget_category, bi.other_category
          FROM memos m 
          JOIN memo_system_users u ON m.created_by = u.id 
+         LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
          LEFT JOIN memo_budget_info bi ON m.id = bi.memo_id
          WHERE m.uuid = ?`,
         [memoUuid]
@@ -73,9 +76,10 @@ export default async function MemoDetailsPage({
 
     // Fetch approvals
     const approvals = await query(
-        `SELECT a.*, u.username as approver_name 
+        `SELECT a.*, COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as approver_name 
       FROM memo_approvals a 
       JOIN memo_system_users u ON a.approver_id = u.id 
+      LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
       WHERE a.memo_id = ? 
       ORDER BY a.step_order ASC`,
         [memo.id]
@@ -83,9 +87,10 @@ export default async function MemoDetailsPage({
 
     // Fetch all recipients for the history timeline
     const allRecipients = await query(
-        `SELECT mr.*, u.username as recipient_name, u.department
+        `SELECT mr.*, COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as recipient_name, u.department
          FROM memo_recipients mr 
          JOIN memo_system_users u ON mr.recipient_id = u.id 
+         LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
          WHERE mr.memo_id = ?
          ORDER BY FIELD(mr.recipient_type, 'To', 'CC', 'BCC'), u.username ASC`,
         [memo.id]
@@ -95,9 +100,10 @@ export default async function MemoDetailsPage({
     const routingLogs = await query(
         `SELECT al.id, al.user_id, al.action, al.timestamp,
                 CAST(al.new_value AS CHAR) as new_value,
-                u.username as action_by_name
+                COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as action_by_name
          FROM audit_logs al
          JOIN memo_system_users u ON al.user_id = u.id
+         LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
          WHERE al.table_name = 'memos' AND al.record_id = ? AND al.action = 'ADJUST_ROUTING'
          ORDER BY al.timestamp DESC`,
         [memo.id]

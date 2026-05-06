@@ -26,11 +26,12 @@ export default async function MemoCenterPage() {
     // 1. Pending Approvals (For Line Managers / Reviewers)
     // Only shows if it's currently THEIR turn to approve
     const pendingApprovals = await query(
-        `SELECT m.*, u.username as creator_name, a.id as approval_id, a.step_order,
+        `SELECT m.*, COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as creator_name, a.id as approval_id, a.step_order,
                 (SELECT COUNT(*) FROM memo_budget_info bi WHERE bi.memo_id = m.id) > 0 as is_budget_memo 
      FROM memos m 
      JOIN memo_approvals a ON m.id = a.memo_id 
      JOIN memo_system_users u ON m.created_by = u.id 
+     LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
      WHERE a.approver_id = ? 
      AND a.status = 'Pending' 
      AND NOT EXISTS (
@@ -45,12 +46,18 @@ export default async function MemoCenterPage() {
 
     // 1.5 Pending Forwards (Consultations needing input)
     const consultationRequests = await query(
-        `SELECT m.*, u.username as creator_name, c.created_at as forwarded_at, c.from_user_id, fu.username as forwarded_by, c.id as consultation_id,
+        `SELECT m.*, 
+                COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as creator_name, 
+                c.created_at as forwarded_at, c.from_user_id, 
+                COALESCE(CONCAT(fhs.FirstName, ' ', IFNULL(CONCAT(fhs.MiddleName, ' '), ''), fhs.Surname), fu.username) as forwarded_by, 
+                c.id as consultation_id,
                 (SELECT COUNT(*) FROM memo_budget_info bi WHERE bi.memo_id = m.id) > 0 as is_budget_memo
          FROM memos m
          JOIN memo_consultations c ON m.id = c.memo_id
          JOIN memo_system_users u ON m.created_by = u.id
+         LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
          JOIN memo_system_users fu ON c.from_user_id = fu.id
+         LEFT JOIN hr_staff fhs ON fu.staff_id = fhs.StaffID
          WHERE c.to_user_id = ? AND c.type = 'Forward'
          AND NOT EXISTS (
              SELECT 1 FROM memo_consultations r 
@@ -68,11 +75,12 @@ export default async function MemoCenterPage() {
 
     // 2. Distributed Memos (For Recipients / Receivers)
     const distributedMemos = await query(
-        `SELECT m.*, u.username as creator_name, mr.read_at, mr.acknowledged_at,
+        `SELECT m.*, COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as creator_name, mr.read_at, mr.acknowledged_at,
                 (SELECT COUNT(*) FROM memo_budget_info bi WHERE bi.memo_id = m.id) > 0 as is_budget_memo
      FROM memos m
      JOIN memo_recipients mr ON m.id = mr.memo_id
      JOIN memo_system_users u ON m.created_by = u.id
+     LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
      WHERE mr.recipient_id = ? AND m.status = 'Distributed'
      ORDER BY m.created_at DESC`,
         [userId]
@@ -80,11 +88,12 @@ export default async function MemoCenterPage() {
 
     // 3. Processed Approvals (For Managers to track progress)
     const processedApprovals = await query(
-        `SELECT m.*, u.username as creator_name, a.status as my_decision, a.processed_at,
+        `SELECT m.*, COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as creator_name, a.status as my_decision, a.processed_at,
                 (SELECT COUNT(*) FROM memo_budget_info bi WHERE bi.memo_id = m.id) > 0 as is_budget_memo
      FROM memos m
      JOIN memo_approvals a ON m.id = a.memo_id
      JOIN memo_system_users u ON m.created_by = u.id
+     LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
      WHERE a.approver_id = ? AND a.status IN ('Approved', 'Rejected')
      ORDER BY a.processed_at DESC
      LIMIT 10`,

@@ -40,8 +40,9 @@ export default async function UserManagementPage({
     const countResult = await query(`
         SELECT COUNT(DISTINCT u.id) as total
         FROM memo_system_users u
-        WHERE (? IS NULL OR u.username LIKE ? OR u.email LIKE ? OR u.staff_id LIKE ?)
-    `, [queryStr, queryStr, queryStr, queryStr]) as any[];
+        LEFT JOIN hr_staff hr ON u.staff_id = hr.StaffID
+        WHERE (? IS NULL OR u.username LIKE ? OR u.email LIKE ? OR u.staff_id LIKE ? OR hr.FirstName LIKE ? OR hr.Surname LIKE ?)
+    `, [queryStr, queryStr, queryStr, queryStr, queryStr, queryStr]) as any[];
     
     const totalUsers = countResult[0]?.total || 0;
     const totalPages = Math.ceil(totalUsers / limit);
@@ -60,20 +61,29 @@ export default async function UserManagementPage({
     const orderBy = allowedSortCols[sort] || 'u.username';
 
     const users = await query(`
-        SELECT u.id, u.uuid, u.username, u.email, u.department, u.is_active, u.staff_id, u.line_manager_id,
-               COALESCE(m_mgr_explicit.username, m_mgr_hr.username) as manager_name,
+        SELECT u.id, u.uuid, 
+               COALESCE(CONCAT(hr.FirstName, ' ', IFNULL(CONCAT(hr.MiddleName, ' '), ''), hr.Surname), u.username) as username, 
+               u.email, u.department, u.is_active, u.staff_id, u.line_manager_id,
+               COALESCE(
+                   CONCAT(hr_mgr_explicit.FirstName, ' ', IFNULL(CONCAT(hr_mgr_explicit.MiddleName, ' '), ''), hr_mgr_explicit.Surname),
+                   m_mgr_explicit.username,
+                   CONCAT(hr_mgr_hr.FirstName, ' ', IFNULL(CONCAT(hr_mgr_hr.MiddleName, ' '), ''), hr_mgr_hr.Surname),
+                   m_mgr_hr.username
+               ) as manager_name,
                GROUP_CONCAT(DISTINCT r.name) as roles_list
         FROM memo_system_users u
         LEFT JOIN hr_staff hr ON u.staff_id = hr.StaffID
         LEFT JOIN memo_system_users m_mgr_hr ON hr.LineManagerID = m_mgr_hr.staff_id
+        LEFT JOIN hr_staff hr_mgr_hr ON m_mgr_hr.staff_id = hr_mgr_hr.StaffID
         LEFT JOIN memo_system_users m_mgr_explicit ON u.line_manager_id = m_mgr_explicit.id
+        LEFT JOIN hr_staff hr_mgr_explicit ON m_mgr_explicit.staff_id = hr_mgr_explicit.StaffID
         LEFT JOIN user_roles ur ON u.id = ur.user_id
         LEFT JOIN roles r ON ur.role_id = r.id
-        WHERE (? IS NULL OR u.username LIKE ? OR u.email LIKE ? OR u.staff_id LIKE ?)
-        GROUP BY u.id, u.uuid, u.username, u.email, u.department, u.is_active, u.staff_id, u.line_manager_id, manager_name
+        WHERE (? IS NULL OR u.username LIKE ? OR u.email LIKE ? OR u.staff_id LIKE ? OR hr.FirstName LIKE ? OR hr.Surname LIKE ?)
+        GROUP BY u.id, u.uuid, u.username, hr.FirstName, hr.MiddleName, hr.Surname, u.email, u.department, u.is_active, u.staff_id, u.line_manager_id, manager_name
         ORDER BY ${orderBy} ${order === 'desc' ? 'DESC' : 'ASC'}
         LIMIT ${limit} OFFSET ${offset}
-    `, [queryStr, queryStr, queryStr, queryStr]) as any[];
+    `, [queryStr, queryStr, queryStr, queryStr, queryStr, queryStr]) as any[];
 
     const formattedUsers = users.map(u => ({
         ...u,

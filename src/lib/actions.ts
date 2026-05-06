@@ -211,9 +211,10 @@ export async function approveMemo(memoId: number, approvalId: number, comments: 
             await query('UPDATE memos SET status = "Reviewer Approval" WHERE id = ?', [memoId]);
 
             const memoDetails = await query(`
-                SELECT m.title, u.username as creator_name
+                SELECT m.title, COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as creator_name
                 FROM memos m
                 JOIN memo_system_users u ON m.created_by = u.id
+                LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
                 WHERE m.id = ?`, [memoId]) as any[];
 
             const message = `${memoDetails[0].creator_name}'s memo "${memoDetails[0].title}" has been reviewed. Your final decision is required.`;
@@ -335,9 +336,19 @@ export async function acknowledgeMemo(memoId: number, decision: 'Acknowledged' |
         if (memoRows.length > 0) {
             const memo = memoRows[0];
             const actionText = decision === 'Acknowledged' ? 'acknowledged' : decision.toLowerCase();
+            
+            // Fetch current user's full name
+            const userRows = await query(`
+                SELECT COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as full_name
+                FROM memo_system_users u
+                LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+                WHERE u.id = ?
+            `, [session.user.id]) as any[];
+            const actorName = userRows.length > 0 ? userRows[0].full_name : session.user.name;
+
             await query(
                 'INSERT INTO notifications (user_id, memo_id, message) VALUES (?, ?, ?)',
-                [memo.created_by, memoId, `${session.user.name} has ${actionText} your memo "${memo.title}".`]
+                [memo.created_by, memoId, `${actorName} has ${actionText} your memo "${memo.title}".`]
             );
         }
 
@@ -424,8 +435,11 @@ export async function getManagers() {
     try {
         // Fetch users who have the Line Manager role OR are listed as managers in hr_staff
         const managers = await query(`
-            SELECT DISTINCT u.id, u.username, u.department, u.staff_id
+            SELECT DISTINCT u.id, 
+                   COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as username, 
+                   u.department, u.staff_id
             FROM memo_system_users u
+            LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
             LEFT JOIN user_roles ur ON u.id = ur.user_id
             LEFT JOIN roles r ON ur.role_id = r.id
             WHERE r.name = 'Line Manager'
@@ -653,8 +667,11 @@ export async function getRecipients() {
         const fetchRecipients = unstable_cache(
             async () => {
                 const recipients = await query(`
-                    SELECT u.id, u.username, u.department 
+                    SELECT u.id, 
+                           COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as username, 
+                           u.department 
                     FROM memo_system_users u
+                    LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
                     WHERE u.is_active = 1
                 `) as any[];
                 return recipients;
@@ -907,8 +924,12 @@ export async function updateMemoRouting(
                 'INSERT INTO memo_recipients (memo_id, recipient_id) VALUES (?, ?)',
                 [memoId, rid]
             );
-            const user = await query('SELECT username FROM memo_system_users WHERE id = ?', [rid]) as any[];
-            if (user.length > 0) newRecipientResults.push(user[0].username);
+            const user = await query(`
+                SELECT COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as full_name 
+                FROM memo_system_users u 
+                LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID 
+                WHERE u.id = ?`, [rid]) as any[];
+            if (user.length > 0) newRecipientResults.push(user[0].full_name);
         }
 
         // Calculate deltas
@@ -964,7 +985,17 @@ export async function updateMemoRouting(
         const memoRows = await query('SELECT created_by, title FROM memos WHERE id = ?', [memoId]) as any[];
         if (memoRows.length > 0) {
             const creatorId = memoRows[0].created_by;
-            let message = `${session.user.name} has adjusted the routing for your memo "${memoRows[0].title}".`;
+            
+            // Fetch current user's full name
+            const userRows = await query(`
+                SELECT COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as full_name
+                FROM memo_system_users u
+                LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+                WHERE u.id = ?
+            `, [userId]) as any[];
+            const actorName = userRows.length > 0 ? userRows[0].full_name : session.user.name;
+
+            let message = `${actorName} has adjusted the routing for your memo "${memoRows[0].title}".`;
 
             if (oldRecipientNamesString && newRecipientNames && oldRecipientNamesString !== newRecipientNames) {
                 message += ` Recipient changed from ${oldRecipientNamesString} to ${newRecipientNames}.`;
@@ -1022,8 +1053,11 @@ export async function forwardMemoConsultation(
 
         // Fetch memo title and sender name for notifications
         const memoRows = await query(
-            `SELECT m.title, m.uuid, u.username as sender_name 
-             FROM memos m JOIN memo_system_users u ON m.created_by = u.id 
+            `SELECT m.title, m.uuid, 
+                    COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as sender_name 
+             FROM memos m 
+             JOIN memo_system_users u ON m.created_by = u.id 
+             LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
              WHERE m.id = ?`,
             [memoId]
         ) as any[];
@@ -1103,11 +1137,13 @@ export async function getConsultations(memoId: number) {
         const rows = await query(
             `SELECT 
                 mc.*,
-                fu.username as from_name,
-                tu.username as to_name
+                COALESCE(CONCAT(fhs.FirstName, ' ', IFNULL(CONCAT(fhs.MiddleName, ' '), ''), fhs.Surname), fu.username) as from_name,
+                COALESCE(CONCAT(ths.FirstName, ' ', IFNULL(CONCAT(ths.MiddleName, ' '), ''), ths.Surname), tu.username) as to_name
              FROM memo_consultations mc
              JOIN memo_system_users fu ON mc.from_user_id = fu.id
+             LEFT JOIN hr_staff fhs ON fu.staff_id = fhs.StaffID
              JOIN memo_system_users tu ON mc.to_user_id = tu.id
+             LEFT JOIN hr_staff ths ON tu.staff_id = ths.StaffID
              WHERE mc.memo_id = ?
              ORDER BY mc.created_at ASC`,
             [memoId]
@@ -1129,11 +1165,14 @@ export async function searchUsersForConsultation(searchTerm: string) {
 
     try {
         const users = await query(
-            `SELECT id, username, department 
-             FROM memo_system_users 
-             WHERE is_active = 1 AND id != ? AND (username LIKE ? OR department LIKE ?)
+            `SELECT u.id, 
+                    COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as username, 
+                    u.department 
+             FROM memo_system_users u
+             LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+             WHERE u.is_active = 1 AND u.id != ? AND (u.username LIKE ? OR u.department LIKE ? OR hs.FirstName LIKE ? OR hs.Surname LIKE ?)
              LIMIT 20`,
-            [currentUserId, `%${searchTerm}%`, `%${searchTerm}%`]
+            [currentUserId, `%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`]
         ) as any[];
         return users;
     } catch (error: any) {
