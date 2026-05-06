@@ -9,6 +9,8 @@ const pool = (global as any).mysqlPool || mysql.createPool({
   connectionLimit: 10,
   queueLimit: 0,
   connectTimeout: 30000,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 10000,
 });
 
 if (process.env.NODE_ENV !== 'production') {
