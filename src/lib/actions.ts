@@ -588,6 +588,31 @@ export async function deleteUser(userId: number) {
     }
 }
 
+export async function resetUserPassword(userId: number) {
+    const session = await auth();
+    if (!session?.user || !(session.user as any).role?.includes('Administrator')) {
+        return { success: false, error: 'Unauthorized' };
+    }
+
+    try {
+        const bcrypt = require('bcryptjs');
+        const salt = await bcrypt.genSalt(10);
+        const newHash = await bcrypt.hash('123456', salt);
+
+        await query('UPDATE memo_system_users SET password_hash = ? WHERE id = ?', [newHash, userId]);
+
+        await query(
+            'INSERT INTO audit_logs (user_id, action, table_name, record_id) VALUES (?, ?, ?, ?)',
+            [session.user.id, 'RESET_PASSWORD', 'users', userId]
+        );
+
+        return { success: true };
+    } catch (error: any) {
+        console.error('Reset password error:', error);
+        return { success: false, error: 'Failed to reset password.' };
+    }
+}
+
 export async function toggleUserStatus(userId: number, currentStatus: boolean) {
     const session = await auth();
     if (!session?.user || !(session.user as any).role?.includes('Administrator')) {
@@ -1299,5 +1324,141 @@ export async function getSidebarCounts() {
     } catch (e) {
         console.error('getSidebarCounts error:', e);
         return { inbox: 0, important: 0, actions: 0, sent: 0, drafts: 0 };
+    }
+}
+
+// ─── DRAFT MEMO ACTIONS ───────────────────────────────────────────────────────
+
+export async function deleteDraftMemo(memoId: number) {
+    const session = await auth();
+    if (!session?.user?.id) return { success: false, error: 'Unauthorized' };
+    const userId = parseInt(session.user.id);
+
+    try {
+        // Ensure the memo belongs to this user AND is still a draft
+        const rows = await query(
+            `SELECT id FROM memos WHERE id = ? AND created_by = ? AND status = 'Draft' LIMIT 1`,
+            [memoId, userId]
+        ) as any[];
+
+        if (rows.length === 0) {
+            return { success: false, error: 'Draft not found or already submitted.' };
+        }
+
+        // Cascade-delete all related rows then the memo itself
+        await query(`DELETE FROM memo_budget_items WHERE memo_id = ?`, [memoId]);
+        await query(`DELETE FROM memo_budget_info  WHERE memo_id = ?`, [memoId]);
+        await query(`DELETE FROM memo_recipients   WHERE memo_id = ?`, [memoId]);
+        await query(`DELETE FROM memo_approvals    WHERE memo_id = ?`, [memoId]);
+        await query(`DELETE FROM attachments        WHERE memo_id = ?`, [memoId]);
+        await query(`DELETE FROM memos             WHERE id = ?`,      [memoId]);
+
+        revalidatePath('/dashboard/tasks');
+        revalidatePath('/dashboard');
+        return { success: true };
+    } catch (e: any) {
+        console.error('deleteDraftMemo error:', e);
+        return { success: false, error: e.message || 'Delete failed' };
+    }
+}
+
+export async function updateDraftMemo(memoId: number, data: FormData, submitNow: boolean) {
+    const session = await auth();
+    if (!session?.user?.id) return { success: false, error: 'Unauthorized' };
+    const userId = parseInt(session.user.id);
+
+    try {
+        const rows = await query(
+            `SELECT id, uuid FROM memos WHERE id = ? AND created_by = ? AND status = 'Draft' LIMIT 1`,
+            [memoId, userId]
+        ) as any[];
+
+        if (rows.length === 0) return { success: false, error: 'Draft not found.' };
+        const { uuid } = rows[0];
+
+        const title         = data.get('title') as string;
+        const content       = data.get('content') as string;
+        const department    = data.get('department') as string;
+        const category      = data.get('category') as string;
+        const priority      = data.get('priority') as string;
+        const memo_type     = data.get('memo_type') as string;
+        const expiry_date   = data.get('expiry_date') as string || null;
+        const is_budget     = data.get('is_budget_memo') === 'true';
+
+        // Update core memo
+        await query(
+            `UPDATE memos SET title=?, content=?, department=?, category=?, priority=?, memo_type=?, expiry_date=?, updated_at=NOW()
+             WHERE id = ?`,
+            [title, content, department, category, priority, memo_type, expiry_date, memoId]
+        );
+
+        // Refresh recipients
+        await query(`DELETE FROM memo_recipients WHERE memo_id = ?`, [memoId]);
+        const recipientIds: number[] = JSON.parse(data.get('recipient_ids') as string || '[]');
+        const ccIds:        number[] = JSON.parse(data.get('cc_ids')        as string || '[]');
+        const bccIds:       number[] = JSON.parse(data.get('bcc_ids')       as string || '[]');
+
+        const allRecipients = [
+            ...recipientIds.map(id => ({ id, type: 'To' })),
+            ...ccIds.map(id        => ({ id, type: 'CC' })),
+            ...bccIds.map(id       => ({ id, type: 'BCC' })),
+        ];
+        for (const r of allRecipients) {
+            await query(
+                `INSERT IGNORE INTO memo_recipients (memo_id, recipient_id, recipient_type) VALUES (?, ?, ?)`,
+                [memoId, r.id, r.type]
+            );
+        }
+
+        // Budget info refresh
+        await query(`DELETE FROM memo_budget_info  WHERE memo_id = ?`, [memoId]);
+        await query(`DELETE FROM memo_budget_items WHERE memo_id = ?`, [memoId]);
+        if (is_budget) {
+            const year_id         = data.get('year_id') as string;
+            const budget_category = data.get('budget_category') as string;
+            const other_category  = data.get('other_category') as string;
+            await query(
+                `INSERT INTO memo_budget_info (memo_id, year_id, budget_category, other_category) VALUES (?, ?, ?, ?)`,
+                [memoId, year_id, budget_category, other_category]
+            );
+            const budgetItems = JSON.parse(data.get('budget_items') as string || '[]');
+            for (const item of budgetItems) {
+                const subtotal = (item.quantity || 1) * (item.amount || 0);
+                await query(
+                    `INSERT INTO memo_budget_items (memo_id, name, description, quantity, amount, total) VALUES (?, ?, ?, ?, ?, ?)`,
+                    [memoId, item.name, item.description || '', item.quantity || 1, item.amount || 0, subtotal]
+                );
+            }
+        }
+
+        if (submitNow) {
+            // Route the memo for approval just like createMemo does
+            const userResult = await query(
+                'SELECT line_manager_id FROM memo_system_users WHERE id = ?', [userId]
+            ) as any[];
+            const managerId = userResult[0]?.line_manager_id;
+
+            if (managerId) {
+                await query(
+                    'INSERT INTO memo_approvals (memo_id, approver_id, step_order, status) VALUES (?, ?, ?, ?)',
+                    [memoId, managerId, 1, 'Pending']
+                );
+                await query('UPDATE memos SET status = "Line Manager Review" WHERE id = ?', [memoId]);
+                await query(
+                    'INSERT INTO notifications (user_id, memo_id, message) VALUES (?, ?, ?)',
+                    [managerId, memoId, `A new memo "${title}" requires your validation.`]
+                );
+            } else {
+                await query('UPDATE memos SET status = "Distributed" WHERE id = ?', [memoId]);
+            }
+        }
+
+        revalidatePath('/dashboard/tasks');
+        revalidatePath(`/dashboard/memos/${uuid}`);
+        revalidatePath('/dashboard');
+        return { success: true, memoUuid: uuid };
+    } catch (e: any) {
+        console.error('updateDraftMemo error:', e);
+        return { success: false, error: e.message || 'Update failed' };
     }
 }

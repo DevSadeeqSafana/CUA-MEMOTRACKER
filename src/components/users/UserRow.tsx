@@ -1,20 +1,20 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
     ChevronDown, 
     ChevronUp, 
     Mail, 
     Building, 
-    Activity, 
     UserPlus, 
     RefreshCw, 
     Search,
     Loader2,
-    Check,
     X,
-    Shield
+    Shield,
+    Users
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import UserTableActions from './UserTableActions';
@@ -33,6 +33,21 @@ export default function UserRow({ user, managers }: UserRowProps) {
     const [availableManagers, setAvailableManagers] = useState<any[]>([]);
     const [isSearchingManagers, setIsSearchingManagers] = useState(false);
     const [isUpdating, setIsUpdating] = useState(false);
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => { setMounted(true); }, []);
+
+    const openModal = () => {
+        setManagerSearchTerm('');
+        setAvailableManagers([]);
+        setIsAssigningLM(true);
+    };
+
+    const closeModal = () => {
+        setIsAssigningLM(false);
+        setManagerSearchTerm('');
+        setAvailableManagers([]);
+    };
 
     const handleSearch = async (term: string) => {
         setManagerSearchTerm(term);
@@ -40,7 +55,6 @@ export default function UserRow({ user, managers }: UserRowProps) {
             setAvailableManagers([]);
             return;
         }
-
         setIsSearchingManagers(true);
         try {
             const results = await searchManagers(term);
@@ -58,8 +72,7 @@ export default function UserRow({ user, managers }: UserRowProps) {
             const result = await updateLineManager(user.id, managerId);
             if (result.success) {
                 toast.success('Line Manager assigned successfully');
-                setIsAssigningLM(false);
-                setManagerSearchTerm('');
+                closeModal();
             } else {
                 toast.error(result.error || 'Failed to assign manager');
             }
@@ -70,6 +83,114 @@ export default function UserRow({ user, managers }: UserRowProps) {
         }
     };
 
+    const assignModal = mounted && isAssigningLM && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6 animate-in fade-in duration-200">
+            {/* Backdrop */}
+            <div className="fixed inset-0 bg-[#1a365d]/50 backdrop-blur-sm" onClick={closeModal} />
+
+            {/* Modal */}
+            <div className="relative bg-white w-full max-w-lg rounded-[2rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
+                {/* Header */}
+                <div className="px-8 pt-8 pb-5 border-b border-slate-100 flex items-center justify-between shrink-0">
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-blue-50 text-[#1a365d] flex items-center justify-center border border-blue-100">
+                            <Users size={16} />
+                        </div>
+                        <div>
+                            <h3 className="text-sm font-black text-[#1a365d] uppercase tracking-tight">
+                                {user.line_manager_id ? 'Change Line Manager' : 'Assign Line Manager'}
+                            </h3>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
+                                For: {user.staff_id || `#CUA-${String(user.id).padStart(5, '0')}`}
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={closeModal}
+                        className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors"
+                    >
+                        <X size={16} />
+                    </button>
+                </div>
+
+                {/* Current manager info */}
+                {user.manager_name && (
+                    <div className="px-8 py-4 bg-slate-50/60 border-b border-slate-100 shrink-0">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Current Manager</p>
+                        <div className="flex items-center gap-2.5">
+                            <div className="w-7 h-7 rounded-lg bg-[#1a365d] text-white flex items-center justify-center font-black text-xs">
+                                {user.manager_name[0]}
+                            </div>
+                            <span className="text-sm font-bold text-slate-700">{user.manager_name}</span>
+                        </div>
+                    </div>
+                )}
+
+                {/* Search */}
+                <div className="px-8 py-5 shrink-0">
+                    <div className="relative group">
+                        <Search
+                            className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors"
+                            size={15}
+                        />
+                        <input
+                            type="text"
+                            autoFocus
+                            placeholder="Search by name or staff ID..."
+                            value={managerSearchTerm}
+                            onChange={(e) => handleSearch(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-11 pr-10 text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none"
+                        />
+                        {isSearchingManagers && (
+                            <Loader2 size={14} className="absolute right-4 top-1/2 -translate-y-1/2 animate-spin text-blue-500" />
+                        )}
+                    </div>
+                </div>
+
+                {/* Results */}
+                <div className="flex-1 overflow-y-auto px-8 pb-8 space-y-2 min-h-[80px]">
+                    {managerSearchTerm.length < 2 ? (
+                        <div className="flex flex-col items-center justify-center py-8 text-center">
+                            <Search size={24} className="text-slate-200 mb-2" />
+                            <p className="text-[11px] font-black text-slate-300 uppercase tracking-widest">
+                                Type at least 2 characters to search
+                            </p>
+                        </div>
+                    ) : availableManagers.length === 0 && !isSearchingManagers ? (
+                        <div className="flex flex-col items-center justify-center py-8 text-center">
+                            <p className="text-[11px] font-black text-slate-300 uppercase tracking-widest">No managers found</p>
+                        </div>
+                    ) : (
+                        availableManagers.map(mgr => (
+                            <button
+                                key={mgr.id}
+                                onClick={() => handleAssignLM(mgr.id)}
+                                disabled={isUpdating}
+                                className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-slate-100 hover:bg-blue-50 hover:border-blue-200 transition-all text-left group disabled:opacity-50"
+                            >
+                                <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm group-hover:bg-blue-600 group-hover:text-white transition-colors shrink-0">
+                                    {mgr.username[0]}
+                                </div>
+                                <div className="overflow-hidden flex-1">
+                                    <p className="text-sm font-bold text-slate-800 truncate">{mgr.username}</p>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest truncate">{mgr.department}</p>
+                                </div>
+                                {isUpdating ? (
+                                    <Loader2 size={14} className="animate-spin text-blue-500 shrink-0" />
+                                ) : (
+                                    <span className="text-[9px] font-black text-blue-500 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                        Select
+                                    </span>
+                                )}
+                            </button>
+                        ))
+                    )}
+                </div>
+            </div>
+        </div>,
+        document.body
+    );
+
     return (
         <>
             <tr className={cn(
@@ -77,7 +198,7 @@ export default function UserRow({ user, managers }: UserRowProps) {
                 !user.is_active && "opacity-60 bg-slate-50/30",
                 isExpanded && "bg-blue-50/20"
             )}>
-                <td className="px-4 md:px-8 py-6">
+                <td className="px-4 md:px-6 py-3.5">
                     <div className="flex items-center gap-4">
                         <button 
                             onClick={() => setIsExpanded(!isExpanded)}
@@ -86,30 +207,31 @@ export default function UserRow({ user, managers }: UserRowProps) {
                             {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                         </button>
                         <div className={cn(
-                            "w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm",
+                            "w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs text-center leading-none select-none uppercase",
                             user.is_active ? "bg-[#1a365d] text-white" : "bg-slate-200 text-slate-500"
                         )}>
-                            {user.username?.[0] || 'U'}
+                            {(user.staff_id && user.staff_id[0]) || 'U'}
                         </div>
                         <div className="space-y-0.5">
-                            <p className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors uppercase tracking-tight text-sm">{user.username}</p>
-                            <p className="text-[9px] text-slate-400 font-black uppercase tracking-wider">{user.staff_id || `#CUA-${String(user.id).padStart(5, '0')}`}</p>
+                            <p className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors uppercase tracking-tight text-sm">
+                                {user.staff_id || `#CUA-${String(user.id).padStart(5, '0')}`}
+                            </p>
                         </div>
                     </div>
                 </td>
-                <td className="px-4 md:px-8 py-6">
+                <td className="px-4 md:px-6 py-3.5">
                     <div className="flex items-center gap-2 text-slate-500 font-medium">
                         <Mail size={14} className="opacity-40" />
                         <span className="text-sm">{user.email}</span>
                     </div>
                 </td>
-                <td className="px-4 md:px-8 py-6">
+                <td className="px-4 md:px-6 py-3.5">
                     <div className="flex items-center gap-2">
                         <Building size={14} className="text-slate-300" />
                         <span className="text-sm font-bold text-slate-700">{user.department}</span>
                     </div>
                 </td>
-                <td className="px-4 md:px-8 py-6">
+                <td className="px-4 md:px-6 py-3.5">
                     <div className="flex items-center gap-3">
                         {user.manager_name ? (
                             <div className="flex items-center gap-2">
@@ -123,10 +245,7 @@ export default function UserRow({ user, managers }: UserRowProps) {
                         )}
                         
                         <button 
-                            onClick={() => {
-                                setIsExpanded(true);
-                                setIsAssigningLM(true);
-                            }}
+                            onClick={openModal}
                             className={cn(
                                 "p-1.5 rounded-lg transition-all border shrink-0",
                                 user.line_manager_id 
@@ -139,148 +258,95 @@ export default function UserRow({ user, managers }: UserRowProps) {
                         </button>
                     </div>
                 </td>
-                <td className="px-4 md:px-8 py-6">
-                    <div className={cn(
-                        "inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border",
-                        user.is_active
-                            ? "bg-emerald-50 border-emerald-100 text-emerald-600"
-                            : "bg-slate-100 border-slate-200 text-slate-400"
-                    )}>
-                        <Activity size={10} className={user.is_active ? "animate-pulse" : ""} />
-                        {user.is_active ? "Authorized" : "Inactive"}
-                    </div>
-                </td>
-                <td className="px-4 md:px-8 py-6">
-                    <div className="flex flex-wrap gap-2">
+                <td className="px-4 md:px-6 py-3.5">
+                    <div className="flex items-center gap-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[200px]">
                         {user.roles.map((role: string) => (
-                            <span key={role} className="px-3 py-1 bg-blue-50 text-blue-700 text-[9px] font-black uppercase tracking-wider rounded-lg border border-blue-100">
+                            <span key={role} className="px-2.5 py-1 bg-blue-50 text-blue-700 text-[9px] font-black uppercase tracking-wider rounded-lg border border-blue-100 shrink-0">
                                 {role}
                             </span>
                         ))}
                     </div>
                 </td>
-                <td className="px-4 md:px-8 py-6 text-right">
+                <td className="px-4 md:px-6 py-3.5 text-right">
                     <UserTableActions user={user} managers={managers} />
                 </td>
             </tr>
 
-            {/* Expanded Content */}
+            {/* Expanded Content - simplified: just profile info since manager is now in modal */}
             {isExpanded && (
                 <tr className="bg-slate-50/50">
-                    <td colSpan={7} className="px-8 py-8 border-b border-slate-100">
-                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in slide-in-from-top-2 duration-300">
-                            {/* Profile Info */}
-                            <div className="lg:col-span-4 space-y-4">
-                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Detailed Profile</h4>
-                                <div className="space-y-4 bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                    <td colSpan={6} className="px-8 py-6 border-b border-slate-100">
+                        <div className="animate-in slide-in-from-top-2 duration-300">
+                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Detailed Profile</h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-3">
                                     <div className="flex justify-between items-center text-sm">
-                                        <span className="text-slate-500 font-medium">Internal ID</span>
-                                        <span className="font-bold text-slate-900">#CUA-{String(user.id).padStart(5, '0')}</span>
+                                        <span className="text-slate-400 font-bold text-[10px] uppercase tracking-widest">Internal ID</span>
+                                        <span className="font-bold text-slate-900 text-xs">#CUA-{String(user.id).padStart(5, '0')}</span>
                                     </div>
                                     <div className="flex justify-between items-center text-sm">
-                                        <span className="text-slate-500 font-medium">Staff Identity</span>
-                                        <span className="font-bold text-slate-900">{user.staff_id || 'NOT LINKED'}</span>
+                                        <span className="text-slate-400 font-bold text-[10px] uppercase tracking-widest">Staff ID</span>
+                                        <span className="font-bold text-slate-900 text-xs">{user.staff_id || 'NOT LINKED'}</span>
                                     </div>
                                     <div className="flex justify-between items-center text-sm">
-                                        <span className="text-slate-500 font-medium">Department</span>
-                                        <span className="font-bold text-slate-900">{user.department}</span>
+                                        <span className="text-slate-400 font-bold text-[10px] uppercase tracking-widest">Department</span>
+                                        <span className="font-bold text-slate-900 text-xs">{user.department}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-sm">
+                                        <span className="text-slate-400 font-bold text-[10px] uppercase tracking-widest">Status</span>
+                                        <span className={cn("font-black text-[9px] uppercase tracking-widest px-2 py-0.5 rounded-lg", user.is_active ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : "bg-slate-100 text-slate-400 border border-slate-200")}>
+                                            {user.is_active ? 'Active' : 'Inactive'}
+                                        </span>
                                     </div>
                                 </div>
-                            </div>
 
-                            {/* Line Manager Assignment */}
-                            <div className="lg:col-span-8 space-y-4">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Hierarchy Management</h4>
-                                    {!isAssigningLM && (
-                                        <button 
-                                            onClick={() => setIsAssigningLM(true)}
-                                            className="text-[9px] font-black text-blue-600 uppercase tracking-widest hover:underline"
-                                        >
-                                            {user.line_manager_id ? 'Change Manager' : 'Assign Manager'}
-                                        </button>
-                                    )}
-                                </div>
-
-                                {isAssigningLM ? (
-                                    <div className="bg-white p-6 rounded-3xl border border-blue-100 shadow-xl shadow-blue-900/5 space-y-4">
-                                        <div className="flex items-center justify-between">
-                                            <p className="text-sm font-bold text-[#1a365d]">Search for Line Manager</p>
-                                            <button onClick={() => setIsAssigningLM(false)} className="text-slate-400 hover:text-red-500">
-                                                <X size={18} />
-                                            </button>
-                                        </div>
-                                        
-                                        <div className="relative group">
-                                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={16} />
-                                            <input
-                                                type="text"
-                                                placeholder="Enter name or staff ID..."
-                                                value={managerSearchTerm}
-                                                onChange={(e) => handleSearch(e.target.value)}
-                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-12 text-sm font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none"
-                                            />
-                                            {isSearchingManagers && <Loader2 size={16} className="absolute right-4 top-1/2 -translate-y-1/2 animate-spin text-blue-500" />}
-                                        </div>
-
-                                        {availableManagers.length > 0 && (
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
-                                                {availableManagers.map(mgr => (
-                                                    <button
-                                                        key={mgr.id}
-                                                        onClick={() => handleAssignLM(mgr.id)}
-                                                        disabled={isUpdating}
-                                                        className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:bg-blue-50 hover:border-blue-200 transition-all text-left group"
-                                                    >
-                                                        <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                                                            {mgr.username[0]}
-                                                        </div>
-                                                        <div className="overflow-hidden">
-                                                            <p className="text-sm font-bold text-slate-900 truncate">{mgr.username}</p>
-                                                            <p className="text-[10px] text-slate-400 font-bold uppercase truncate">{mgr.department}</p>
-                                                        </div>
-                                                    </button>
-                                                ))}
+                                <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                                    <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mb-3">Reporting To</p>
+                                    {user.manager_name ? (
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-xl bg-[#1a365d] text-white flex items-center justify-center font-black text-sm relative">
+                                                <Shield size={20} className="opacity-10 absolute" />
+                                                <span>{user.manager_name[0]}</span>
                                             </div>
+                                            <div>
+                                                <p className="text-sm font-black text-[#1a365d] uppercase tracking-tight">{user.manager_name}</p>
+                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Line Manager</p>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center gap-2 text-amber-600">
+                                            <UserPlus size={16} />
+                                            <span className="text-[11px] font-black uppercase tracking-widest">No manager assigned</span>
+                                        </div>
+                                    )}
+                                    <button
+                                        onClick={openModal}
+                                        className="mt-4 w-full px-4 py-2 bg-[#1a365d] text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#2c5282] transition-all shadow-sm"
+                                    >
+                                        {user.line_manager_id ? 'Change Manager' : 'Assign Manager'}
+                                    </button>
+                                </div>
+
+                                <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                                    <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mb-3">System Roles</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {user.roles.length > 0 ? user.roles.map((role: string) => (
+                                            <span key={role} className="px-2.5 py-1 bg-blue-50 text-blue-700 text-[9px] font-black uppercase tracking-wider rounded-lg border border-blue-100">
+                                                {role}
+                                            </span>
+                                        )) : (
+                                            <span className="text-[10px] text-slate-300 font-black uppercase tracking-widest italic">No roles assigned</span>
                                         )}
                                     </div>
-                                ) : (
-                                    <div className="bg-white p-8 rounded-3xl border border-slate-100 flex flex-col items-center justify-center text-center space-y-4">
-                                        {user.manager_name ? (
-                                            <>
-                                                <div className="w-16 h-16 rounded-2xl bg-blue-50 text-[#1a365d] flex items-center justify-center border border-blue-100 relative shadow-inner">
-                                                    <Shield size={32} className="opacity-10 absolute" />
-                                                    <span className="text-2xl font-black">{user.manager_name[0]}</span>
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-black text-[#1a365d] font-outfit uppercase tracking-tight">Report Chain Established</p>
-                                                    <p className="text-xs text-slate-500 font-medium mt-1">{user.username} reports directly to <span className="font-bold text-slate-900">{user.manager_name}</span>.</p>
-                                                </div>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100 relative">
-                                                    <UserPlus size={32} />
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-black text-[#1a365d] font-outfit uppercase tracking-tight">No Manager Assigned</p>
-                                                    <p className="text-xs text-slate-500 font-medium mt-1">This user is currently not linked to any line manager in the system hierarchy.</p>
-                                                </div>
-                                                <button 
-                                                    onClick={() => setIsAssigningLM(true)}
-                                                    className="px-6 py-2 bg-[#1a365d] text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#2c5282] transition-all shadow-lg shadow-blue-900/20"
-                                                >
-                                                    Assign Manager Now
-                                                </button>
-                                            </>
-                                        )}
-                                    </div>
-                                )}
+                                </div>
                             </div>
                         </div>
                     </td>
                 </tr>
             )}
+
+            {/* Line Manager Assignment Modal */}
+            {assignModal}
         </>
     );
 }

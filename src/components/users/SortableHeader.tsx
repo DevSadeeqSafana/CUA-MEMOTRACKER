@@ -38,7 +38,7 @@ export default function SortableHeader({
     };
 
     return (
-        <th className={cn("px-4 md:px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50 cursor-pointer group select-none", className)} onClick={handleSort}>
+        <th className={cn("px-4 md:px-6 py-3.5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50 cursor-pointer group select-none", className)} onClick={handleSort}>
             <div className="flex items-center gap-2">
                 {label}
                 <div className="flex flex-col text-slate-300 group-hover:text-slate-500 transition-colors">

@@ -23,9 +23,13 @@ import {
     MessageSquare,
     Sparkles,
     Filter,
-    CheckSquare
+    CheckSquare,
+    Pencil
 } from 'lucide-react';
 import { cn, formatDate } from '@/lib/utils';
+import { deleteDraftMemo } from '@/lib/actions';
+import toast from 'react-hot-toast';
+import ConfirmationModal from '@/components/ui/ConfirmationModal';
 
 interface MemoInboxContainerProps {
     memos: any[];
@@ -38,6 +42,8 @@ export default function MemoInboxContainer({ memos, initialFolder = 'inbox' }: M
     
     // Synced search parameter folder or fallback
     const folder = searchParams.get('folder') || initialFolder;
+    const [deleteDraftId, setDeleteDraftId] = useState<number | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
     const [tab, setTab] = useState<'all' | 'primary' | 'budget' | 'actions' | 'policy'>('all');
     const [search, setSearch] = useState('');
     const [starredIds, setStarredIds] = useState<Set<number>>(new Set());
@@ -55,6 +61,27 @@ export default function MemoInboxContainer({ memos, initialFolder = 'inbox' }: M
             }
             return next;
         });
+    };
+
+    const handleDeleteDraft = async () => {
+        if (!deleteDraftId) return;
+
+        setIsDeleting(true);
+        try {
+            const res = await deleteDraftMemo(deleteDraftId);
+            if (res.success) {
+                toast.success('Draft deleted successfully');
+                setDeleteDraftId(null);
+                router.refresh();
+            } else {
+                toast.error(res.error || 'Failed to delete draft');
+            }
+        } catch (error) {
+            console.error('Delete draft error:', error);
+            toast.error('An error occurred while deleting draft');
+        } finally {
+            setIsDeleting(false);
+        }
     };
 
     // Filter memos based on Folder, Classification Tab, and Search Query
@@ -284,7 +311,7 @@ export default function MemoInboxContainer({ memos, initialFolder = 'inbox' }: M
                             return (
                                 <div
                                     key={memo.id}
-                                    onClick={() => router.push(`/dashboard/memos/${memo.uuid}`)}
+                                    onClick={() => router.push(folder === 'drafts' ? `/dashboard/memos/${memo.uuid}/edit` : `/dashboard/memos/${memo.uuid}`)}
                                     className={cn(
                                         "flex items-center gap-4 px-6 py-4 hover:bg-slate-50 transition-all cursor-pointer relative group",
                                         memo.is_unread ? "bg-blue-50/20 border-l-4 border-l-blue-600" : "bg-white"
@@ -376,23 +403,45 @@ export default function MemoInboxContainer({ memos, initialFolder = 'inbox' }: M
                                         )}
                                     </div>
 
-                                    {/* Date / Time Column */}
-                                    <div className="w-20 shrink-0 text-right group-hover:hidden block">
-                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                                            {formatDate(memo.created_at)}
-                                        </span>
-                                    </div>
-
-                                    {/* Quick Actions (Hover trigger) */}
-                                    <div className="w-20 shrink-0 flex items-center justify-end gap-1.5 hidden group-hover:flex animate-in fade-in duration-200">
-                                        <button
-                                            type="button"
-                                            title="Open Memo"
-                                            onClick={() => router.push(`/dashboard/memos/${memo.uuid}`)}
-                                            className="w-7 h-7 bg-blue-50 border border-blue-100 hover:bg-blue-600 hover:text-white rounded-lg flex items-center justify-center text-blue-600 transition-all shadow-sm"
-                                        >
-                                            <ArrowRight size={13} />
-                                        </button>
+                                    {/* Quick Actions */}
+                                    <div className="w-20 shrink-0 flex items-center justify-end gap-1.5">
+                                        {folder === 'drafts' ? (
+                                            <>
+                                                <button
+                                                    type="button"
+                                                    title="Continue Editing"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        router.push(`/dashboard/memos/${memo.uuid}/edit`);
+                                                    }}
+                                                    className="w-7 h-7 bg-blue-50 border border-blue-100 hover:bg-blue-600 hover:text-white rounded-lg flex items-center justify-center text-blue-600 transition-all shadow-sm"
+                                                >
+                                                    <Pencil size={12} />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    title="Delete Draft"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        setDeleteDraftId(memo.id);
+                                                    }}
+                                                    className="w-7 h-7 bg-red-50 border border-red-100 hover:bg-red-600 hover:text-white rounded-lg flex items-center justify-center text-red-600 transition-all shadow-sm"
+                                                >
+                                                    <Trash2 size={12} />
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                title="Open Memo"
+                                                onClick={() => router.push(`/dashboard/memos/${memo.uuid}`)}
+                                                className="w-7 h-7 bg-blue-50 border border-blue-100 hover:bg-blue-600 hover:text-white rounded-lg flex items-center justify-center text-blue-600 transition-all shadow-sm"
+                                            >
+                                                <ArrowRight size={13} />
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             );
@@ -400,6 +449,16 @@ export default function MemoInboxContainer({ memos, initialFolder = 'inbox' }: M
                     </div>
                 )}
             </div>
+
+            <ConfirmationModal
+                isOpen={deleteDraftId !== null}
+                onClose={() => setDeleteDraftId(null)}
+                onConfirm={handleDeleteDraft}
+                title="Delete Draft Memo"
+                description="Are you sure you want to permanently delete this draft memo? This action cannot be undone."
+                confirmText="Delete Draft"
+                isLoading={isDeleting}
+            />
         </div>
     );
 }

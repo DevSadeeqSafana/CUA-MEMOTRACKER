@@ -7,12 +7,13 @@ import MemoInboxContainer from '@/components/memos/MemoInboxContainer';
 export default async function MemoCenterPage({
     searchParams,
 }: {
-    searchParams: { folder?: string; tab?: string };
+    searchParams: Promise<{ folder?: string; tab?: string }>;
 }) {
+    const resolvedSearchParams = await searchParams;
     const session = await auth();
     if (!session?.user) return null;
     const userId = session.user.id;
-    const folder = searchParams.folder || 'inbox';
+    const folder = resolvedSearchParams.folder || 'inbox';
 
     // 1. Fetch distributed memos (Memos sent to the user as a recipient)
     const distributed = await query(`

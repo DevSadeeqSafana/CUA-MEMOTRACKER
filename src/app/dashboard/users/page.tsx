@@ -94,8 +94,8 @@ export default async function UserManagementPage({
     const managers = await getManagers();
 
     return (
-        <div className="space-y-10 animate-in fade-in duration-700 font-sans">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 md:gap-6 bg-white p-5 md:p-6 rounded-2xl md:rounded-3xl border border-slate-200 shadow-sm">
+        <div className="space-y-6 animate-in fade-in duration-700 font-sans">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 md:gap-5 bg-white p-4 md:p-5 rounded-2xl border border-slate-200 shadow-sm">
                 <div className="space-y-1">
                     <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#1a365d] flex items-center justify-center border border-blue-100">
@@ -112,30 +112,29 @@ export default async function UserManagementPage({
             {/* Controls */}
             <div className="flex flex-col sm:flex-row gap-3">
                 <UserSearch />
-                <button className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 rounded-2xl text-slate-500 font-bold hover:bg-slate-50 transition-all shadow-sm shrink-0">
-                    <Filter size={16} />
+                <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-500 font-bold hover:bg-slate-50 transition-all shadow-sm shrink-0">
+                    <Filter size={14} />
                     Filters
                 </button>
                 <div className="flex-grow" />
-                <div className="bg-slate-50 border border-slate-200 px-4 py-2 rounded-2xl flex items-center gap-3">
+                <div className="bg-slate-50 border border-slate-200 px-3.5 py-1.5 rounded-xl flex items-center gap-3">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Users</span>
                     <span className="text-sm font-black text-[#1a365d]">{totalUsers}</span>
                 </div>
             </div>
 
             {/* Table Interface */}
-            <div className="bg-white border border-slate-200 rounded-[2rem] shadow-sm overflow-hidden text-slate-900">
+            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden text-slate-900">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse min-w-[1200px]">
                         <thead>
                             <tr>
-                                <SortableHeader label="Staff Identity" sortKey="username" currentSort={sort} currentOrder={order} />
+                                <SortableHeader label="Staff ID" sortKey="staff_id" currentSort={sort} currentOrder={order} />
                                 <SortableHeader label="University Email" sortKey="email" currentSort={sort} currentOrder={order} />
                                 <SortableHeader label="Department" sortKey="department" currentSort={sort} currentOrder={order} />
                                 <SortableHeader label="Reporting To" sortKey="manager" currentSort={sort} currentOrder={order} />
-                                <SortableHeader label="Status" sortKey="status" currentSort={sort} currentOrder={order} />
-                                <th className="px-4 md:px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">System Roles</th>
-                                <th className="px-4 md:px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] text-right bg-slate-50">Actions</th>
+                                <th className="px-4 md:px-6 py-3.5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-50">System Roles</th>
+                                <th className="px-4 md:px-6 py-3.5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] text-right bg-slate-50">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">

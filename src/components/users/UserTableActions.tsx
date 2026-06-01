@@ -8,10 +8,11 @@ import {
     Trash2,
     UserX,
     UserCheck,
-    Loader2
+    Loader2,
+    Lock
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { deleteUser, toggleUserStatus } from '@/lib/actions';
+import { deleteUser, toggleUserStatus, resetUserPassword } from '@/lib/actions';
 import EditUserForm from '@/components/users/EditUserForm';
 import ConfirmationModal from '@/components/ui/ConfirmationModal';
 import toast from 'react-hot-toast';
@@ -25,6 +26,7 @@ export default function UserTableActions({ user, managers }: UserTableActionsPro
     const [isOpen, setIsOpen] = useState(false);
     const [isEditOpen, setIsEditOpen] = useState(false);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [isResetModalOpen, setIsResetModalOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [mounted, setMounted] = useState(false);
 
@@ -87,6 +89,25 @@ export default function UserTableActions({ user, managers }: UserTableActionsPro
         }
     };
 
+    const handleResetPassword = async () => {
+        setIsLoading(true);
+        try {
+            const result = await resetUserPassword(user.id);
+            if (result.success) {
+                toast.success(`Password reset to '123456' for ${user.username}.`);
+                setIsResetModalOpen(false);
+            } else {
+                toast.error(result.error || 'Failed to reset password.');
+            }
+        } catch (error) {
+            console.error('Reset failed:', error);
+            toast.error('An unexpected error occurred during password reset.');
+        } finally {
+            setIsLoading(false);
+            setIsOpen(false);
+        }
+    };
+
     return (
         <div className="relative">
             <button
@@ -136,6 +157,14 @@ export default function UserTableActions({ user, managers }: UserTableActionsPro
                             )}
                             {user.is_active ? "Inactivate User" : "Activate User"}
                         </button>
+                        <button
+                            onClick={() => { setIsResetModalOpen(true); setIsOpen(false); }}
+                            disabled={isLoading}
+                            className="w-full flex items-center gap-3 px-4 py-2 text-sm font-bold text-amber-600 hover:bg-amber-50 transition-colors"
+                        >
+                            <Lock size={16} />
+                            Reset Password
+                        </button>
                         <div className="my-1 border-t border-slate-100" />
                         <button
                             onClick={() => { setIsDeleteModalOpen(true); setIsOpen(false); }}
@@ -156,6 +185,17 @@ export default function UserTableActions({ user, managers }: UserTableActionsPro
                 title="Delete User Account"
                 description={`Are you sure you want to permanently delete ${user.username}? All their system roles will be revoked. This action cannot be undone.`}
                 confirmText="Delete Account"
+                isLoading={isLoading}
+            />
+
+            <ConfirmationModal
+                isOpen={isResetModalOpen}
+                onClose={() => setIsResetModalOpen(false)}
+                onConfirm={handleResetPassword}
+                title="Reset User Password"
+                description={`Are you sure you want to reset ${user.username}'s password to the default '123456'?`}
+                confirmText="Reset Password"
+                variant="warning"
                 isLoading={isLoading}
             />
 
