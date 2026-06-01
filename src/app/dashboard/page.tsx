@@ -132,42 +132,8 @@ export default async function DashboardPage() {
                     <h3 className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Broadcasts</h3>
                     <p className="text-lg md:text-xl font-black text-[#1a365d] tracking-tighter">{university_total}</p>
                     <div className="mt-3 md:mt-6 flex items-center gap-2 text-[9px] font-black text-slate-300 uppercase tracking-widest leading-none">
-                        Records
+                        Broadcasted
                     </div>
-                </div>
-            </div>
-
-            {/* University Analytics Preview */}
-            <div className="bg-white border border-slate-200 rounded-[1.5rem] md:rounded-[2rem] p-5 md:p-8 shadow-sm">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8 mb-12">
-                    <div className="space-y-1">
-                        <h2 className="text-base font-black text-[#1a365d] font-outfit uppercase tracking-wider">Communication Activity</h2>
-                        <p className="text-[10px] text-slate-400 font-medium">Monthly oversight of the CUA Internal Memo Tracking System.</p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <div className="text-right">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Last Update</p>
-                            <p className="text-xs font-bold text-slate-900 leading-none">Just Now</p>
-                        </div>
-                        <div className="w-px h-8 bg-slate-100"></div>
-                        <Activity size={24} className="text-blue-500" />
-                    </div>
-                </div>
-
-                <div className="h-48 md:h-64 flex items-end gap-1 md:gap-3 justify-between px-2 md:px-4 pt-4 pb-8">
-                    {chartData.map((d, i) => (
-                        <div key={i} className="flex-grow group relative h-full flex flex-col justify-end">
-                            <div
-                                className="w-full bg-slate-100 rounded-lg md:rounded-2xl group-hover:bg-blue-500 transition-all duration-700 relative cursor-pointer"
-                                style={{ height: `${(d.count / maxCount) * 100}%` }}
-                            >
-                                <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[9px] font-black py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-20">
-                                    {d.count} Memos
-                                </div>
-                            </div>
-                            <span className="absolute bottom-[-22px] left-1/2 -translate-x-1/2 text-[7px] md:text-[8px] font-black text-slate-300 uppercase">{d.label}</span>
-                        </div>
-                    ))}
                 </div>
             </div>
         </div>

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import {
     FileText,
     PlusCircle,
@@ -13,25 +13,49 @@ import {
     Settings,
     LogOut,
     Menu,
-    X
+    X,
+    Star,
+    AlertCircle,
+    Send
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getSidebarCounts } from '@/lib/actions';
 
 export default function Sidebar({ user, userRoles, handleSignOut }: { user: any, userRoles: string[], handleSignOut: () => void }) {
     const [isOpen, setIsOpen] = useState(false);
     const pathname = usePathname();
+    const searchParams = useSearchParams();
+    const folder = searchParams.get('folder') || 'inbox';
+
+    const [counts, setCounts] = useState<{ inbox: number, important: number, actions: number, sent: number, drafts: number }>({
+        inbox: 0, important: 0, actions: 0, sent: 0, drafts: 0
+    });
+
+    const fetchCounts = async () => {
+        const result = await getSidebarCounts();
+        setCounts(result);
+    };
 
     // Close sidebar on path change (mobile)
     useEffect(() => {
         setIsOpen(false);
     }, [pathname]);
 
+    // Poll counts every 10 seconds for instant real-time counts!
+    useEffect(() => {
+        fetchCounts();
+        const interval = setInterval(fetchCounts, 10000);
+        return () => clearInterval(interval);
+    }, []);
+
     const navLinks = [
-        { href: '/dashboard', label: 'Overview', icon: Inbox, roles: [] },
-        { href: '/dashboard/tasks', label: 'Memo Center', icon: CheckSquare, roles: [] },
-        { href: '/dashboard/approvals', label: 'Signatures Queue', icon: PlusCircle, roles: ['Line Manager', 'Reviewer'], special: 'amber' },
-        { href: '/dashboard/memos/new', label: 'New Memo', icon: PlusCircle, roles: [], isButton: true },
-        { href: '/dashboard/memos/my-memos', label: 'My Memos', icon: FileText, roles: [] },
+        { href: '/dashboard/memos/new', label: 'Compose', icon: PlusCircle, roles: [], isCompose: true },
+        { href: '/dashboard', label: 'Overview', icon: CheckSquare, roles: [] },
+        { href: '/dashboard/tasks?folder=inbox', label: 'Inbox', icon: Inbox, roles: [], badgeKey: 'inbox' as const },
+        { href: '/dashboard/tasks?folder=important', label: 'Important', icon: Star, roles: [], badgeKey: 'important' as const },
+        { href: '/dashboard/tasks?folder=actions', label: 'Action Queue', icon: AlertCircle, roles: [], badgeKey: 'actions' as const },
+        { href: '/dashboard/tasks?folder=sent', label: 'Sent Memos', icon: Send, roles: [], badgeKey: 'sent' as const },
+        { href: '/dashboard/tasks?folder=drafts', label: 'Drafts', icon: FileText, roles: [], badgeKey: 'drafts' as const },
     ];
 
     const adminLinks = [
@@ -100,13 +124,22 @@ export default function Sidebar({ user, userRoles, handleSignOut }: { user: any,
 
                     {navLinks.filter(l => canSeeLink(l.roles)).map(link => {
                         const Icon = link.icon;
-                        const isActive = pathname === link.href;
+                        
+                        // Active folder / query param matching
+                        const isCompose = link.isCompose;
+                        const isActive = isCompose
+                            ? pathname === link.href
+                            : pathname === link.href.split('?')[0] && (link.href.includes('?folder=') ? folder === link.href.split('?folder=')[1] : true);
 
-                        if (link.isButton) {
+                        if (isCompose) {
                             return (
-                                <Link key={link.href} href={link.href} className="flex items-center gap-3 px-4 py-3 mt-4 mb-2 rounded-xl bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/40 hover:bg-blue-500 hover:-translate-y-0.5 transition-all border border-blue-400/20 active:scale-95">
-                                    <Icon size={20} className={cn(link.special === 'amber' ? 'text-amber-400 rotate-45' : '')} />
-                                    <span className="text-sm">{link.label}</span>
+                                <Link
+                                    key={link.href}
+                                    href={link.href}
+                                    className="flex items-center justify-center gap-3 w-full py-3.5 mt-2 mb-6 bg-white text-[#1a365d] hover:bg-slate-50 font-black rounded-2xl shadow-lg hover:shadow-xl transition-all duration-200 border border-slate-100/10 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 text-xs uppercase tracking-wider shrink-0"
+                                >
+                                    <PlusCircle size={18} className="text-blue-500" />
+                                    <span>Compose</span>
                                 </Link>
                             );
                         }
@@ -114,14 +147,18 @@ export default function Sidebar({ user, userRoles, handleSignOut }: { user: any,
                         return (
                             <Link key={link.href} href={link.href} className={cn(
                                 "flex items-center gap-3 px-4 py-3 rounded-xl transition-all group",
-                                isActive ? "bg-white/15 text-white shadow-sm border border-white/5" : "hover:bg-white/10 text-white/80 hover:text-white"
+                                isActive ? "bg-white/15 text-white shadow-sm border border-white/5 font-bold" : "hover:bg-white/10 text-white/80 hover:text-white font-medium"
                             )}>
-                                <Icon size={20} className={cn(
-                                    "transition-all",
-                                    isActive ? "opacity-100" : "opacity-70 group-hover:opacity-100",
-                                    link.special === 'amber' ? 'text-amber-400 rotate-45' : ''
+                                <Icon size={18} className={cn(
+                                    "transition-all shrink-0",
+                                    isActive ? "opacity-100 text-blue-300" : "opacity-70 group-hover:opacity-100"
                                 )} />
-                                <span className={cn("text-sm", isActive ? "font-bold" : "font-medium")}>{link.label}</span>
+                                <span className="text-xs tracking-wide">{link.label}</span>
+                                {link.badgeKey && counts[link.badgeKey] > 0 && (
+                                    <span className="ml-auto bg-blue-500/25 border border-blue-400/20 text-blue-200 font-black text-[9px] px-2 py-0.5 rounded-full shadow-sm shrink-0">
+                                        {counts[link.badgeKey]}
+                                    </span>
+                                )}
                             </Link>
                         );
                     })}

@@ -23,7 +23,6 @@ import AcknowledgeButton from '@/components/memos/AcknowledgeButton';
 import MarkAsRead from '@/components/memos/MarkAsRead';
 import MemoHistory from '@/components/memos/MemoHistory';
 import ReviewerDecisionPanel from '@/components/memos/ReviewerDecisionPanel';
-import MemoRoutingTracker from '@/components/memos/MemoRoutingTracker';
 import LineManagerRoutingAdjustment from '@/components/memos/LineManagerRoutingAdjustment';
 import ConsultationThread from '@/components/memos/ConsultationThread';
 import DocumentPreviewModal from '@/components/memos/DocumentPreviewModal';
@@ -133,6 +132,10 @@ export default async function MemoDetailsPage({
     const isForwardRecipient = consultations.some((c: any) => c.to_user_id === currentUserId);
     const canForward = isPendingApprover || isForwardRecipient || isRecipient;
 
+    const toRecipients = allRecipients.filter((r: any) => r.recipient_type === 'To');
+    const ccRecipients = allRecipients.filter((r: any) => r.recipient_type === 'CC');
+    const bccRecipients = allRecipients.filter((r: any) => r.recipient_type === 'BCC');
+
     return (
         <div className="max-w-7xl mx-auto space-y-8 pb-20 animate-in fade-in duration-700 font-sans">
             {/* Top Navigation Bar */}
@@ -143,180 +146,36 @@ export default async function MemoDetailsPage({
                 >
                     <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
                     Back
-                    <span className="hidden sm:inline">to Cockpit</span>
+                    <span className="hidden sm:inline">to Dashboard</span>
                 </Link>
-
-                <div className="flex items-center gap-6">
-                    <div className="text-right">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Index Reference</p>
-                        <p className="text-sm font-black text-[#1a365d] font-mono tracking-tighter">REF/{memo.reference_number}</p>
-                    </div>
-                </div>
             </div>
-
-            {/* Premium Header Card */}
-            <div className="bg-white border border-slate-200 rounded-[1.5rem] p-5 md:p-6 shadow-sm relative overflow-hidden">
-                {/* Status Badge — inline on mobile, absolute on desktop */}
-                <div className="flex justify-end mb-4 md:mb-0 md:absolute md:top-0 md:right-0 md:p-6 md:flex md:flex-col md:items-end md:gap-3 z-10">
+            {/* Gmail-Style Page Header (Subject) */}
+            <div className="flex flex-col gap-2">
+                <h1 className="text-xl md:text-2xl lg:text-3xl font-black text-[#1a365d] leading-tight font-outfit tracking-tight uppercase">
+                    {memo.title}
+                </h1>
+                <div className="flex items-center gap-2 flex-wrap mt-1">
                     <div className={cn(
-                        "text-[10px] font-black uppercase tracking-[0.2em] px-3 md:px-4 py-1.5 md:py-2 rounded-xl border-2 shadow-sm",
+                        "text-[9px] font-black px-2.5 py-1 rounded-lg border uppercase tracking-widest shadow-sm",
                         memo.status === 'Draft' && "bg-slate-50 border-slate-200 text-slate-400",
-                        memo.status === 'Line Manager Review' && "bg-amber-50 border-amber-200 text-amber-700",
-                        memo.status === 'Reviewer Approval' && "bg-blue-50 border-blue-200 text-blue-700",
-                        memo.status === 'Distributed' && "bg-emerald-50 border-emerald-200 text-emerald-700",
+                        memo.status === 'Line Manager Review' && "bg-amber-50 border border-amber-200 text-amber-700 animate-pulse-subtle",
+                        memo.status === 'Reviewer Approval' && "bg-blue-50 border border-blue-200 text-blue-700 animate-pulse-subtle",
+                        memo.status === 'Distributed' && "bg-emerald-50 border border-emerald-200 text-emerald-700 shadow-emerald-600/10",
+                        memo.status === 'Archived' && "bg-gray-50 border border-gray-200 text-gray-500",
                     )}>
-                        <span className="hidden sm:inline">Workflow: </span>{memo.status}
+                        {memo.status}
                     </div>
-                </div>
-
-                <div className="space-y-4 md:space-y-6 max-w-4xl relative z-10">
-                    <div className="flex flex-wrap items-center gap-2 md:gap-4">
-                        <div className={cn(
-                            "flex items-center gap-2 text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg border-2",
-                            memo.priority === 'High' ? "bg-red-50 border-red-200 text-red-600" :
-                                memo.priority === 'Medium' ? "bg-amber-50 border-amber-200 text-amber-600" :
-                                    "bg-blue-50 border-blue-200 text-blue-600"
-                        )}>
-                            <Clock size={10} />
-                            {memo.priority} Priority
-                        </div>
-                        <span className="w-1 h-1 rounded-full bg-slate-200"></span>
-                        <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400">
-                            <Tag size={10} />
-                            {memo.memo_type} Content
-                        </div>
-                        {budgetItems.length > 0 && (
-                            <>
-                                <span className="w-1 h-1 rounded-full bg-slate-200"></span>
-                                <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg bg-emerald-50 border-2 border-emerald-200 text-emerald-600 shadow-sm animate-pulse-subtle">
-                                    <Wallet size={10} />
-                                    Budget Requisition
-                                </div>
-                            </>
-                        )}
+                    <div className={cn(
+                        "text-[9px] font-black px-2.5 py-1 rounded-lg border uppercase tracking-widest shadow-sm",
+                        memo.priority === 'High' ? "bg-red-50 border border-red-200 text-red-600" :
+                            memo.priority === 'Medium' ? "bg-amber-50 border border-amber-200 text-amber-600" :
+                                "bg-blue-50 border border-blue-200 text-blue-600"
+                    )}>
+                        {memo.priority} Priority
                     </div>
-
-                    <h1 className="text-lg md:text-xl lg:text-2xl font-black leading-tight text-[#1a365d] font-outfit uppercase tracking-tight">{memo.title}</h1>
-
-                    <div className="flex flex-wrap items-center gap-4 md:gap-8 pt-4 md:pt-6 border-t border-slate-50">
-                        <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-xl bg-[#1a365d] flex items-center justify-center text-white text-base font-black shadow-xl shadow-blue-900/40">
-                                {creatorInitial}
-                            </div>
-                            <div>
-                                <p className="text-[8px] text-slate-400 font-black uppercase tracking-widest leading-none mb-1">Originator</p>
-                                <p className="text-sm font-black text-slate-900 leading-none">{memo.creator_name}</p>
-                            </div>
-                        </div>
-
-                        <div className="h-6 w-px bg-slate-100 hidden md:block"></div>
-
-                        <div className="space-y-1">
-                            <p className="text-[8px] text-slate-400 font-black uppercase tracking-widest leading-none">Institutional Dept</p>
-                            <p className="text-xs font-bold text-slate-700 flex items-center gap-2">
-                                <Building size={14} className="text-blue-500" />
-                                {memo.department}
-                            </p>
-                        </div>
-
-                        <div className="h-6 w-px bg-slate-100 hidden md:block"></div>
-
-                        <div className="space-y-1">
-                            <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest leading-none">Authorized At</p>
-                            <p className="text-xs font-bold text-slate-700 flex items-center gap-2">
-                                <Calendar size={14} className="text-blue-500" />
-                                {formatDate(memo.created_at)}
-                            </p>
-                        </div>
+                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg">
+                        {memo.memo_type}
                     </div>
-
-                    {/* Budget Indicator Section */}
-                    {budgetItems.length > 0 && (
-                        <div className="mt-8 pt-8 border-t border-slate-100 space-y-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                <div className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-3 flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-900/10">
-                                        <Calendar size={16} />
-                                    </div>
-                                    <div className="overflow-hidden">
-                                        <p className="text-[8px] font-black text-emerald-600 uppercase tracking-widest leading-none mb-1">Fiscal Year</p>
-                                        <p className="text-xs font-black text-slate-900 uppercase truncate">{memo.year_id}</p>
-                                    </div>
-                                </div>
-                                <div className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-3 flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-900/10">
-                                        <Tag size={16} />
-                                    </div>
-                                    <div className="overflow-hidden">
-                                        <p className="text-[8px] font-black text-emerald-600 uppercase tracking-widest leading-none mb-1">Category</p>
-                                        <p className="text-xs font-black text-slate-900 uppercase truncate">
-                                            {memo.budget_category === 'Others' ? memo.other_category : memo.budget_category}
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className="bg-[#1a365d] border border-blue-900 rounded-xl p-3 flex items-center gap-3 shadow-xl shadow-blue-900/10">
-                                    <div className="w-8 h-8 rounded-lg bg-white/10 text-white flex items-center justify-center">
-                                        <span className="text-[10px] font-black">₦</span>
-                                    </div>
-                                    <div className="overflow-hidden">
-                                        <p className="text-[8px] font-black text-blue-300 uppercase tracking-widest leading-none mb-1">Total Commitments</p>
-                                        <p className="text-xs font-black text-white truncate">₦{budgetGrandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm overflow-hidden">
-                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Financial Breakdown</h4>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left">
-                                        <thead>
-                                            <tr className="border-b border-slate-100">
-                                                <th className="pb-4 text-[9px] font-black text-[#1a365d] uppercase tracking-widest">Line Item</th>
-                                                <th className="pb-4 text-[9px] font-black text-[#1a365d] uppercase tracking-widest text-center">Qty</th>
-                                                <th className="pb-4 text-[9px] font-black text-[#1a365d] uppercase tracking-widest text-right">Unit (₦)</th>
-                                                <th className="pb-4 text-[9px] font-black text-[#1a365d] uppercase tracking-widest text-right">Subtotal (₦)</th>
-                                                <th className="pb-4 text-[9px] font-black text-[#1a365d] uppercase tracking-widest text-center">Doc</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-50">
-                                            {budgetItems.map((item, idx) => (
-                                                <tr key={idx} className="group">
-                                                    <td className="py-4 pr-4">
-                                                        <p className="text-xs font-black text-slate-900 uppercase">{item.name}</p>
-                                                        {item.description && <p className="text-[9px] text-slate-400 font-bold mt-1 max-w-sm">{item.description}</p>}
-                                                    </td>
-                                                    <td className="py-4 text-xs font-bold text-slate-600 text-center">{item.quantity}</td>
-                                                    <td className="py-4 text-xs font-bold text-slate-600 text-right">₦{parseFloat(item.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                                    <td className="py-4 text-xs font-black text-[#1a365d] text-right">₦{parseFloat(item.total).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                                    <td className="py-4 text-center">
-                                                        {item.attachment_path ? (
-                                                            <a 
-                                                                href={item.attachment_path} 
-                                                                target="_blank" 
-                                                                rel="noopener noreferrer"
-                                                                className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-blue-100 transition-colors border border-blue-100"
-                                                            >
-                                                                <Paperclip size={12} />
-                                                                View
-                                                            </a>
-                                                        ) : (
-                                                            <span className="text-[8px] text-slate-300 font-black uppercase tracking-widest">None</span>
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                        <tfoot>
-                                            <tr className="border-t border-slate-100 bg-slate-50/50">
-                                                <td colSpan={3} className="py-4 pl-4 text-[10px] font-black text-[#1a365d] uppercase tracking-widest text-right">Aggregate Total</td>
-                                                <td colSpan={2} className="py-4 pr-4 text-sm font-black text-emerald-600 text-right">₦{budgetGrandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                            </tr>
-                                        </tfoot>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    )}
                 </div>
             </div>
 
@@ -358,16 +217,6 @@ export default async function MemoDetailsPage({
                         <p className="text-[9px] font-black text-amber-500 uppercase">+{routingLogs.length - 3} more in audit trail</p>
                     )}
                 </div>
-            )}
-
-            {/* ─── Shared: Live Routing Tracker (Visible to all authorized parties) ─── */}
-            {(isCreator || isApprover || isRecipient || isCreatorsLineManager) && (
-                <MemoRoutingTracker
-                    memo={memo}
-                    approvals={approvals}
-                    recipients={allRecipients}
-                    currentUserId={currentUserId}
-                />
             )}
 
             {/* ─── LINE MANAGER / REVIEWER VIEW: Approval actions ─── */}
@@ -470,43 +319,172 @@ export default async function MemoDetailsPage({
             {/* Main Content & Shared Components */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
                 <div className="lg:col-span-8 space-y-8">
-                    {/* Content Body */}
-                    <div className="bg-white border border-slate-200 rounded-[1.5rem] p-8 shadow-sm font-serif">
-                        <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-300 border-b border-slate-100 pb-6 mb-8 flex items-center gap-3">
-                            <FileText size={16} className="opacity-30" />
-                            Official Statement Body
-                        </h2>
-                        <div
-                            className="prose prose-slate prose-lg max-w-none text-slate-800 leading-relaxed font-sans"
-                            dangerouslySetInnerHTML={{ __html: memo.content }}
-                        />
-                    </div>
+                    {/* Gmail-Style Email Reader Card */}
+                    <div className="bg-white border border-slate-200 rounded-[2rem] p-6 md:p-8 shadow-sm space-y-6">
+                        {/* Senders Header row */}
+                        <div className="flex items-start gap-4 justify-between flex-wrap">
+                            <div className="flex items-start gap-4">
+                                <div className="w-10 h-10 rounded-full bg-[#1a365d] text-white flex items-center justify-center font-black text-sm shadow-md shadow-blue-600/10 shrink-0">
+                                    {creatorInitial}
+                                </div>
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-xs font-black text-slate-800">{memo.creator_name}</span>
+                                        <span className="text-[10px] text-slate-400 font-medium font-mono">
+                                            &lt;{memo.creator_email || `${memo.creator_name.toLowerCase().replace(/\s+/g, '')}@cua.edu.ng`}&gt;
+                                        </span>
+                                    </div>
+                                    <div className="text-[10px] text-slate-500 font-medium leading-relaxed">
+                                        <span className="font-bold text-slate-400 uppercase tracking-widest text-[8px] mr-1">To:</span>
+                                        {toRecipients.map(r => r.recipient_name).join(', ')}
+                                        {ccRecipients.length > 0 && (
+                                            <span className="block mt-0.5">
+                                                <span className="font-bold text-slate-400 uppercase tracking-widest text-[8px] mr-1">Cc:</span>
+                                                {ccRecipients.map(r => r.recipient_name).join(', ')}
+                                            </span>
+                                        )}
+                                        {bccRecipients.length > 0 && (
+                                            <span className="block mt-0.5">
+                                                <span className="font-bold text-slate-400 uppercase tracking-widest text-[8px] mr-1">Bcc:</span>
+                                                {bccRecipients.map(r => r.recipient_name).join(', ')}
+                                            </span>
+                                        )}
+                                        <span className="block mt-1.5 text-[9px] font-black text-blue-600 uppercase tracking-widest">
+                                            Department: {memo.department}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
 
-                    {/* Attachments Section */}
-                    {attachments.length > 0 && (
-                        <div className="bg-white border border-slate-200 rounded-[1.5rem] p-8 shadow-sm">
-                            <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-300 border-b border-slate-100 pb-6 mb-6 flex items-center gap-3">
-                                <Paperclip size={16} className="opacity-30" />
-                                Accompanying Documents
-                            </h2>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {attachments.map((file: any) => (
-                                    <DocumentPreviewModal 
-                                        key={file.id}
-                                        fileUrl={file.file_path}
-                                        fileName={file.file_name}
-                                        fileType={file.file_type}
-                                        fileSize={file.file_size}
-                                    />
-                                ))}
+                            <div className="text-right shrink-0">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">
+                                    {formatDate(memo.created_at)}
+                                </span>
                             </div>
                         </div>
-                    )}
 
-                    {/* Full Dedicated History Timeline */}
-                    <MemoHistory memo={memo} approvals={approvals} recipients={allRecipients} routingLogs={routingLogs} consultations={consultations} />
+                        {/* Divider */}
+                        <div className="h-px bg-slate-100 w-full"></div>
 
-                    {/* Consultation Thread — read-only view below audit trail */}
+                        {/* Rich Content Statement Body */}
+                        <div className="py-2">
+                            <div
+                                className="prose prose-slate prose-lg max-w-none text-slate-800 leading-relaxed font-sans"
+                                dangerouslySetInnerHTML={{ __html: memo.content }}
+                            />
+                        </div>
+
+                        {/* Unified Budget Details Section (if applicable) */}
+                        {budgetItems.length > 0 && (
+                            <div className="mt-8 pt-8 border-t border-slate-100 space-y-6">
+                                <h4 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Financial Breakdown</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    <div className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-3 flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-900/10">
+                                            <Calendar size={16} />
+                                        </div>
+                                        <div className="overflow-hidden">
+                                            <p className="text-[8px] font-black text-emerald-600 uppercase tracking-widest leading-none mb-1">Fiscal Year</p>
+                                            <p className="text-xs font-black text-slate-900 uppercase truncate">{memo.year_id}</p>
+                                        </div>
+                                    </div>
+                                    <div className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-3 flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-900/10">
+                                            <Tag size={16} />
+                                        </div>
+                                        <div className="overflow-hidden">
+                                            <p className="text-[8px] font-black text-emerald-600 uppercase tracking-widest leading-none mb-1">Category</p>
+                                            <p className="text-xs font-black text-slate-900 uppercase truncate">
+                                                {memo.budget_category === 'Others' ? memo.other_category : memo.budget_category}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="bg-[#1a365d] border border-blue-900 rounded-xl p-3 flex items-center gap-3 shadow-xl shadow-blue-900/10">
+                                        <div className="w-8 h-8 rounded-lg bg-white/10 text-white flex items-center justify-center">
+                                            <span className="text-[10px] font-black">₦</span>
+                                        </div>
+                                        <div className="overflow-hidden">
+                                            <p className="text-[8px] font-black text-blue-300 uppercase tracking-widest leading-none mb-1">Total Commitments</p>
+                                            <p className="text-xs font-black text-white truncate">₦{budgetGrandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm overflow-hidden">
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left">
+                                            <thead>
+                                                <tr className="border-b border-slate-100">
+                                                    <th className="pb-4 text-[9px] font-black text-[#1a365d] uppercase tracking-widest">Line Item</th>
+                                                    <th className="pb-4 text-[9px] font-black text-[#1a365d] uppercase tracking-widest text-center">Qty</th>
+                                                    <th className="pb-4 text-[9px] font-black text-[#1a365d] uppercase tracking-widest text-right">Unit (₦)</th>
+                                                    <th className="pb-4 text-[9px] font-black text-[#1a365d] uppercase tracking-widest text-right">Subtotal (₦)</th>
+                                                    <th className="pb-4 text-[9px] font-black text-[#1a365d] uppercase tracking-widest text-center">Doc</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-50">
+                                                {budgetItems.map((item, idx) => (
+                                                    <tr key={idx} className="group">
+                                                        <td className="py-4 pr-4">
+                                                            <p className="text-xs font-black text-slate-900 uppercase">{item.name}</p>
+                                                            {item.description && <p className="text-[9px] text-slate-400 font-bold mt-1 max-w-sm">{item.description}</p>}
+                                                        </td>
+                                                        <td className="py-4 text-xs font-bold text-slate-600 text-center">{item.quantity}</td>
+                                                        <td className="py-4 text-xs font-bold text-slate-600 text-right">₦{parseFloat(item.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                                        <td className="py-4 text-xs font-black text-[#1a365d] text-right">₦{parseFloat(item.total).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                                        <td className="py-4 text-center">
+                                                            {item.attachment_path ? (
+                                                                <a 
+                                                                    href={item.attachment_path} 
+                                                                    target="_blank" 
+                                                                    rel="noopener noreferrer"
+                                                                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-blue-100 transition-colors border border-blue-100"
+                                                                >
+                                                                    <Paperclip size={12} />
+                                                                    View
+                                                                </a>
+                                                            ) : (
+                                                                <span className="text-[8px] text-slate-300 font-black uppercase tracking-widest">None</span>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                            <tfoot>
+                                                <tr className="border-t border-slate-100 bg-slate-50/50">
+                                                    <td colSpan={3} className="py-4 pl-4 text-[10px] font-black text-[#1a365d] uppercase tracking-widest text-right">Aggregate Total</td>
+                                                    <td colSpan={2} className="py-4 pr-4 text-sm font-black text-emerald-600 text-right">₦{budgetGrandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Attachments Section inside Main Memo Card */}
+                        {attachments.length > 0 && (
+                            <div className="mt-8 pt-8 border-t border-slate-100 space-y-6">
+                                <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-3">
+                                    <Paperclip size={14} className="text-blue-500" />
+                                    Accompanying Documents
+                                </h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {attachments.map((file: any) => (
+                                        <DocumentPreviewModal 
+                                            key={file.id}
+                                            fileUrl={file.file_path}
+                                            fileName={file.file_name}
+                                            fileType={file.file_type}
+                                            fileSize={file.file_size}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Consultation Thread — read-only view below main card */}
                     {consultations.length > 0 && (
                         <ConsultationThread
                             memoId={memo.id}
@@ -522,73 +500,9 @@ export default async function MemoDetailsPage({
                 </div>
 
                 {/* Sidebar Context */}
-                <div className="lg:col-span-4 space-y-6">
-                    {/* Security Info Card */}
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6 text-white">
-                        <h3 className="text-[9px] font-black text-blue-500 uppercase tracking-[0.3em] border-b border-white/5 pb-3">Encryption & Standards</h3>
-
-                        <div className="space-y-6">
-                            <div className="flex items-center justify-between">
-                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] flex items-center gap-3">
-                                    <ShieldCheck size={14} className="text-blue-500" />
-                                    Archive Link
-                                </span>
-                                <span className="text-xs font-bold font-mono text-blue-400">#CUA-{memo.id}</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] flex items-center gap-3">
-                                    <Clock size={14} className="text-blue-500" />
-                                    Lifecycle
-                                </span>
-                                <span className="text-xs font-bold text-slate-300">{memo.expiry_date ? formatDate(memo.expiry_date) : 'IMMUTABLE'}</span>
-                            </div>
-                        </div>
-
-                        <div className="pt-10 border-t border-white/5 space-y-6">
-                            <h4 className="text-[10px] font-black text-blue-500 uppercase tracking-[0.3em]">Institutional Verification</h4>
-                            <p className="text-[11px] leading-relaxed text-slate-400 font-medium italic">
-                                "This document is digitally registered under the Cosmopolitan University Abuja Audit Framework. All interactions are immutable and timestamped."
-                            </p>
-                        </div>
-                    </div>
-
-                    {/* Recipient Quick List */}
-                    <div className="bg-white border border-slate-200 rounded-[1.5rem] p-6 shadow-sm space-y-6">
-                        <h3 className="text-[10px] font-black text-[#1a365d] uppercase tracking-[0.2em] flex items-center gap-3">
-                            <Users size={16} className="text-blue-500" />
-                            Target Distribution
-                        </h3>
-                        
-                        {['To', 'CC', 'BCC'].map(type => {
-                            const group = allRecipients.filter(r => (r.recipient_type || 'To') === type);
-                            if (group.length === 0) return null;
-                            
-                            return (
-                                <div key={type} className="space-y-3">
-                                    <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1">{type === 'To' ? 'Primary' : type}</h4>
-                                    <div className="space-y-2">
-                                        {group.map((rec) => (
-                                            <div key={rec.recipient_id} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                                                <div className="flex items-center gap-3 overflow-hidden">
-                                                    <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-[10px] font-black text-slate-400">
-                                                        {rec.recipient_name[0]}
-                                                    </div>
-                                                    <span className="text-xs font-bold text-slate-600 truncate">{rec.recipient_name}</span>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    {rec.acknowledged_at ? (
-                                                        <CheckCircle2 size={14} className="text-emerald-500" />
-                                                    ) : (
-                                                        <Clock size={14} className="text-slate-200" />
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
+                <div className="lg:col-span-4">
+                    {/* Full Dedicated History Timeline (Audit Trail) */}
+                    <MemoHistory memo={memo} approvals={approvals} recipients={allRecipients} routingLogs={routingLogs} consultations={consultations} />
                 </div>
             </div>
         </div>

@@ -1227,3 +1227,77 @@ async function uploadFile(file: File, uuid: string): Promise<string> {
 
     return filePath;
 }
+
+export async function getSidebarCounts() {
+    const session = await auth();
+    if (!session?.user?.id) return { inbox: 0, important: 0, actions: 0, sent: 0, drafts: 0 };
+    const userId = parseInt(session.user.id);
+
+    try {
+        const [unreadInbox] = await query(`
+            SELECT COUNT(*) as count 
+            FROM memo_recipients mr 
+            JOIN memos m ON mr.memo_id = m.id 
+            WHERE mr.recipient_id = ? AND mr.acknowledged_at IS NULL AND m.status = 'Distributed'
+        `, [userId]) as any[];
+
+        const [pendingApprovals] = await query(`
+            SELECT COUNT(*) as count 
+            FROM memo_approvals a
+            JOIN memos m ON a.memo_id = m.id
+            WHERE a.approver_id = ? AND a.status = 'Pending'
+            AND NOT EXISTS (
+                SELECT 1 FROM memo_approvals a2 
+                WHERE a2.memo_id = m.id AND a2.step_order < a.step_order AND a2.status != 'Approved'
+            )
+        `, [userId]) as any[];
+
+        const [pendingConsultations] = await query(`
+            SELECT COUNT(*) as count 
+            FROM memo_consultations c
+            WHERE c.to_user_id = ? AND c.type = 'Forward'
+            AND NOT EXISTS (
+                SELECT 1 FROM memo_consultations r 
+                WHERE r.parent_id = c.id AND r.from_user_id = ? AND r.type = 'Response'
+            )
+        `, [userId, userId]) as any[];
+
+        const [importantCount] = await query(`
+            SELECT COUNT(*) as count 
+            FROM memos m
+            LEFT JOIN memo_recipients mr ON m.id = mr.memo_id AND mr.recipient_id = ?
+            LEFT JOIN memo_approvals a ON m.id = a.memo_id AND a.approver_id = ?
+            WHERE m.priority = 'High' 
+            AND (
+                (mr.recipient_id = ? AND mr.acknowledged_at IS NULL AND m.status = 'Distributed')
+                OR 
+                (a.approver_id = ? AND a.status = 'Pending' AND NOT EXISTS (
+                    SELECT 1 FROM memo_approvals a2 
+                    WHERE a2.memo_id = m.id AND a2.step_order < a.step_order AND a2.status != 'Approved'
+                ))
+            )
+        `, [userId, userId, userId, userId]) as any[];
+
+        const [draftsCount] = await query(`
+            SELECT COUNT(*) as count FROM memos WHERE created_by = ? AND status = 'Draft'
+        `, [userId]) as any[];
+
+        const [sentCount] = await query(`
+            SELECT COUNT(*) as count FROM memos WHERE created_by = ? AND status != 'Draft'
+        `, [userId]) as any[];
+
+        const actions = (pendingApprovals?.count || 0) + (pendingConsultations?.count || 0);
+        const inbox = (unreadInbox?.count || 0) + actions;
+
+        return {
+            inbox,
+            important: importantCount?.count || 0,
+            actions,
+            sent: sentCount?.count || 0,
+            drafts: draftsCount?.count || 0
+        };
+    } catch (e) {
+        console.error('getSidebarCounts error:', e);
+        return { inbox: 0, important: 0, actions: 0, sent: 0, drafts: 0 };
+    }
+}
