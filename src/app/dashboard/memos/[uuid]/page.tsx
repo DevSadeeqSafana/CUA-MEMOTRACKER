@@ -14,7 +14,9 @@ import {
     History,
     Users,
     Wallet,
-    Target
+    Target,
+    Pencil,
+    AlertTriangle
 } from 'lucide-react';
 import Link from 'next/link';
 import { cn, formatDate } from '@/lib/utils';
@@ -118,6 +120,10 @@ export default async function MemoDetailsPage({
     const isApprover = approvals.some(a => a.approver_id === currentUserId);
     const isCreatorsLineManager = memo.creator_line_manager_id === currentUserId;
 
+    // Edit gate: only available to creator when memo is Draft AND has a rejection record
+    const rejectedApprovals = approvals.filter(a => a.status === 'Rejected');
+    const canEdit = isCreator && memo.status === 'Draft' && rejectedApprovals.length > 0;
+
     // Role-specific power: allow ANY pending approver to adjust routing (added approvers, line managers, etc)
     const canAdjustRouting = isPendingApprover;
 
@@ -148,6 +154,17 @@ export default async function MemoDetailsPage({
                     Back
                     <span className="hidden sm:inline">to Dashboard</span>
                 </Link>
+
+                {/* Edit & Resubmit button — only for creator of rejected memos */}
+                {canEdit && (
+                    <Link
+                        href={`/dashboard/memos/${memo.uuid}/edit`}
+                        className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-amber-500/30 animate-pulse-subtle"
+                    >
+                        <Pencil size={13} />
+                        Edit &amp; Resubmit
+                    </Link>
+                )}
             </div>
             {/* Gmail-Style Page Header (Subject) */}
             <div className="flex flex-col gap-2">
@@ -157,13 +174,14 @@ export default async function MemoDetailsPage({
                 <div className="flex items-center gap-2 flex-wrap mt-1">
                     <div className={cn(
                         "text-[9px] font-black px-2.5 py-1 rounded-lg border uppercase tracking-widest shadow-sm",
-                        memo.status === 'Draft' && "bg-slate-50 border-slate-200 text-slate-400",
+                        memo.status === 'Draft' && !canEdit && "bg-slate-50 border-slate-200 text-slate-400",
+                        memo.status === 'Draft' && canEdit  && "bg-amber-50 border-amber-200 text-amber-600",
                         memo.status === 'Line Manager Review' && "bg-amber-50 border border-amber-200 text-amber-700 animate-pulse-subtle",
                         memo.status === 'Reviewer Approval' && "bg-blue-50 border border-blue-200 text-blue-700 animate-pulse-subtle",
                         memo.status === 'Distributed' && "bg-emerald-50 border border-emerald-200 text-emerald-700 shadow-emerald-600/10",
                         memo.status === 'Archived' && "bg-gray-50 border border-gray-200 text-gray-500",
                     )}>
-                        {memo.status}
+                        {canEdit ? 'Rejected — Needs Revision' : memo.status}
                     </div>
                     <div className={cn(
                         "text-[9px] font-black px-2.5 py-1 rounded-lg border uppercase tracking-widest shadow-sm",
@@ -178,6 +196,42 @@ export default async function MemoDetailsPage({
                     </div>
                 </div>
             </div>
+
+            {/* Rejection banner — only visible to creator when memo needs editing */}
+            {canEdit && (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl overflow-hidden shadow-sm animate-in fade-in duration-500">
+                    <div className="px-5 py-4 border-b border-amber-100 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                                <AlertTriangle size={15} />
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-black text-amber-700 uppercase tracking-[0.18em]">Action Required — Revision Needed</p>
+                                <p className="text-[11px] text-amber-500 font-medium mt-0.5">Your memo was rejected. Review the reason(s) below and edit before resubmitting.</p>
+                            </div>
+                        </div>
+                        <Link
+                            href={`/dashboard/memos/${memo.uuid}/edit`}
+                            className="shrink-0 flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md shadow-amber-500/20"
+                        >
+                            <Pencil size={12} />
+                            Edit Memo
+                        </Link>
+                    </div>
+                    <div className="divide-y divide-amber-100">
+                        {rejectedApprovals.map((a: any) => (
+                            <div key={a.id} className="px-5 py-3 flex items-start gap-3">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-2 shrink-0" />
+                                <div>
+                                    <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">{a.approver_name}</p>
+                                    <p className="text-sm text-amber-900 font-medium leading-relaxed mt-0.5">"{a.comments || 'No reason provided'}"
+                                    </p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Routing Adjustment Notifications — compact inline style */}
             {routingLogs.length > 0 && isCreator && (

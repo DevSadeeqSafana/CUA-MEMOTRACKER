@@ -168,11 +168,6 @@ export default function CreateUserForm({ onClose }: CreateUserFormProps) {
             toast.error('Governance error: At least one administrative or operational role must be assigned.');
             return;
         }
-        if (!formData.line_manager_id) {
-            toast.error('Accountability error: Every user must be assigned a Line Manager for memo validation.');
-            return;
-        }
-
         setIsLoading(true);
 
         try {

@@ -8,7 +8,8 @@ import {
     ChevronUp, 
     Mail, 
     Building, 
-    UserPlus, 
+    UserPlus,
+    UserMinus,
     RefreshCw, 
     Search,
     Loader2,
@@ -83,6 +84,23 @@ export default function UserRow({ user, managers }: UserRowProps) {
         }
     };
 
+    const handleRemoveLM = async () => {
+        setIsUpdating(true);
+        try {
+            const result = await updateLineManager(user.id, null);
+            if (result.success) {
+                toast.success('Line Manager removed successfully');
+                closeModal();
+            } else {
+                toast.error(result.error || 'Failed to remove manager');
+            }
+        } catch (error) {
+            toast.error('An unexpected error occurred');
+        } finally {
+            setIsUpdating(false);
+        }
+    };
+
     const assignModal = mounted && isAssigningLM && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6 animate-in fade-in duration-200">
             {/* Backdrop */}
@@ -113,15 +131,25 @@ export default function UserRow({ user, managers }: UserRowProps) {
                     </button>
                 </div>
 
-                {/* Current manager info */}
+                {/* Current manager info + Remove option */}
                 {user.manager_name && (
                     <div className="px-8 py-4 bg-slate-50/60 border-b border-slate-100 shrink-0">
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Current Manager</p>
-                        <div className="flex items-center gap-2.5">
-                            <div className="w-7 h-7 rounded-lg bg-[#1a365d] text-white flex items-center justify-center font-black text-xs">
-                                {user.manager_name[0]}
+                        <div className="flex items-center justify-between gap-2.5">
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-7 h-7 rounded-lg bg-[#1a365d] text-white flex items-center justify-center font-black text-xs">
+                                    {user.manager_name[0]}
+                                </div>
+                                <span className="text-sm font-bold text-slate-700">{user.manager_name}</span>
                             </div>
-                            <span className="text-sm font-bold text-slate-700">{user.manager_name}</span>
+                            <button
+                                onClick={handleRemoveLM}
+                                disabled={isUpdating}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 border border-red-100 text-red-500 hover:bg-red-100 hover:border-red-200 transition-all text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
+                            >
+                                {isUpdating ? <span className="animate-pulse">...</span> : <UserMinus size={11} />}
+                                Remove
+                            </button>
                         </div>
                     </div>
                 )}
@@ -210,11 +238,14 @@ export default function UserRow({ user, managers }: UserRowProps) {
                             "w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs text-center leading-none select-none uppercase",
                             user.is_active ? "bg-[#1a365d] text-white" : "bg-slate-200 text-slate-500"
                         )}>
-                            {(user.staff_id && user.staff_id[0]) || 'U'}
+                            {(user.username && user.username[0]) || 'U'}
                         </div>
                         <div className="space-y-0.5">
-                            <p className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors uppercase tracking-tight text-sm">
+                            <p className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors uppercase tracking-tight text-xs">
                                 {user.staff_id || `#CUA-${String(user.id).padStart(5, '0')}`}
+                            </p>
+                            <p className="text-[11px] text-slate-400 font-medium">
+                                {user.username}
                             </p>
                         </div>
                     </div>
@@ -319,12 +350,24 @@ export default function UserRow({ user, managers }: UserRowProps) {
                                             <span className="text-[11px] font-black uppercase tracking-widest">No manager assigned</span>
                                         </div>
                                     )}
-                                    <button
-                                        onClick={openModal}
-                                        className="mt-4 w-full px-4 py-2 bg-[#1a365d] text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#2c5282] transition-all shadow-sm"
-                                    >
-                                        {user.line_manager_id ? 'Change Manager' : 'Assign Manager'}
-                                    </button>
+                                    <div className="mt-4 flex gap-2">
+                                        <button
+                                            onClick={openModal}
+                                            className="flex-1 px-4 py-2 bg-[#1a365d] text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#2c5282] transition-all shadow-sm"
+                                        >
+                                            {user.line_manager_id ? 'Change Manager' : 'Assign Manager'}
+                                        </button>
+                                        {user.line_manager_id && (
+                                            <button
+                                                onClick={handleRemoveLM}
+                                                disabled={isUpdating}
+                                                className="px-4 py-2 bg-red-50 border border-red-200 text-red-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-100 transition-all disabled:opacity-50 flex items-center gap-1.5"
+                                            >
+                                                <UserMinus size={12} />
+                                                Remove
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
 
                                 <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">

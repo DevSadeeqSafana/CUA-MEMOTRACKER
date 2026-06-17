@@ -85,11 +85,6 @@ export default function EditUserForm({ user, managers, onClose }: EditUserFormPr
             toast.error('Please select at least one role.');
             return;
         }
-        if (!formData.line_manager_id) {
-            toast.error('Please assign a Line Manager for this user.');
-            return;
-        }
-
         setIsLoading(true);
 
         try {

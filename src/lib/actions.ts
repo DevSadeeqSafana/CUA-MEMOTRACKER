@@ -2,6 +2,7 @@
 
 import { auth } from '@/auth';
 import { query } from './db';
+import { sendMemoNotificationEmail } from './mailer';
 import { generateReferenceNumber } from './memo-utils';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
@@ -175,8 +176,14 @@ export async function createMemo(data: FormData, isDraft: boolean) {
                     'INSERT INTO notifications (user_id, memo_id, message) VALUES (?, ?, ?)',
                     [managerId, memoId, `A new memo "${title}" requires your validation.`]
                 );
+                
+                // Trigger email notification to the manager
+                await sendMemoNotificationEmail(memoId, 'SUBMITTED');
             } else {
                 await query('UPDATE memos SET status = "Distributed" WHERE id = ?', [memoId]);
+                
+                // Trigger email notifications to recipients & creator for automatic distribution
+                await sendMemoNotificationEmail(memoId, 'DISTRIBUTED');
             }
         }
 
@@ -194,6 +201,10 @@ export async function approveMemo(memoId: number, approvalId: number, comments: 
     if (!session?.user) throw new Error('Unauthorized');
 
     try {
+        // Fetch step_order before modifying the record
+        const approvedStep = await query('SELECT step_order FROM memo_approvals WHERE id = ?', [approvalId]) as any[];
+        const stepOrder = approvedStep.length > 0 ? approvedStep[0].step_order : null;
+
         // Mark current step as approved with optional comments
         await query(
             'UPDATE memo_approvals SET status = "Approved", comments = ?, processed_at = CURRENT_TIMESTAMP WHERE id = ?',
@@ -223,6 +234,11 @@ export async function approveMemo(memoId: number, approvalId: number, comments: 
                 'INSERT INTO notifications (user_id, memo_id, message) VALUES (?, ?, ?)',
                 [nextSteps[0].approver_id, memoId, message]
             );
+
+            // Trigger APPROVED_BY_LM notification if the Line Manager just approved (step_order === 1)
+            if (stepOrder === 1) {
+                await sendMemoNotificationEmail(memoId, 'APPROVED_BY_LM');
+            }
         } else {
             // Final approval complete: Distribute
             await query('UPDATE memos SET status = "Distributed" WHERE id = ?', [memoId]);
@@ -258,6 +274,9 @@ export async function approveMemo(memoId: number, approvalId: number, comments: 
                     [recipient.recipient_id, memoId, `New internal memo: "${memo[0].title}" has been distributed.`]
                 );
             }
+
+            // Trigger email notification for distribution
+            await sendMemoNotificationEmail(memoId, 'DISTRIBUTED');
         }
 
         await query(
@@ -292,6 +311,9 @@ export async function rejectMemo(memoId: number, approvalId: number, comments?: 
             'INSERT INTO notifications (user_id, memo_id, message) VALUES (?, ?, ?)',
             [memo[0].created_by, memoId, `Your memo "${memo[0].title}" was rejected by the review committee.`]
         );
+
+        // Trigger email notification for rejection
+        await sendMemoNotificationEmail(memoId, 'REJECTED', { comments });
 
         await query(
             'INSERT INTO audit_logs (user_id, action, table_name, record_id, new_value) VALUES (?, ?, ?, ?, ?)',
@@ -1448,8 +1470,14 @@ export async function updateDraftMemo(memoId: number, data: FormData, submitNow:
                     'INSERT INTO notifications (user_id, memo_id, message) VALUES (?, ?, ?)',
                     [managerId, memoId, `A new memo "${title}" requires your validation.`]
                 );
+
+                // Trigger email notification to the manager
+                await sendMemoNotificationEmail(memoId, 'SUBMITTED');
             } else {
                 await query('UPDATE memos SET status = "Distributed" WHERE id = ?', [memoId]);
+
+                // Trigger email notifications to recipients & creator for automatic distribution
+                await sendMemoNotificationEmail(memoId, 'DISTRIBUTED');
             }
         }
 
@@ -1462,3 +1490,138 @@ export async function updateDraftMemo(memoId: number, data: FormData, submitNow:
         return { success: false, error: e.message || 'Update failed' };
     }
 }
+
+// ─── REJECTED MEMO EDIT ───────────────────────────────────────────────────────
+
+export async function updateRejectedMemo(memoId: number, data: FormData, submitNow: boolean) {
+    const session = await auth();
+    if (!session?.user?.id) return { success: false, error: 'Unauthorized' };
+    const userId = parseInt(session.user.id);
+
+    try {
+        // 1. Verify memo belongs to user and is in Draft status
+        const rows = await query(
+            `SELECT id, uuid, title FROM memos WHERE id = ? AND created_by = ? AND status = 'Draft' LIMIT 1`,
+            [memoId, userId]
+        ) as any[];
+        if (rows.length === 0) return { success: false, error: 'Memo not found or not in Draft status.' };
+        const { uuid } = rows[0];
+
+        // 2. Verify there is at least one Rejected approval record (this is the edit gate)
+        const rejections = await query(
+            `SELECT id FROM memo_approvals WHERE memo_id = ? AND status = 'Rejected' LIMIT 1`,
+            [memoId]
+        ) as any[];
+        if (rejections.length === 0) {
+            return { success: false, error: 'This memo has not been rejected and cannot be edited.' };
+        }
+
+        const title       = data.get('title') as string;
+        const content     = data.get('content') as string;
+        const department  = data.get('department') as string;
+        let   category    = data.get('category') as string;
+        const custom_cat  = data.get('custom_category') as string;
+        if (category === 'Others' && custom_cat) category = custom_cat;
+        const priority    = data.get('priority') as string;
+        const memo_type   = data.get('memo_type') as string;
+        const expiry_date = data.get('expiry_date') as string || null;
+        const is_budget   = data.get('is_budget_memo') === 'true';
+
+        // 3. Update core memo fields
+        await query(
+            `UPDATE memos SET title=?, content=?, department=?, category=?, priority=?, memo_type=?, expiry_date=?, updated_at=NOW()
+             WHERE id = ?`,
+            [title, content, department, category, priority, memo_type, expiry_date, memoId]
+        );
+
+        // 4. Refresh recipients
+        await query(`DELETE FROM memo_recipients WHERE memo_id = ?`, [memoId]);
+        const recipientIds: number[] = JSON.parse(data.get('recipient_ids') as string || '[]');
+        const ccIds: number[]        = JSON.parse(data.get('cc_ids')        as string || '[]');
+        const bccIds: number[]       = JSON.parse(data.get('bcc_ids')       as string || '[]');
+        const allRecipients = [
+            ...recipientIds.map(id => ({ id, type: 'To' })),
+            ...ccIds.map(id        => ({ id, type: 'CC' })),
+            ...bccIds.map(id       => ({ id, type: 'BCC' })),
+        ];
+        for (const r of allRecipients) {
+            await query(
+                `INSERT IGNORE INTO memo_recipients (memo_id, recipient_id, recipient_type) VALUES (?, ?, ?)`,
+                [memoId, r.id, r.type]
+            );
+        }
+
+        // 5. Refresh budget info
+        await query(`DELETE FROM memo_budget_info  WHERE memo_id = ?`, [memoId]);
+        await query(`DELETE FROM memo_budget_items WHERE memo_id = ?`, [memoId]);
+        if (is_budget) {
+            const year_id         = data.get('year_id') as string;
+            const budget_category = data.get('budget_category') as string;
+            const other_category  = data.get('other_category') as string;
+            await query(
+                `INSERT INTO memo_budget_info (memo_id, year_id, budget_category, other_category) VALUES (?, ?, ?, ?)`,
+                [memoId, year_id, budget_category, other_category]
+            );
+            const budgetItems = JSON.parse(data.get('budget_items') as string || '[]');
+            for (const item of budgetItems) {
+                const subtotal = (item.quantity || 1) * (item.amount || 0);
+                await query(
+                    `INSERT INTO memo_budget_items (memo_id, name, description, quantity, amount, total) VALUES (?, ?, ?, ?, ?, ?)`,
+                    [memoId, item.name, item.description || '', item.quantity || 1, item.amount || 0, subtotal]
+                );
+            }
+        }
+
+        // 6. Re-submit flow
+        if (submitNow) {
+            // Clear ALL previous approval records (Rejected + any old Pending) for a clean re-submission
+            await query(`DELETE FROM memo_approvals WHERE memo_id = ?`, [memoId]);
+
+            const userResult = await query(
+                'SELECT line_manager_id FROM memo_system_users WHERE id = ?', [userId]
+            ) as any[];
+            const managerId = userResult[0]?.line_manager_id;
+
+            if (managerId) {
+                await query(
+                    'INSERT INTO memo_approvals (memo_id, approver_id, step_order, status) VALUES (?, ?, ?, ?)',
+                    [memoId, managerId, 1, 'Pending']
+                );
+                await query('UPDATE memos SET status = "Line Manager Review" WHERE id = ?', [memoId]);
+                await query(
+                    'INSERT INTO notifications (user_id, memo_id, message) VALUES (?, ?, ?)',
+                    [managerId, memoId, `The revised memo "${title}" has been resubmitted for your review.`]
+                );
+
+                // Trigger email notification to the manager for resubmission
+                await sendMemoNotificationEmail(memoId, 'RESUBMITTED');
+            } else {
+                await query('UPDATE memos SET status = "Distributed" WHERE id = ?', [memoId]);
+
+                // Trigger email notifications to recipients & creator for automatic distribution
+                await sendMemoNotificationEmail(memoId, 'DISTRIBUTED');
+            }
+
+            await query(
+                'INSERT INTO audit_logs (user_id, action, table_name, record_id, new_value) VALUES (?, ?, ?, ?, ?)',
+                [userId, 'RESUBMIT_MEMO', 'memos', memoId, JSON.stringify({ title })]
+            );
+        } else {
+            // Just saving — keep as Draft
+            await query(
+                'INSERT INTO audit_logs (user_id, action, table_name, record_id, new_value) VALUES (?, ?, ?, ?, ?)',
+                [userId, 'EDIT_REJECTED_MEMO', 'memos', memoId, JSON.stringify({ title })]
+            );
+        }
+
+        revalidatePath(`/dashboard/memos/${uuid}`);
+        revalidatePath(`/dashboard/memos/${uuid}/edit`);
+        revalidatePath('/dashboard/memos/my-memos');
+        revalidatePath('/dashboard');
+        return { success: true, memoUuid: uuid };
+    } catch (e: any) {
+        console.error('updateRejectedMemo error:', e);
+        return { success: false, error: e.message || 'Update failed' };
+    }
+}
+
