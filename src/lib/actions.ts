@@ -823,7 +823,7 @@ export async function getBudgetItemNames() {
         const getNames = unstable_cache(
             async () => {
                 const results = await query(`
-                    SELECT ItemName, MAX(Quantity) as Quantity, MAX(Amount) as Amount
+                    SELECT ItemName, MAX(ItemDescription) as ItemDescription, MAX(Quantity) as Quantity, MAX(Amount) as Amount
                     FROM hr_finance_budget_item 
                     WHERE ItemName IS NOT NULL AND ItemName != ''
                     GROUP BY ItemName
@@ -831,6 +831,7 @@ export async function getBudgetItemNames() {
                 `) as any[];
                 return results.map(r => ({
                     name: r.ItemName,
+                    description: r.ItemDescription || '',
                     quantity: Number(r.Quantity) || 1,
                     amount: Number(r.Amount) || 0
                 }));
