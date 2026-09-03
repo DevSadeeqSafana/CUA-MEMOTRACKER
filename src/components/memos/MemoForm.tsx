@@ -16,16 +16,14 @@ import {
     Check,
     Wallet,
     Loader2,
-    Search,
     FileText as FileTextIcon,
     Trash2,
-    Target,
     ChevronDown,
 } from 'lucide-react';
 import RichTextEditor from './RichTextEditor';
 import { cn } from '@/lib/utils';
 import { MemoPriority, MemoType } from '@/types/memo';
-import { getBudgetItems, getBudgetYears, getBudgetItemLists, getBudgetItemNames, getDepartments, getCurrentFiscalYear } from '@/lib/actions';
+import { getBudgetItemsByListId, getBudgetYears, getBudgetItemLists, getDepartments, getCurrentFiscalYear } from '@/lib/actions';
 import toast from 'react-hot-toast';
 
 const memoSchema = z.object({
@@ -86,223 +84,7 @@ interface MemoFormProps {
     recipients?: any[];
 }
 
-// ── Budget Item Taxonomy Catalogue (Category -> Budget Item Group -> Specific Sub-Items) ──
-const BUDGET_CATALOGUE: Record<string, { groupName: string; subItems: string[] }[]> = {
-    "Advertising": [
-        {
-            groupName: "Equipment Purchase",
-            subItems: [
-                "Laptop (High Specs / Graphics)",
-                "DSLR / Mirrorless Camera",
-                "Studio Camera & Tripod",
-                "Sound System / PA Speakers",
-                "Wireless Microphone Set",
-                "Studio Lighting Kit",
-                "Video Switcher / Capture Card",
-                "Drone & Accessories",
-                "Teleprompter Equipment",
-            ]
-        },
-        {
-            groupName: "Media Placement & Publishing",
-            subItems: [
-                "Billboard Placement",
-                "TV Commercial Airtime",
-                "Radio Commercial Spot",
-                "National Newspaper Advert",
-                "Social Media Sponsored Campaign",
-                "Google & Digital Ad Campaign",
-                "Press Release Distribution",
-            ]
-        },
-        {
-            groupName: "Print & Branding Materials",
-            subItems: [
-                "Roll-Up Banners & Pop-ups",
-                "Flyers, Brochures & Handouts",
-                "Branded Souvenirs & Merchandise",
-                "Annual Report Print",
-                "Billboards & Signage Production",
-            ]
-        }
-    ],
-    "Office Supplies & Equipment": [
-        {
-            groupName: "Office Electronics & Machines",
-            subItems: [
-                "Heavy-Duty Multi-Function Printer",
-                "Photocopier Machine",
-                "Paper Shredder",
-                "Digital Projector & Screen",
-                "Laminating Machine",
-                "Paper Trimmer / Cutter",
-            ]
-        },
-        {
-            groupName: "Office Furniture",
-            subItems: [
-                "Executive Desk",
-                "Ergonomic Mesh Chair",
-                "Visitor Chairs",
-                "Steel Filing Cabinet",
-                "Conference Table",
-                "Book Case / Shelving",
-            ]
-        },
-        {
-            groupName: "Stationery & Consumables",
-            subItems: [
-                "A4 Printing Paper Cartons",
-                "Printer Toner Cartridges",
-                "File Folders & Binders",
-                "General Office Stationery Kit",
-            ]
-        }
-    ],
-    "IT & Electronics": [
-        {
-            groupName: "Computer Hardware",
-            subItems: [
-                "Desktop Workstation",
-                "Staff Laptop",
-                "High-End Server Rack",
-                "External Network Storage (NAS)",
-                "UPS / Power Backup Unit",
-                "Dual Monitor Display",
-            ]
-        },
-        {
-            groupName: "Networking Infrastructure",
-            subItems: [
-                "Enterprise Wi-Fi Access Point",
-                "Managed Gigabit Switch",
-                "Ethernet Cable Drums & RJ45",
-                "Network Firewall Appliance",
-            ]
-        },
-        {
-            groupName: "Software & Cloud Services",
-            subItems: [
-                "Operating System Licenses",
-                "ERP / Management System License",
-                "Design & Video Editing Suite",
-                "Enterprise Antivirus Subscription",
-            ]
-        }
-    ],
-    "Maintenance & Facilities": [
-        {
-            groupName: "Power & Electrical Equipment",
-            subItems: [
-                "Power Generator Set",
-                "Inverter & Deep-Cycle Batteries",
-                "Solar Panel Array",
-                "Heavy-Duty Circuit Breakers",
-                "Transformer Maintenance Kit",
-            ]
-        },
-        {
-            groupName: "Facility Repairs & Fixtures",
-            subItems: [
-                "Air Conditioner Units (Split / Standing)",
-                "Plumbing & Sanitaryware Fittings",
-                "Roofing & Carpentry Materials",
-                "Wall Painting & Renovation Materials",
-            ]
-        }
-    ],
-    "Events & Protocol": [
-        {
-            groupName: "Event Setup & Rental",
-            subItems: [
-                "Canopy / Marquee Tent Rental",
-                "Banquet Chairs & Tables",
-                "Stage & Backdrop Setup",
-                "Public Address (PA) Sound System",
-                "LED Display Screen Rental",
-            ]
-        },
-        {
-            groupName: "Catering & Refreshments",
-            subItems: [
-                "VIP Catering Service",
-                "General Delegates Refreshments",
-                "Bottled Water & Beverages",
-            ]
-        }
-    ],
-    "Laboratory & Research": [
-        {
-            groupName: "Lab Instruments & Equipment",
-            subItems: [
-                "Compound Optical Microscope",
-                "High-Speed Centrifuge",
-                "UV-Vis Spectrophotometer",
-                "Digital Analytical Balance",
-                "Autoclave Sterilizer",
-            ]
-        },
-        {
-            groupName: "Reagents & Lab Consumables",
-            subItems: [
-                "Chemical Reagents Batch",
-                "Glassware Kit (Beakers & Flasks)",
-                "Personal Protective Equipment (PPE)",
-            ]
-        }
-    ]
-};
 
-const DEFAULT_BUDGET_GROUPS = [
-    {
-        groupName: "Equipment Purchase",
-        subItems: [
-            "Laptop",
-            "DSLR / Studio Camera",
-            "Sound System / Speakers",
-            "Projector",
-            "Printer / Scanner",
-            "Television / Display Screen",
-            "Tablet / Mobile Device",
-        ]
-    },
-    {
-        groupName: "Supplies & Procurement",
-        subItems: [
-            "Consumables / Raw Materials",
-            "Tools & Utensils",
-            "Safety & Protective Gear",
-        ]
-    },
-    {
-        groupName: "Services & Maintenance",
-        subItems: [
-            "Repair & Servicing",
-            "Installation & Setup",
-            "Consultancy / Expert Service",
-        ]
-    },
-    {
-        groupName: "General / Other",
-        subItems: []
-    }
-];
-
-function getGroupListForCategory(selectedCategory?: string) {
-    if (!selectedCategory) return DEFAULT_BUDGET_GROUPS;
-    const categoryKey = Object.keys(BUDGET_CATALOGUE).find(k =>
-        selectedCategory.toLowerCase().includes(k.toLowerCase()) ||
-        k.toLowerCase().includes(selectedCategory.toLowerCase())
-    );
-    return categoryKey ? BUDGET_CATALOGUE[categoryKey] : DEFAULT_BUDGET_GROUPS;
-}
-
-function getSubItemsForGroup(selectedCategory?: string, groupName?: string) {
-    if (!groupName) return [];
-    const groups = getGroupListForCategory(selectedCategory);
-    const foundGroup = groups.find(g => g.groupName === groupName);
-    return foundGroup ? foundGroup.subItems : [];
-}
 
 // Inline recipient search row (like Gmail's To/CC/BCC fields)
 function RecipientRow({
@@ -415,10 +197,12 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
     const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
 
     const [budgetYears, setBudgetYears] = useState<any[]>([]);
-    const [budgetCategories, setBudgetCategories] = useState<any[]>([]);
-    const [budgetItemNames, setBudgetItemNames] = useState<{ name: string, description?: string, quantity: number, amount: number }[]>([]);
+    const [budgetCategories, setBudgetCategories] = useState<{ id: string | number, name: string }[]>([]);
+    // map: categoryId -> items loaded from DB
+    const [categoryItems, setCategoryItems] = useState<Record<string, { id: string | number, name: string, description: string, amount: number }[]>>({});
     const [departments, setDepartments] = useState<{ name: string }[]>([]);
     const [currentYear, setCurrentYear] = useState<{ id: string, name: string } | null>(null);
+    const [loadingItems, setLoadingItems] = useState(false);
 
     const {
         register,
@@ -465,34 +249,16 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
         toast.success('Financial Requisition attachment removed.');
     };
 
-    const autoFillItemDetails = (index: number, primaryName: string, subName?: string) => {
-        if (!primaryName && !subName) return;
-        const searchTerms = [subName, primaryName].filter(Boolean) as string[];
 
-        for (const term of searchTerms) {
-            const cleanTerm = term.toLowerCase().trim();
-            const matched = budgetItemNames.find(i =>
-                i.name.toLowerCase().trim() === cleanTerm ||
-                i.name.toLowerCase().includes(cleanTerm) ||
-                cleanTerm.includes(i.name.toLowerCase())
-            );
-            if (matched) {
-                if (matched.description) {
-                    setValue(`budget_items.${index}.description`, matched.description);
-                }
-                if (matched.quantity) {
-                    setValue(`budget_items.${index}.quantity`, matched.quantity);
-                }
-                if (matched.amount) {
-                    setValue(`budget_items.${index}.amount`, matched.amount);
-                }
-                const q = watch(`budget_items.${index}.quantity`) || matched.quantity || 1;
-                const a = watch(`budget_items.${index}.amount`) || matched.amount || 0;
-                setValue(`budget_items.${index}.total`, q * a);
-                break;
-            }
-        }
+    const loadItemsForCategory = async (catNameOrId?: string | number) => {
+        const key = catNameOrId ? String(catNameOrId) : 'all';
+        if (categoryItems[key] && categoryItems[key].length > 0) return;
+        setLoadingItems(true);
+        const items = await getBudgetItemsByListId(catNameOrId);
+        setCategoryItems(prev => ({ ...prev, [key]: items }));
+        setLoadingItems(false);
     };
+
 
     useEffect(() => {
         if (Object.keys(errors).length > 0) console.log('Form Errors:', errors);
@@ -500,19 +266,19 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
 
     useEffect(() => {
         const fetchInitialData = async () => {
-            const [years, categories, names, depts, curYear] = await Promise.all([
+            const [years, categories, depts, curYear, initialItems] = await Promise.all([
                 getBudgetYears(),
                 getBudgetItemLists(),
-                getBudgetItemNames(),
                 getDepartments(),
-                getCurrentFiscalYear()
+                getCurrentFiscalYear(),
+                getBudgetItemsByListId()
             ]);
             setBudgetYears(years);
             setBudgetCategories(categories);
-            setBudgetItemNames(names);
             setDepartments(depts);
             setCurrentYear(curYear);
             if (curYear) setValue('year_id', curYear.id);
+            setCategoryItems({ all: initialItems });
         };
         fetchInitialData();
     }, [setValue]);
@@ -979,40 +745,27 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                         <div className="p-8 space-y-6 flex-1 overflow-y-auto bg-slate-50/50">
                             {/* Budget Category Selection Card */}
                             <div className="bg-white border border-slate-200 p-6 rounded-2xl space-y-4 shadow-sm">
-                                <div className="flex items-center justify-between">
-                                    <h4 className="text-[10px] font-black text-[#1a365d] uppercase tracking-widest">General Configuration</h4>
-                                </div>
+                                <h4 className="text-[10px] font-black text-[#1a365d] uppercase tracking-widest">General Configuration</h4>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                     <div className="space-y-1.5 md:col-span-2">
                                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Budget Category</label>
                                         <select
-                                            {...register('budget_category')}
+                                            {...register('budget_category', {
+                                                onChange: (e) => {
+                                                    const selectedName = e.target.value;
+                                                    const cat = budgetCategories.find(c => c.name === selectedName);
+                                                    loadItemsForCategory(cat ? cat.id : selectedName);
+                                                }
+                                            })}
                                             className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:border-emerald-500 outline-none transition-all"
                                         >
-                                            <option value="">Select Category...</option>
+                                            <option value="">Select Budget Category...</option>
                                             {budgetCategories.map(cat => (
                                                 <option key={cat.id} value={cat.name}>{cat.name}</option>
                                             ))}
-                                            <option value="Advertising">Advertising</option>
-                                            <option value="Office Supplies & Equipment">Office Supplies & Equipment</option>
-                                            <option value="IT & Electronics">IT & Electronics</option>
-                                            <option value="Maintenance & Facilities">Maintenance & Facilities</option>
-                                            <option value="Events & Protocol">Events & Protocol</option>
-                                            <option value="Laboratory & Research">Laboratory & Research</option>
-                                            <option value="Others">Others</option>
                                         </select>
                                         {errors.budget_category && <p className="text-[9px] text-red-500 font-bold">{errors.budget_category.message}</p>}
                                     </div>
-                                    {watch('budget_category') === 'Others' && (
-                                        <div className="md:col-span-2 space-y-1.5 animate-in slide-in-from-top-1">
-                                            <label className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Specify Other Category</label>
-                                            <input
-                                                {...register('other_category')}
-                                                className="w-full bg-emerald-50/30 border border-emerald-100 rounded-xl px-4 py-2.5 text-xs font-bold focus:border-emerald-500 outline-none transition-all"
-                                                placeholder="Define the category..."
-                                            />
-                                        </div>
-                                    )}
                                 </div>
                                 <input type="hidden" {...register('year_id')} />
                             </div>
@@ -1023,12 +776,12 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                     <div>
                                         <h4 className="text-[10px] font-black text-[#1a365d] uppercase tracking-widest">Budget Line Items</h4>
                                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
-                                            Select specific items under budget item categories (e.g. Equipment Purchase → Laptop)
+                                            Select category above, then pick an item and enter quantity
                                         </p>
                                     </div>
                                     <button
                                         type="button"
-                                        onClick={() => append({ name: '', budget_item_group: '', specific_item: '', description: '', quantity: 1, amount: 0, total: 0 })}
+                                        onClick={() => append({ name: '', description: '', quantity: 1, amount: 0, total: 0 })}
                                         className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-sm flex items-center gap-1.5"
                                     >
                                         <Plus size={12} />
@@ -1047,7 +800,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                         </p>
                                         <button
                                             type="button"
-                                            onClick={() => append({ name: '', budget_item_group: '', specific_item: '', description: '', quantity: 1, amount: 0, total: 0 })}
+                                            onClick={() => append({ name: '', description: '', quantity: 1, amount: 0, total: 0 })}
                                             className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/10"
                                         >
                                             + Add Requisition Line Item
@@ -1055,11 +808,13 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                     </div>
                                 ) : (
                                     fields.map((field, index) => {
-                                        const currentCategory = watch('budget_category');
-                                        const currentGroup = watch(`budget_items.${index}.budget_item_group`);
-                                        const currentSpecific = watch(`budget_items.${index}.specific_item`);
-                                        const availableGroups = getGroupListForCategory(currentCategory);
-                                        const availableSubItems = getSubItemsForGroup(currentCategory, currentGroup);
+                                        // Determine which items are available for the selected category
+                                        const selectedCatName = watch('budget_category');
+                                        const cat = budgetCategories.find(c => c.name === selectedCatName);
+                                        const catKey = cat ? String(cat.id) : (selectedCatName || 'all');
+                                        const availableItems = (categoryItems[catKey] && categoryItems[catKey].length > 0)
+                                            ? categoryItems[catKey]
+                                            : (categoryItems['all'] || []);
 
                                         return (
                                             <div key={field.id} className="bg-white border border-slate-200 p-5 rounded-2xl space-y-4 relative group shadow-sm hover:border-emerald-200 transition-all">
@@ -1073,134 +828,87 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                                 </button>
 
                                                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                                                    {/* Tier 1 Selection: Budget Item Group */}
-                                                    <div className="md:col-span-4 space-y-1.5">
+                                                    {/* Item Selection Dropdown */}
+                                                    <div className="md:col-span-8 space-y-1.5">
                                                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                                                            Budget Item Class / Group
+                                                            Budget Item
                                                         </label>
                                                         <select
-                                                            {...register(`budget_items.${index}.budget_item_group`, {
+                                                            {...register(`budget_items.${index}.name`, {
                                                                 onChange: (e) => {
-                                                                    const grp = e.target.value;
-                                                                    setValue(`budget_items.${index}.specific_item`, '');
-                                                                    if (grp && grp !== 'Custom Group...') {
-                                                                        setValue(`budget_items.${index}.name`, grp);
-                                                                        autoFillItemDetails(index, grp);
+                                                                    const selectedName = e.target.value;
+                                                                    const matched = availableItems.find(i => i.name === selectedName);
+                                                                    if (matched) {
+                                                                        setValue(`budget_items.${index}.description`, matched.description || '');
+                                                                        setValue(`budget_items.${index}.amount`, matched.amount || 0);
+                                                                        const q = watch(`budget_items.${index}.quantity`) || 1;
+                                                                        setValue(`budget_items.${index}.total`, q * (matched.amount || 0));
                                                                     }
                                                                 }
                                                             })}
                                                             className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold focus:border-emerald-500 outline-none transition-all"
+                                                            disabled={!selectedCatName || loadingItems}
                                                         >
-                                                            <option value="">Select Budget Item...</option>
-                                                            {availableGroups.map((g, gIdx) => (
-                                                                <option key={gIdx} value={g.groupName}>{g.groupName}</option>
+                                                            <option value="">
+                                                                {loadingItems ? 'Loading items...' : selectedCatName ? 'Select Budget Item...' : 'Select a category first'}
+                                                            </option>
+                                                            {availableItems.map((item) => (
+                                                                <option key={item.id} value={item.name}>{item.name}</option>
                                                             ))}
-                                                            <option value="Custom Group...">Custom Item Class...</option>
                                                         </select>
                                                     </div>
 
-                                                    {/* Tier 2 Selection: Specific Item under Budget Item */}
+                                                    {/* Quantity */}
                                                     <div className="md:col-span-4 space-y-1.5">
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                                                            Specific Sub-Item Selection
-                                                        </label>
-                                                        <select
-                                                            {...register(`budget_items.${index}.specific_item`, {
-                                                                onChange: (e) => {
-                                                                    const sub = e.target.value;
-                                                                    const grp = watch(`budget_items.${index}.budget_item_group`);
-                                                                    if (sub && sub !== 'Custom Sub-Item...') {
-                                                                        const combinedName = grp ? `${grp} - ${sub}` : sub;
-                                                                        setValue(`budget_items.${index}.name`, combinedName);
-                                                                        autoFillItemDetails(index, combinedName, sub);
-                                                                    }
-                                                                }
-                                                            })}
-                                                            disabled={!currentGroup}
-                                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold focus:border-emerald-500 outline-none transition-all disabled:opacity-50"
-                                                        >
-                                                            <option value="">Select Specific Item...</option>
-                                                            {availableSubItems.map((sub, sIdx) => (
-                                                                <option key={sIdx} value={sub}>{sub}</option>
-                                                            ))}
-                                                            <option value="Custom Sub-Item...">Custom Specific Item...</option>
-                                                        </select>
-                                                    </div>
-
-                                                    {/* Display / Custom Item Name */}
-                                                    <div className="md:col-span-4 space-y-1.5">
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                                                            Final Item Description Title
-                                                        </label>
-                                                        <div className="relative">
-                                                            <Target className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={13} />
-                                                            <datalist id={`budget-item-names-${index}`}>
-                                                                {budgetItemNames.map((item, idx) => (
-                                                                    <option key={idx} value={item.name} />
-                                                                ))}
-                                                            </datalist>
-                                                            <input
-                                                                {...register(`budget_items.${index}.name`, {
-                                                                    onChange: (e) => {
-                                                                        const val = e.target.value;
-                                                                        autoFillItemDetails(index, val);
-                                                                    }
-                                                                })}
-                                                                list={`budget-item-names-${index}`}
-                                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-9 pr-4 text-xs font-bold focus:border-emerald-500 outline-none transition-all"
-                                                                placeholder="e.g. Equipment Purchase - Laptop"
-                                                            />
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Item Details / Description */}
-                                                    <div className="md:col-span-12 space-y-1.5">
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Item Description & Specifications</label>
-                                                        <textarea
-                                                            {...register(`budget_items.${index}.description`)}
-                                                            rows={2}
-                                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-medium focus:border-emerald-500 outline-none transition-all resize-none"
-                                                            placeholder="Specific technical details or justifications..."
-                                                        />
-                                                    </div>
-
-                                                    {/* Quantity, Unit Price, Subtotal */}
-                                                    <div className="md:col-span-3 space-y-1.5">
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Qty</label>
+                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Quantity</label>
                                                         <input
                                                             type="number"
+                                                            min={1}
                                                             {...register(`budget_items.${index}.quantity`, { valueAsNumber: true })}
                                                             className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:border-emerald-500 outline-none transition-all"
                                                             onChange={(e) => {
-                                                                const q = parseInt(e.target.value) || 0;
+                                                                const raw = e.target.value;
+                                                                const val = raw === '' ? '' : parseInt(raw);
+                                                                setValue(`budget_items.${index}.quantity`, val as any);
+                                                                const q = typeof val === 'number' && !isNaN(val) ? val : 0;
                                                                 const a = watch(`budget_items.${index}.amount`) || 0;
                                                                 setValue(`budget_items.${index}.total`, q * a);
                                                             }}
                                                         />
                                                     </div>
 
-                                                    <div className="md:col-span-4 space-y-1.5">
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Unit Price (NGN)</label>
-                                                        <input
-                                                            type="number"
-                                                            step="0.01"
-                                                            {...register(`budget_items.${index}.amount`, { valueAsNumber: true })}
-                                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:border-emerald-500 outline-none transition-all"
-                                                            onChange={(e) => {
-                                                                const a = parseFloat(e.target.value) || 0;
-                                                                const q = watch(`budget_items.${index}.quantity`) || 0;
-                                                                setValue(`budget_items.${index}.total`, q * a);
-                                                            }}
-                                                        />
-                                                    </div>
-
-                                                    <div className="md:col-span-5 space-y-1.5">
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Sub-Total (NGN)</label>
-                                                        <div className="w-full bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-2.5 text-xs font-black text-emerald-700 flex items-center justify-between">
-                                                            <span>NGN</span>
-                                                            <span>{((watch(`budget_items.${index}.quantity`) || 0) * (watch(`budget_items.${index}.amount`) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                                    {/* Auto-filled Description (read-only) */}
+                                                    {watch(`budget_items.${index}.description`) && (
+                                                        <div className="md:col-span-12 space-y-1.5">
+                                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Item Description (from database)</label>
+                                                            <div className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-xs text-slate-600 font-medium">
+                                                                {watch(`budget_items.${index}.description`)}
+                                                            </div>
+                                                            <input type="hidden" {...register(`budget_items.${index}.description`)} />
                                                         </div>
-                                                    </div>
+                                                    )}
+
+                                                    {/* Unit Price (read-only from DB) and Subtotal */}
+                                                    {(Number(watch(`budget_items.${index}.amount`) || 0) > 0) && (
+                                                        <>
+                                                            <div className="md:col-span-5 space-y-1.5">
+                                                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Unit Price (NGN) — from Budget</label>
+                                                                <div className="w-full bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-700 flex items-center justify-between">
+                                                                    <span>NGN</span>
+                                                                    <span>{(watch(`budget_items.${index}.amount`) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                                                </div>
+                                                                <input type="hidden" {...register(`budget_items.${index}.amount`, { valueAsNumber: true })} />
+                                                            </div>
+
+                                                            <div className="md:col-span-7 space-y-1.5">
+                                                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Sub-Total (NGN)</label>
+                                                                <div className="w-full bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-2.5 text-xs font-black text-emerald-700 flex items-center justify-between">
+                                                                    <span>NGN</span>
+                                                                    <span>{((watch(`budget_items.${index}.quantity`) || 0) * (watch(`budget_items.${index}.amount`) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                                                </div>
+                                                            </div>
+                                                        </>
+                                                    )}
 
                                                     {/* Attachment */}
                                                     <div className="md:col-span-12 space-y-1.5">

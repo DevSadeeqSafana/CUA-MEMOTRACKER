@@ -817,6 +817,44 @@ export async function changePassword(formData: { currentPassword: string; newPas
     return { success: true };
 }
 
+export async function getBudgetItemsByListId(categoryNameOrId?: string | number) {
+    try {
+        let sql = `
+            SELECT EntryID as id, ItemName as name, ItemDescription as description, Amount as amount, Quantity as quantity
+            FROM hr_finance_budget_item
+            WHERE ItemName IS NOT NULL AND ItemName != ''
+        `;
+        const params: any[] = [];
+        if (categoryNameOrId && typeof categoryNameOrId === 'string' && categoryNameOrId.trim() !== '') {
+            sql += ` AND (ItemName LIKE ? OR ItemDescription LIKE ?)`;
+            params.push(`%${categoryNameOrId}%`, `%${categoryNameOrId}%`);
+        }
+        sql += ` ORDER BY ItemName ASC LIMIT 200`;
+
+        let items = await query(sql, params) as any[];
+
+        if (items.length === 0) {
+            items = await query(`
+                SELECT EntryID as id, ItemName as name, ItemDescription as description, Amount as amount, Quantity as quantity
+                FROM hr_finance_budget_item
+                WHERE ItemName IS NOT NULL AND ItemName != ''
+                ORDER BY ItemName ASC LIMIT 200
+            `) as any[];
+        }
+
+        return items.map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            description: r.description || '',
+            amount: Number(r.amount) || 0,
+            quantity: Number(r.quantity) || 1,
+        }));
+    } catch (error) {
+        console.error('Failed to fetch budget items by list id:', error);
+        return [];
+    }
+}
+
 export async function getBudgetItemNames() {
     try {
         const { unstable_cache } = require('next/cache');
