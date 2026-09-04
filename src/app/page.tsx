@@ -6,12 +6,42 @@ import { useRouter } from 'next/navigation';
 import { Loader2, AlertCircle, ArrowRight, ShieldCheck, GraduationCap, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Image from 'next/image';
+import { GoogleLogin, CredentialResponse } from '@react-oauth/google';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+
+  const handleGoogleSuccess = async (credentialResponse: CredentialResponse) => {
+    if (!credentialResponse.credential) {
+      toast.error('Failed to retrieve credentials from Google.');
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const result = await signIn('credentials', {
+        googleToken: credentialResponse.credential,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        toast.error('Google Sign-In failed. Ensure you are using your active @cosmopolitan.edu.ng staff account.');
+      } else {
+        toast.success('Successfully authenticated via Google SSO!');
+        router.push('/dashboard');
+      }
+    } catch (err) {
+      toast.error('An error occurred during Google Sign-In.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleError = () => {
+    toast.error('Google Sign-In was cancelled or failed.');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,7 +130,35 @@ export default function LoginPage() {
             </div>
             <div className="space-y-2">
               <h1 className="text-3xl md:text-5xl font-black tracking-tight text-[#1a365d] font-outfit">Staff Sign In</h1>
-              <p className="text-slate-500 font-medium text-sm md:text-lg leading-relaxed">Enter your university credentials to access the internal portal.</p>
+              <p className="text-slate-500 font-medium text-sm md:text-lg leading-relaxed">Enter your university credentials or sign in with Google SSO.</p>
+            </div>
+          </div>
+
+          {/* Institutional Google Single Sign-On */}
+          <div className="space-y-4">
+            <div className="flex flex-col items-center justify-center space-y-2">
+              <div className="w-full flex justify-center [&>div]:w-full font-bold">
+                <GoogleLogin
+                  onSuccess={handleGoogleSuccess}
+                  onError={handleGoogleError}
+                  theme="outline"
+                  shape="pill"
+                  size="large"
+                  text="continue_with"
+                  logo_alignment="left"
+                />
+              </div>
+              <p className="text-[11px] text-slate-400 font-semibold tracking-wide text-center">
+                Institutional login restricted to <span className="text-[#1a365d] font-bold">@cosmopolitan.edu.ng</span>
+              </p>
+            </div>
+
+            <div className="relative flex items-center justify-center my-6">
+              <div className="border-t border-slate-200 w-full" />
+              <span className="bg-slate-50 px-4 text-xs font-black uppercase tracking-widest text-slate-400 shrink-0">
+                OR SIGN IN WITH PASSWORD
+              </span>
+              <div className="border-t border-slate-200 w-full" />
             </div>
           </div>
 

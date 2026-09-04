@@ -27,7 +27,13 @@
   --border: oklch(0.92 0.01 240);
   --input: oklch(0.92 0.01 240);
   --ring: oklch(0.35 0.15 240);
-  --radius: 1rem;
+  --radius: 0px;
+}
+
+@layer base {
+  *, ::before, ::after {
+    border-radius: 0 !important;
+  }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -86,7 +92,7 @@ h6 {
 
 ::-webkit-scrollbar-thumb {
   background: var(--muted-foreground);
-  border-radius: 10px;
+  border-radius: 0 !important;
   border: 2px solid var(--background);
 }
 

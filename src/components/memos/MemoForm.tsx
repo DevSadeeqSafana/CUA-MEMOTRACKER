@@ -324,12 +324,12 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
             {/* ── Top bar: type switcher + actions ── */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
                 {/* Memo type pill */}
-                <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-2xl p-1.5 shadow-sm w-fit">
+                <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-none p-1.5 shadow-sm w-fit">
                     <button
                         type="button"
                         onClick={() => setValue('is_budget_memo', false)}
                         className={cn(
-                            'flex items-center gap-2 px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-200',
+                            'flex items-center gap-2 px-4 py-1.5 rounded-none text-[10px] font-black uppercase tracking-widest transition-all duration-200',
                             !isBudgetMemo ? 'bg-[#1a365d] text-white shadow-md shadow-blue-900/20' : 'text-slate-400 hover:text-slate-600'
                         )}
                     >
@@ -339,7 +339,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                         type="button"
                         onClick={() => setValue('is_budget_memo', true)}
                         className={cn(
-                            'flex items-center gap-2 px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-200',
+                            'flex items-center gap-2 px-4 py-1.5 rounded-none text-[10px] font-black uppercase tracking-widest transition-all duration-200',
                             isBudgetMemo ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/20' : 'text-slate-400 hover:text-slate-600'
                         )}
                     >
@@ -353,7 +353,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                         type="button"
                         onClick={handleSubmit(data => handleSubmission(data, true), onInvalid)}
                         disabled={isLoading}
-                        className="flex items-center gap-2 px-5 py-2.5 border border-slate-200 bg-white rounded-xl font-bold text-xs text-slate-600 hover:bg-slate-50 transition-all disabled:opacity-50 shadow-sm"
+                        className="flex items-center gap-2 px-5 py-2.5 border border-slate-200 bg-white rounded-none font-bold text-xs text-slate-600 hover:bg-slate-50 transition-all disabled:opacity-50 shadow-sm"
                     >
                         {isLoading ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
                         Save Draft
@@ -362,7 +362,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                         type="button"
                         onClick={handleSubmit(data => handleSubmission(data, false), onInvalid)}
                         disabled={isLoading}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-[#1a365d] text-white rounded-xl font-bold text-xs shadow-lg shadow-blue-900/20 hover:bg-[#2c5282] transition-all disabled:opacity-50 outline-none"
+                        className="flex items-center gap-2 px-5 py-2.5 bg-[#1a365d] text-white rounded-none font-bold text-xs shadow-lg shadow-blue-900/20 hover:bg-[#2c5282] transition-all disabled:opacity-50 outline-none"
                     >
                         {isLoading ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
                         Route for Approval
@@ -371,7 +371,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
             </div>
 
             {/* ── Main compose card ── */}
-            <div className="bg-white border border-slate-200 rounded-[1.5rem] shadow-sm overflow-hidden">
+            <div className="bg-white border border-slate-200 rounded-none shadow-sm overflow-hidden">
 
                 {/* Subject line */}
                 <div className="px-6 py-4 border-b border-slate-100">

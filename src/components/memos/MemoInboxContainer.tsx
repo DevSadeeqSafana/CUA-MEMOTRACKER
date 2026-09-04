@@ -164,24 +164,26 @@ export default function MemoInboxContainer({ memos, initialFolder = 'inbox' }: M
     };
 
     return (
-        <div className="bg-white border border-slate-200 rounded-[2rem] shadow-sm overflow-hidden flex flex-col font-sans h-full min-h-[600px] animate-in fade-in duration-500">
+        <div className="bg-white border border-slate-200 rounded-none shadow-sm overflow-hidden flex flex-col font-sans h-full min-h-[600px] animate-in fade-in duration-500">
             {/* Topbar: Title, Stats, Search */}
-            <div className="p-6 md:p-8 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
+            <div className="p-5 md:p-6 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
                 <div className="space-y-1">
-                    <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
+                    <div className="flex items-center gap-3.5">
+                        <div className="w-9 h-9 bg-[#1a365d] text-white flex items-center justify-center font-bold shrink-0 rounded-none">
                             {folder === 'inbox' && <Inbox size={18} />}
-                            {folder === 'important' && <Star size={18} className="text-amber-500 fill-amber-500" />}
+                            {folder === 'important' && <Star size={18} className="text-amber-400 fill-amber-400" />}
                             {folder === 'actions' && <AlertCircle size={18} />}
                             {folder === 'sent' && <Send size={18} />}
                             {folder === 'drafts' && <FileText size={18} />}
                         </div>
-                        <h1 className="text-xl font-black text-[#1a365d] uppercase tracking-tight capitalize font-outfit">
-                            {folder === 'inbox' ? 'Inbox' : folder === 'actions' ? 'Action Queue' : folder === 'sent' ? 'Sent Memos' : folder}
-                        </h1>
-                        <span className="bg-slate-200/60 border border-slate-200 text-slate-500 text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full shrink-0">
-                            {filteredMemos.length} item{filteredMemos.length !== 1 ? 's' : ''}
-                        </span>
+                        <div>
+                            <h1 className="text-xl md:text-2xl font-black text-[#1a365d] uppercase tracking-tight font-outfit">
+                                {folder === 'inbox' ? 'Inbox' : folder === 'actions' ? 'Action Queue' : folder === 'sent' ? 'Sent Memos' : folder}
+                            </h1>
+                            <p className="text-xs text-slate-500 font-medium">
+                                Showing {filteredMemos.length} item{filteredMemos.length !== 1 ? 's' : ''} in {folder}
+                            </p>
+                        </div>
                     </div>
                 </div>
 
@@ -193,7 +195,7 @@ export default function MemoInboxContainer({ memos, initialFolder = 'inbox' }: M
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                         placeholder="Search memos..."
-                        className="w-full bg-white border border-slate-200 focus:border-blue-500 outline-none rounded-2xl pl-11 pr-4 py-2.5 text-xs font-bold transition-all shadow-inner placeholder:text-slate-300 text-slate-700"
+                        className="w-full bg-white border border-slate-200 focus:border-blue-500 outline-none rounded-none pl-11 pr-4 py-2.5 text-xs font-bold transition-all shadow-sm placeholder:text-slate-300 text-slate-700"
                     />
                 </div>
             </div>

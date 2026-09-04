@@ -53,10 +53,17 @@ export default async function ReportsPage() {
     ) as any[];
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-500">
-            <div>
-                <h1 className="text-2xl md:text-3xl font-bold tracking-tight">System Reports & Analytics</h1>
-                <p className="text-muted-foreground mt-1">Detailed overview of memo lifecycle and organizational compliance.</p>
+        <div className="space-y-6 animate-in fade-in duration-500 font-sans">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-5 md:p-6 border border-slate-200 shadow-sm rounded-none">
+                <div className="flex items-center gap-3.5">
+                    <div className="w-9 h-9 bg-[#1a365d] text-white flex items-center justify-center font-bold shrink-0 rounded-none">
+                        <BarChart2 size={18} />
+                    </div>
+                    <div>
+                        <h1 className="text-xl md:text-2xl font-black tracking-tight text-[#1a365d] font-outfit uppercase">System Reports & Analytics</h1>
+                        <p className="text-xs text-slate-500 font-medium">Detailed overview of memo lifecycle and organizational compliance.</p>
+                    </div>
+                </div>
             </div>
 
             {/* Metric Cards */}

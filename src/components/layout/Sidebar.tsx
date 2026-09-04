@@ -94,9 +94,9 @@ export default function Sidebar({ user, userRoles, handleSignOut }: { user: any,
                 />
             )}
 
-            {/* Sidebar */}
+            {/* Sidebar (Fixed Viewport Left) */}
             <aside className={cn(
-                "fixed md:relative top-0 left-0 h-full w-72 bg-[#1a365d] flex flex-col text-white shadow-2xl z-50 transition-transform duration-300 ease-in-out md:translate-x-0 border-r border-[#1a365d]",
+                "fixed top-0 left-0 h-screen w-72 bg-[#1a365d] flex flex-col text-white shadow-2xl z-50 transition-transform duration-300 ease-in-out md:translate-x-0 border-r border-white/10 rounded-none",
                 isOpen ? "translate-x-0" : "-translate-x-full"
             )}>
                 <div className="p-8 border-b border-white/10 hidden md:block shrink-0">

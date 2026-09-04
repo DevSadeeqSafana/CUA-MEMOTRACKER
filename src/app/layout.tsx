@@ -18,6 +18,8 @@ export const metadata: Metadata = {
   description: "Internal Memo Tracker System for Cosmopolitan University Abuja.",
 };
 
+import GoogleAuthProvider from "@/components/providers/GoogleAuthProvider";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -29,7 +31,9 @@ export default function RootLayout({
         className={`${inter.variable} ${outfit.variable} font-sans antialiased`}
       >
         <Toaster position="top-right" toastOptions={{ duration: 4000, style: { borderRadius: '1rem', background: '#fff', color: '#1a365d', fontWeight: 'bold' } }} />
-        {children}
+        <GoogleAuthProvider>
+          {children}
+        </GoogleAuthProvider>
       </body>
     </html>
   );

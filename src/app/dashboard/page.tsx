@@ -61,77 +61,87 @@ export default async function DashboardPage() {
     const maxCount = Math.max(...chartData.map(d => d.count), 1);
 
     return (
-        <div className="space-y-6 md:space-y-12 animate-in fade-in duration-1000 font-sans">
-            {/* Executive Greeting */}
-            <div className="relative overflow-hidden bg-[#1a365d] rounded-[1.5rem] md:rounded-[2rem] p-5 md:p-8 text-white shadow-2xl">
-                <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2"></div>
-                <div className="relative z-10 space-y-4">
+        <div className="space-y-6 md:space-y-8 animate-in fade-in duration-1000 font-sans">
+            {/* Standard Uniform Header Card */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-5 md:p-6 border border-slate-200 shadow-sm rounded-none">
+                <div className="flex items-center gap-3.5">
+                    <div className="w-9 h-9 bg-[#1a365d] text-white flex items-center justify-center font-bold shrink-0 rounded-none">
+                        <Activity size={18} />
+                    </div>
+                    <div>
+                        <h1 className="text-xl md:text-2xl font-black tracking-tight text-[#1a365d] font-outfit uppercase">System Overview</h1>
+                        <p className="text-xs text-slate-500 font-medium">Internal memo tracker dashboard and institutional analytics.</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Executive Greeting Banner */}
+            <div className="relative overflow-hidden bg-[#1a365d] rounded-none p-5 md:p-8 text-white shadow-sm border border-[#1a365d]">
+                <div className="relative z-10 space-y-3">
                     <div className="flex items-center gap-3 text-blue-300">
-                        <Activity size={18} className="animate-pulse" />
+                        <Activity size={16} className="animate-pulse" />
                         <span className="text-[10px] font-black uppercase tracking-[0.3em]">CUA Institutional Monitor</span>
                     </div>
-                    <h1 className="text-xl sm:text-2xl md:text-3xl font-black font-outfit leading-none tracking-tight">
-                        Greetings, <br />
-                        <span className="text-blue-400">{session.user.name}</span>
-                    </h1>
-                    <p className="text-blue-100/60 font-medium max-w-xl text-sm">
+                    <h2 className="text-xl sm:text-2xl font-black font-outfit leading-none tracking-tight">
+                        Greetings, <span className="text-blue-300">{session.user.name}</span>
+                    </h2>
+                    <p className="text-blue-100/70 font-medium max-w-xl text-xs md:text-sm">
                         University communications are operating within standard parameters. You have {pending_count + unread_count} items requiring attention in your Memo Center.
                     </p>
                 </div>
             </div>
 
             {/* Performance Grids */}
-            <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
-                <Link href="/dashboard/tasks" className="group bg-white border border-slate-200 rounded-[1.25rem] md:rounded-[1.5rem] p-4 md:p-6 shadow-sm hover:border-blue-500 transition-all hover:-translate-y-1">
-                    <div className="flex items-start justify-between mb-4 md:mb-6">
-                        <div className="w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-all">
-                            <Clock size={20} className="md:hidden" /><Clock size={28} className="hidden md:block" />
+            <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Link href="/dashboard/tasks" className="group bg-white border border-slate-200 rounded-none p-5 shadow-sm hover:border-blue-500 transition-all">
+                    <div className="flex items-start justify-between mb-4">
+                        <div className="w-10 h-10 rounded-none bg-blue-50 flex items-center justify-center text-blue-600 group-hover:bg-[#1a365d] group-hover:text-white transition-all">
+                            <Clock size={20} />
                         </div>
-                        <TrendingUp size={14} className="text-blue-500 md:w-4" />
+                        <TrendingUp size={14} className="text-blue-500" />
                     </div>
-                    <h3 className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Decision Queue</h3>
-                    <p className="text-lg md:text-xl font-black text-[#1a365d] tracking-tighter">{pending_count}</p>
-                    <div className="mt-3 md:mt-6 flex items-center gap-2 text-[10px] md:text-xs font-bold text-blue-600 group-hover:gap-4 transition-all uppercase tracking-widest">
+                    <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Decision Queue</h3>
+                    <p className="text-2xl font-black text-[#1a365d] tracking-tighter">{pending_count}</p>
+                    <div className="mt-4 flex items-center gap-2 text-[10px] font-bold text-blue-600 group-hover:gap-3 transition-all uppercase tracking-widest">
                         Process <ArrowRight size={12} />
                     </div>
                 </Link>
 
-                <Link href="/dashboard/tasks" className="group bg-white border border-slate-200 rounded-[1.25rem] md:rounded-[1.5rem] p-4 md:p-6 shadow-sm hover:border-emerald-500 transition-all hover:-translate-y-1">
-                    <div className="flex items-start justify-between mb-4 md:mb-6">
-                        <div className="w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-all">
-                            <Layers size={20} className="md:hidden" /><Layers size={28} className="hidden md:block" />
+                <Link href="/dashboard/tasks" className="group bg-white border border-slate-200 rounded-none p-5 shadow-sm hover:border-emerald-500 transition-all">
+                    <div className="flex items-start justify-between mb-4">
+                        <div className="w-10 h-10 rounded-none bg-emerald-50 flex items-center justify-center text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-all">
+                            <Layers size={20} />
                         </div>
-                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
                     </div>
-                    <h3 className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Inbox</h3>
-                    <p className="text-lg md:text-xl font-black text-[#1a365d] tracking-tighter">{unread_count}</p>
-                    <div className="mt-3 md:mt-6 flex items-center gap-2 text-[10px] md:text-xs font-bold text-emerald-600 group-hover:gap-4 transition-all uppercase tracking-widest">
+                    <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Inbox</h3>
+                    <p className="text-2xl font-black text-[#1a365d] tracking-tighter">{unread_count}</p>
+                    <div className="mt-4 flex items-center gap-2 text-[10px] font-bold text-emerald-600 group-hover:gap-3 transition-all uppercase tracking-widest">
                         Open <ArrowRight size={12} />
                     </div>
                 </Link>
 
-                <div className="bg-white border border-slate-200 rounded-[1.25rem] md:rounded-[1.5rem] p-4 md:p-6 shadow-sm">
-                    <div className="flex items-start justify-between mb-4 md:mb-6">
-                        <div className="w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400">
-                            <Send size={20} className="md:hidden" /><Send size={28} className="hidden md:block" />
+                <div className="bg-white border border-slate-200 rounded-none p-5 shadow-sm">
+                    <div className="flex items-start justify-between mb-4">
+                        <div className="w-10 h-10 rounded-none bg-slate-50 flex items-center justify-center text-slate-500">
+                            <Send size={20} />
                         </div>
                     </div>
-                    <h3 className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">My Memos</h3>
-                    <p className="text-lg md:text-xl font-black text-[#1a365d] tracking-tighter">{my_total}</p>
-                    <div className="mt-3 md:mt-6 flex items-center gap-2 text-[9px] font-black text-slate-300 uppercase tracking-widest leading-none">
+                    <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">My Memos</h3>
+                    <p className="text-2xl font-black text-[#1a365d] tracking-tighter">{my_total}</p>
+                    <div className="mt-4 flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">
                         History
                     </div>
                 </div>
 
-                <div className="bg-white border border-slate-200 rounded-[1.25rem] md:rounded-[1.5rem] p-4 md:p-6 shadow-sm">
-                    <div className="flex items-start justify-between mb-4 md:mb-6">
-                        <div className="w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-2xl bg-[#1a365d] flex items-center justify-center text-white">
-                            <ShieldCheck size={20} className="md:hidden" /><ShieldCheck size={28} className="hidden md:block" />
+                <div className="bg-white border border-slate-200 rounded-none p-5 shadow-sm">
+                    <div className="flex items-start justify-between mb-4">
+                        <div className="w-10 h-10 rounded-none bg-[#1a365d] flex items-center justify-center text-white">
+                            <ShieldCheck size={20} />
                         </div>
                     </div>
-                    <h3 className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Broadcasts</h3>
-                    <p className="text-lg md:text-xl font-black text-[#1a365d] tracking-tighter">{university_total}</p>
-                    <div className="mt-3 md:mt-6 flex items-center gap-2 text-[9px] font-black text-slate-300 uppercase tracking-widest leading-none">
+                    <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Broadcasts</h3>
+                    <p className="text-2xl font-black text-[#1a365d] tracking-tighter">{university_total}</p>
+                    <div className="mt-4 flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">
                         Broadcasted
                     </div>
                 </div>

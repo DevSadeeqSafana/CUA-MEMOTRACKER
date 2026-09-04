@@ -95,15 +95,15 @@ export default async function UserManagementPage({
 
     return (
         <div className="space-y-6 animate-in fade-in duration-700 font-sans">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 md:gap-5 bg-white p-4 md:p-5 rounded-2xl border border-slate-200 shadow-sm">
-                <div className="space-y-1">
-                    <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#1a365d] flex items-center justify-center border border-blue-100">
-                            <UsersIcon size={18} />
-                        </div>
-                        <h1 className="text-xl font-black tracking-tight text-[#1a365d] font-outfit">User Directory</h1>
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-5 md:p-6 border border-slate-200 shadow-sm rounded-none">
+                <div className="flex items-center gap-3.5">
+                    <div className="w-9 h-9 bg-[#1a365d] text-white flex items-center justify-center font-bold shrink-0 rounded-none">
+                        <UsersIcon size={18} />
                     </div>
-                    <p className="text-[10px] text-slate-500 font-medium ml-[44px]">Manage institutional accounts and system permissions.</p>
+                    <div>
+                        <h1 className="text-xl md:text-2xl font-black tracking-tight text-[#1a365d] font-outfit uppercase">User Directory</h1>
+                        <p className="text-xs text-slate-500 font-medium">Manage institutional accounts and system permissions.</p>
+                    </div>
                 </div>
 
                 <CreateUserFormWrapper />
@@ -112,19 +112,19 @@ export default async function UserManagementPage({
             {/* Controls */}
             <div className="flex flex-col sm:flex-row gap-3">
                 <UserSearch />
-                <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-500 font-bold hover:bg-slate-50 transition-all shadow-sm shrink-0">
+                <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-none text-slate-500 font-bold hover:bg-slate-50 transition-all shadow-sm shrink-0">
                     <Filter size={14} />
                     Filters
                 </button>
                 <div className="flex-grow" />
-                <div className="bg-slate-50 border border-slate-200 px-3.5 py-1.5 rounded-xl flex items-center gap-3">
+                <div className="bg-slate-50 border border-slate-200 px-3.5 py-1.5 rounded-none flex items-center gap-3">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Users</span>
                     <span className="text-sm font-black text-[#1a365d]">{totalUsers}</span>
                 </div>
             </div>
 
             {/* Table Interface */}
-            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden text-slate-900">
+            <div className="bg-white border border-slate-200 rounded-none shadow-sm overflow-hidden text-slate-900">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse min-w-[1200px]">
                         <thead>
