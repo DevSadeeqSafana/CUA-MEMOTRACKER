@@ -26,6 +26,80 @@ async function getVCUserId() {
     }
 }
 
+async function getAccountantUserId() {
+    try {
+        const rows = await query(`
+            SELECT u.id 
+            FROM memo_system_users u
+            JOIN user_roles ur ON u.id = ur.user_id
+            JOIN roles r ON ur.role_id = r.id
+            WHERE r.name = 'Accountant'
+            LIMIT 1
+        `) as any[];
+        if (rows.length > 0) return rows[0].id;
+
+        // Fallback specifically for Chidi Teddy Ojiako
+        const chidiRows = await query(`
+            SELECT id FROM memo_system_users
+            WHERE email LIKE '%chidi.ojiako%' OR staff_id = 'E0152'
+            LIMIT 1
+        `) as any[];
+        return chidiRows.length > 0 ? chidiRows[0].id : null;
+    } catch (error) {
+        console.error('Failed to get Accountant user ID:', error);
+        return null;
+    }
+}
+
+export async function routeApprovedFinanceMemoToAccountant(memoId: number) {
+    try {
+        const memoCheck = await query(`
+            SELECT m.id, m.title, m.category,
+                   (SELECT COUNT(*) FROM memo_budget_info bi WHERE bi.memo_id = m.id) as budget_info_count,
+                   (SELECT COUNT(*) FROM memo_budget_items bi WHERE bi.memo_id = m.id) as budget_items_count
+            FROM memos m
+            WHERE m.id = ?
+        `, [memoId]) as any[];
+
+        if (memoCheck.length === 0) return;
+
+        const memo = memoCheck[0];
+        const categoryLower = (memo.category || '').toLowerCase();
+        const financeTerms = ['finance', 'budget', 'payment', 'expense', 'reimbursement', 'procurement', 'financial', 'accounts', 'accounting', 'funds'];
+        const isFinanceCategory = financeTerms.some(term => categoryLower.includes(term));
+        const isBudgetMemo = memo.budget_info_count > 0 || memo.budget_items_count > 0 || isFinanceCategory;
+
+        if (!isBudgetMemo) return;
+
+        const accountantId = await getAccountantUserId();
+        if (!accountantId) {
+            console.warn(`routeApprovedFinanceMemoToAccountant: No Accountant user found for memo ${memoId}`);
+            return;
+        }
+
+        await query(`
+            INSERT INTO memo_finance_processing (memo_id, accountant_id, status)
+            VALUES (?, ?, 'Pending Processing')
+            ON DUPLICATE KEY UPDATE accountant_id = VALUES(accountant_id)
+        `, [memoId, accountantId]);
+
+        await query(`
+            INSERT IGNORE INTO memo_recipients (memo_id, recipient_id, recipient_type)
+            VALUES (?, ?, 'To')
+        `, [memoId, accountantId]);
+
+        await query(`
+            INSERT INTO notifications (user_id, memo_id, message)
+            VALUES (?, ?, ?)
+        `, [accountantId, memoId, `New approved financial budget memo requiring processing: "${memo.title}"`]);
+
+        console.log(`routeApprovedFinanceMemoToAccountant: Memo ${memoId} successfully routed to accountant ID ${accountantId}`);
+    } catch (error) {
+        console.error('routeApprovedFinanceMemoToAccountant Error:', error);
+    }
+}
+
+
 export async function createMemo(data: FormData, isDraft: boolean) {
     console.log('--- Starting createMemo action ---');
     const session = await auth();
@@ -181,6 +255,7 @@ export async function createMemo(data: FormData, isDraft: boolean) {
                 await sendMemoNotificationEmail(memoId, 'SUBMITTED');
             } else {
                 await query('UPDATE memos SET status = "Distributed" WHERE id = ?', [memoId]);
+                await routeApprovedFinanceMemoToAccountant(memoId);
                 
                 // Trigger email notifications to recipients & creator for automatic distribution
                 await sendMemoNotificationEmail(memoId, 'DISTRIBUTED');
@@ -242,6 +317,7 @@ export async function approveMemo(memoId: number, approvalId: number, comments: 
         } else {
             // Final approval complete: Distribute
             await query('UPDATE memos SET status = "Distributed" WHERE id = ?', [memoId]);
+            await routeApprovedFinanceMemoToAccountant(memoId);
             const memo = await query('SELECT created_by, title FROM memos WHERE id = ?', [memoId]) as any[];
 
             await query(
@@ -1372,6 +1448,12 @@ export async function getSidebarCounts() {
             SELECT COUNT(*) as count FROM memos WHERE created_by = ? AND status != 'Draft'
         `, [userId]) as any[];
 
+        const [accountantQueue] = await query(`
+            SELECT COUNT(*) as count 
+            FROM memo_finance_processing fp
+            WHERE fp.status IN ('Pending Processing', 'In Progress')
+        `) as any[];
+
         const actions = (pendingApprovals?.count || 0) + (pendingConsultations?.count || 0);
         const inbox = (unreadInbox?.count || 0) + actions;
 
@@ -1380,11 +1462,12 @@ export async function getSidebarCounts() {
             important: importantCount?.count || 0,
             actions,
             sent: sentCount?.count || 0,
-            drafts: draftsCount?.count || 0
+            drafts: draftsCount?.count || 0,
+            accountant_queue: accountantQueue?.count || 0
         };
     } catch (e) {
         console.error('getSidebarCounts error:', e);
-        return { inbox: 0, important: 0, actions: 0, sent: 0, drafts: 0 };
+        return { inbox: 0, important: 0, actions: 0, sent: 0, drafts: 0, accountant_queue: 0 };
     }
 }
 
@@ -1514,6 +1597,7 @@ export async function updateDraftMemo(memoId: number, data: FormData, submitNow:
                 await sendMemoNotificationEmail(memoId, 'SUBMITTED');
             } else {
                 await query('UPDATE memos SET status = "Distributed" WHERE id = ?', [memoId]);
+                await routeApprovedFinanceMemoToAccountant(memoId);
 
                 // Trigger email notifications to recipients & creator for automatic distribution
                 await sendMemoNotificationEmail(memoId, 'DISTRIBUTED');
@@ -1636,6 +1720,7 @@ export async function updateRejectedMemo(memoId: number, data: FormData, submitN
                 await sendMemoNotificationEmail(memoId, 'RESUBMITTED');
             } else {
                 await query('UPDATE memos SET status = "Distributed" WHERE id = ?', [memoId]);
+                await routeApprovedFinanceMemoToAccountant(memoId);
 
                 // Trigger email notifications to recipients & creator for automatic distribution
                 await sendMemoNotificationEmail(memoId, 'DISTRIBUTED');
@@ -1663,4 +1748,125 @@ export async function updateRejectedMemo(memoId: number, data: FormData, submitN
         return { success: false, error: e.message || 'Update failed' };
     }
 }
+
+// ─── ACCOUNTANT FINANCE PROCESSING ACTIONS ───────────────────────────────────
+
+export async function getAccountantFinanceMemos(statusFilter?: string) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error('Unauthorized');
+
+    try {
+        let whereClause = '';
+        const params: any[] = [];
+
+        if (statusFilter && statusFilter !== 'All') {
+            whereClause = ' WHERE fp.status = ?';
+            params.push(statusFilter);
+        }
+
+        const memos = await query(`
+            SELECT 
+                fp.id as processing_id,
+                fp.memo_id,
+                fp.status as processing_status,
+                fp.processing_notes,
+                fp.voucher_number,
+                fp.processed_at,
+                fp.created_at as routed_at,
+                m.uuid,
+                m.reference_number,
+                m.title,
+                m.category,
+                m.priority,
+                m.status as memo_status,
+                m.created_at as memo_created_at,
+                m.updated_at as memo_updated_at,
+                COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as creator_name,
+                hs.Designation as creator_designation,
+                COALESCE(
+                    (SELECT SUM(total) FROM memo_budget_items WHERE memo_id = m.id),
+                    0
+                ) as total_budget_amount,
+                (SELECT COUNT(*) FROM memo_budget_items WHERE memo_id = m.id) as budget_items_count,
+                bi.budget_category
+            FROM memo_finance_processing fp
+            JOIN memos m ON fp.memo_id = m.id
+            JOIN memo_system_users u ON m.created_by = u.id
+            LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+            LEFT JOIN memo_budget_info bi ON m.id = bi.memo_id
+            ${whereClause}
+            ORDER BY fp.created_at DESC
+        `, params) as any[];
+
+        return { success: true, memos };
+    } catch (error: any) {
+        console.error('getAccountantFinanceMemos Error:', error);
+        return { success: false, error: error.message || 'Failed to fetch accountant memos' };
+    }
+}
+
+export async function updateFinanceMemoProcessingStatus(
+    processingId: number,
+    status: 'Pending Processing' | 'In Progress' | 'Processed' | 'Rejected',
+    notes?: string,
+    voucherNumber?: string
+) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error('Unauthorized');
+    const userId = parseInt(session.user.id);
+
+    try {
+        const existing = await query(`
+            SELECT fp.*, m.id as memo_id, m.created_by, m.title, m.uuid
+            FROM memo_finance_processing fp
+            JOIN memos m ON fp.memo_id = m.id
+            WHERE fp.id = ?
+        `, [processingId]) as any[];
+
+        if (existing.length === 0) {
+            return { success: false, error: 'Finance processing record not found' };
+        }
+
+        const record = existing[0];
+        const isFinal = status === 'Processed' || status === 'Rejected';
+
+        await query(`
+            UPDATE memo_finance_processing
+            SET status = ?,
+                processing_notes = ?,
+                voucher_number = ?,
+                processed_at = ?,
+                accountant_id = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        `, [status, notes || null, voucherNumber || null, isFinal ? new Date() : null, userId, processingId]);
+
+        // Notify creator
+        let message = `Financial processing status for memo "${record.title}" updated to: ${status}`;
+        if (voucherNumber) {
+            message += ` (Payment Voucher: ${voucherNumber})`;
+        }
+        await query(`
+            INSERT INTO notifications (user_id, memo_id, message)
+            VALUES (?, ?, ?)
+        `, [record.created_by, record.memo_id, message]);
+
+        // Audit log
+        await query(`
+            INSERT INTO audit_logs (user_id, action, table_name, record_id, new_value)
+            VALUES (?, 'UPDATE_FINANCE_PROCESSING', 'memo_finance_processing', ?, ?)
+        `, [userId, processingId, JSON.stringify({ status, notes, voucherNumber })]);
+
+        revalidatePath('/dashboard/accountant');
+        revalidatePath(`/dashboard/memos/${record.uuid}`);
+        revalidatePath('/dashboard/tasks');
+        revalidatePath('/dashboard');
+
+        return { success: true };
+    } catch (error: any) {
+        console.error('updateFinanceMemoProcessingStatus Error:', error);
+        return { success: false, error: error.message || 'Failed to update processing status' };
+    }
+}
+
 

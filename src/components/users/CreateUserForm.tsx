@@ -146,6 +146,7 @@ export default function CreateUserForm({ onClose }: CreateUserFormProps) {
         'Line Manager',
         'Reviewer',
         'Recipient',
+        'Accountant',
         'Administrator'
     ];
 

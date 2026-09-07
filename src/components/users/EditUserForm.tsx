@@ -67,6 +67,7 @@ export default function EditUserForm({ user, managers, onClose }: EditUserFormPr
         'Line Manager',
         'Reviewer',
         'Recipient',
+        'Accountant',
         'Administrator'
     ];
 

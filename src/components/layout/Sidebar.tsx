@@ -16,7 +16,8 @@ import {
     X,
     Star,
     AlertCircle,
-    Send
+    Send,
+    Landmark
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getSidebarCounts } from '@/lib/actions';
@@ -27,8 +28,8 @@ export default function Sidebar({ user, userRoles, handleSignOut }: { user: any,
     const searchParams = useSearchParams();
     const folder = searchParams.get('folder') || 'inbox';
 
-    const [counts, setCounts] = useState<{ inbox: number, important: number, actions: number, sent: number, drafts: number }>({
-        inbox: 0, important: 0, actions: 0, sent: 0, drafts: 0
+    const [counts, setCounts] = useState<{ inbox: number, important: number, actions: number, sent: number, drafts: number, accountant_queue?: number }>({
+        inbox: 0, important: 0, actions: 0, sent: 0, drafts: 0, accountant_queue: 0
     });
 
     const fetchCounts = async () => {
@@ -52,6 +53,7 @@ export default function Sidebar({ user, userRoles, handleSignOut }: { user: any,
         { href: '/dashboard/memos/new', label: 'Compose', icon: PlusCircle, roles: [], isCompose: true },
         { href: '/dashboard', label: 'Overview', icon: CheckSquare, roles: [] },
         { href: '/dashboard/tasks?folder=inbox', label: 'Inbox', icon: Inbox, roles: [], badgeKey: 'inbox' as const },
+        { href: '/dashboard/accountant', label: 'Finance Queue', icon: Landmark, roles: ['Accountant'], badgeKey: 'accountant_queue' as const },
         { href: '/dashboard/tasks?folder=important', label: 'Important', icon: Star, roles: [], badgeKey: 'important' as const },
         { href: '/dashboard/tasks?folder=actions', label: 'Action Queue', icon: AlertCircle, roles: [], badgeKey: 'actions' as const },
         { href: '/dashboard/tasks?folder=sent', label: 'Sent Memos', icon: Send, roles: [], badgeKey: 'sent' as const },
@@ -154,7 +156,7 @@ export default function Sidebar({ user, userRoles, handleSignOut }: { user: any,
                                     isActive ? "opacity-100 text-blue-300" : "opacity-70 group-hover:opacity-100"
                                 )} />
                                 <span className="text-xs tracking-wide">{link.label}</span>
-                                {link.badgeKey && counts[link.badgeKey] > 0 && (
+                                {link.badgeKey && (counts[link.badgeKey] ?? 0) > 0 && (
                                     <span className="ml-auto bg-blue-500/25 border border-blue-400/20 text-blue-200 font-black text-[9px] px-2 py-0.5 rounded-full shadow-sm shrink-0">
                                         {counts[link.badgeKey]}
                                     </span>

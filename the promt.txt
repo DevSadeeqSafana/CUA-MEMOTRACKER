@@ -1,0 +1,3 @@
+The following task has been started earlier, check the imeplementation plan and it's status and compltete it:
+
+"Chidi teddy ojiako is the universites accountant, any approved finance budget memo in memo system  should be delivered to him after aprroval from the final destination the user intends to send, the system should automatically route the approved finace memo's to him for processing, a new tab shouls be added to his account for this very purpose"
