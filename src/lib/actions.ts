@@ -166,11 +166,14 @@ export async function createMemo(data: FormData, isDraft: boolean) {
 
         // 2. Handle Budget Info
         if (is_budget_memo) {
+            const itemCategories = Array.from(new Set(budget_items.map((i: any) => i.budget_category).filter(Boolean)));
+            const finalBudgetCategory = itemCategories.length > 0 ? itemCategories.join(', ') : budget_category;
+
             await query(
                 `INSERT INTO memo_budget_info 
                  (memo_id, year_id, budget_category, other_category) 
                  VALUES (?, ?, ?, ?)`,
-                [memoId, year_id, budget_category, other_category]
+                [memoId, year_id, finalBudgetCategory, other_category]
             );
 
             for (let i = 0; i < budget_items.length; i++) {
@@ -185,11 +188,16 @@ export async function createMemo(data: FormData, isDraft: boolean) {
                     itemAttachmentPath = await uploadFile(itemFile, uuid);
                 }
 
+                let finalDesc = item.description || '';
+                if (item.budget_category && !finalDesc.startsWith(`[${item.budget_category}]`)) {
+                    finalDesc = finalDesc ? `[${item.budget_category}] ${finalDesc}` : `[${item.budget_category}]`;
+                }
+
                 await query(
                     `INSERT INTO memo_budget_items 
                      (memo_id, name, description, quantity, amount, total, attachment_path) 
                      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                    [memoId, item.name, item.description || '', item.quantity || 1, item.amount || 0, subtotal, itemAttachmentPath]
+                    [memoId, item.name, finalDesc, item.quantity || 1, item.amount || 0, subtotal, itemAttachmentPath]
                 );
             }
         }
@@ -895,38 +903,65 @@ export async function changePassword(formData: { currentPassword: string; newPas
 
 export async function getBudgetItemsByListId(categoryNameOrId?: string | number) {
     try {
-        let sql = `
-            SELECT EntryID as id, ItemName as name, ItemDescription as description, Amount as amount, Quantity as quantity
-            FROM hr_finance_budget_item
-            WHERE ItemName IS NOT NULL AND ItemName != ''
-        `;
-        const params: any[] = [];
-        if (categoryNameOrId && typeof categoryNameOrId === 'string' && categoryNameOrId.trim() !== '') {
-            sql += ` AND (ItemName LIKE ? OR ItemDescription LIKE ?)`;
-            params.push(`%${categoryNameOrId}%`, `%${categoryNameOrId}%`);
-        }
-        sql += ` ORDER BY ItemName ASC LIMIT 200`;
-
-        let items = await query(sql, params) as any[];
-
-        if (items.length === 0) {
-            items = await query(`
-                SELECT EntryID as id, ItemName as name, ItemDescription as description, Amount as amount, Quantity as quantity
-                FROM hr_finance_budget_item
-                WHERE ItemName IS NOT NULL AND ItemName != ''
-                ORDER BY ItemName ASC LIMIT 200
-            `) as any[];
+        if (!categoryNameOrId) {
+            return [];
         }
 
-        return items.map((r: any) => ({
-            id: r.id,
-            name: r.name,
-            description: r.description || '',
-            amount: Number(r.amount) || 0,
-            quantity: Number(r.quantity) || 1,
-        }));
+        const isNumeric = !isNaN(Number(categoryNameOrId)) && String(categoryNameOrId).trim() !== '';
+        let sql = '';
+        let params: any[] = [];
+
+        if (isNumeric) {
+            sql = `
+                SELECT i.EntryID as id, i.ItemName as category_name, i.ItemDescription as description, i.Amount as amount, i.Quantity as quantity
+                FROM hr_finance_budget_item i
+                JOIN hr_finance_budget_item_list l ON TRIM(LOWER(i.ItemName)) = TRIM(LOWER(l.ItemName))
+                WHERE l.EntryID = ?
+                ORDER BY i.EntryID ASC
+            `;
+            params = [Number(categoryNameOrId)];
+        } else {
+            sql = `
+                SELECT i.EntryID as id, i.ItemName as category_name, i.ItemDescription as description, i.Amount as amount, i.Quantity as quantity
+                FROM hr_finance_budget_item i
+                WHERE TRIM(LOWER(i.ItemName)) = TRIM(LOWER(?))
+                ORDER BY i.EntryID ASC
+            `;
+            params = [String(categoryNameOrId).trim()];
+        }
+
+        const items = await query(sql, params) as any[];
+
+        return items.map((r: any) => {
+            const rawDesc = (r.description || '').trim();
+            let itemName = '';
+            let itemDesc = rawDesc;
+
+            if (rawDesc) {
+                const productMatch = rawDesc.match(/^Product:\s*([^|]+)(?:\s*\|\s*(.*))?$/i);
+                if (productMatch) {
+                    itemName = productMatch[1].trim();
+                    itemDesc = rawDesc;
+                } else {
+                    itemName = rawDesc;
+                    itemDesc = rawDesc;
+                }
+            } else {
+                itemName = r.category_name || '';
+                itemDesc = '';
+            }
+
+            return {
+                id: r.id,
+                category: r.category_name,
+                name: itemName,
+                description: itemDesc,
+                amount: Number(r.amount) || 0,
+                quantity: Number(r.quantity) || 1,
+            };
+        });
     } catch (error) {
-        console.error('Failed to fetch budget items by list id:', error);
+        console.error('Failed to fetch budget items by category:', error);
         return [];
     }
 }
@@ -1561,16 +1596,23 @@ export async function updateDraftMemo(memoId: number, data: FormData, submitNow:
             const year_id         = data.get('year_id') as string;
             const budget_category = data.get('budget_category') as string;
             const other_category  = data.get('other_category') as string;
+            const budgetItems     = JSON.parse(data.get('budget_items') as string || '[]');
+            const itemCategories  = Array.from(new Set(budgetItems.map((i: any) => i.budget_category).filter(Boolean)));
+            const finalBudgetCategory = itemCategories.length > 0 ? itemCategories.join(', ') : budget_category;
+
             await query(
                 `INSERT INTO memo_budget_info (memo_id, year_id, budget_category, other_category) VALUES (?, ?, ?, ?)`,
-                [memoId, year_id, budget_category, other_category]
+                [memoId, year_id, finalBudgetCategory, other_category]
             );
-            const budgetItems = JSON.parse(data.get('budget_items') as string || '[]');
             for (const item of budgetItems) {
                 const subtotal = (item.quantity || 1) * (item.amount || 0);
+                let finalDesc = item.description || '';
+                if (item.budget_category && !finalDesc.startsWith(`[${item.budget_category}]`)) {
+                    finalDesc = finalDesc ? `[${item.budget_category}] ${finalDesc}` : `[${item.budget_category}]`;
+                }
                 await query(
                     `INSERT INTO memo_budget_items (memo_id, name, description, quantity, amount, total) VALUES (?, ?, ?, ?, ?, ?)`,
-                    [memoId, item.name, item.description || '', item.quantity || 1, item.amount || 0, subtotal]
+                    [memoId, item.name, finalDesc, item.quantity || 1, item.amount || 0, subtotal]
                 );
             }
         }
@@ -1681,16 +1723,23 @@ export async function updateRejectedMemo(memoId: number, data: FormData, submitN
             const year_id         = data.get('year_id') as string;
             const budget_category = data.get('budget_category') as string;
             const other_category  = data.get('other_category') as string;
+            const budgetItems     = JSON.parse(data.get('budget_items') as string || '[]');
+            const itemCategories  = Array.from(new Set(budgetItems.map((i: any) => i.budget_category).filter(Boolean)));
+            const finalBudgetCategory = itemCategories.length > 0 ? itemCategories.join(', ') : budget_category;
+
             await query(
                 `INSERT INTO memo_budget_info (memo_id, year_id, budget_category, other_category) VALUES (?, ?, ?, ?)`,
-                [memoId, year_id, budget_category, other_category]
+                [memoId, year_id, finalBudgetCategory, other_category]
             );
-            const budgetItems = JSON.parse(data.get('budget_items') as string || '[]');
             for (const item of budgetItems) {
                 const subtotal = (item.quantity || 1) * (item.amount || 0);
+                let finalDesc = item.description || '';
+                if (item.budget_category && !finalDesc.startsWith(`[${item.budget_category}]`)) {
+                    finalDesc = finalDesc ? `[${item.budget_category}] ${finalDesc}` : `[${item.budget_category}]`;
+                }
                 await query(
                     `INSERT INTO memo_budget_items (memo_id, name, description, quantity, amount, total) VALUES (?, ?, ?, ?, ?, ?)`,
-                    [memoId, item.name, item.description || '', item.quantity || 1, item.amount || 0, subtotal]
+                    [memoId, item.name, finalDesc, item.quantity || 1, item.amount || 0, subtotal]
                 );
             }
         }

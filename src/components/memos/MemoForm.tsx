@@ -44,10 +44,11 @@ const memoSchema = z.object({
     custom_category: z.string().optional(),
     budget_items: z.array(z.object({
         name: z.string(),
+        budget_category: z.string().optional(),
         budget_item_group: z.string().optional(),
         specific_item: z.string().optional(),
         description: z.string().optional(),
-        quantity: z.number().min(1),
+        quantity: z.number().min(1, 'Quantity must be at least 1'),
         amount: z.number().min(0),
         total: z.number().optional(),
         file: z.any().optional(),
@@ -57,15 +58,15 @@ const memoSchema = z.object({
         if (!data.year_id) {
             ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Budget Year is required", path: ["year_id"] });
         }
-        if (!data.budget_category) {
-            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Budget Category is required", path: ["budget_category"] });
-        }
         if (!data.budget_items || data.budget_items.length === 0) {
-            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "At least one budget item is required", path: ["budget_items"] });
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "At least one requisition item is required", path: ["budget_items"] });
         } else {
             data.budget_items.forEach((item, idx) => {
+                if (!item.budget_category || item.budget_category.trim().length === 0) {
+                    ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Requisition #${idx + 1}: Budget category is required`, path: ["budget_items", idx, "budget_category"] });
+                }
                 if (!item.name || item.name.trim().length === 0) {
-                    ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Item #${idx + 1} name is required`, path: ["budget_items", idx, "name"] });
+                    ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Requisition #${idx + 1}: Budget item is required`, path: ["budget_items", idx, "name"] });
                 }
             });
         }
@@ -198,11 +199,12 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
 
     const [budgetYears, setBudgetYears] = useState<any[]>([]);
     const [budgetCategories, setBudgetCategories] = useState<{ id: string | number, name: string }[]>([]);
-    // map: categoryId -> items loaded from DB
+    // map: categoryId/name -> items loaded from DB
     const [categoryItems, setCategoryItems] = useState<Record<string, { id: string | number, name: string, description: string, amount: number }[]>>({});
+    const [loadingCategory, setLoadingCategory] = useState<Record<string, boolean>>({});
+    const [customItemMode, setCustomItemMode] = useState<Record<number, boolean>>({});
     const [departments, setDepartments] = useState<{ name: string }[]>([]);
     const [currentYear, setCurrentYear] = useState<{ id: string, name: string } | null>(null);
-    const [loadingItems, setLoadingItems] = useState(false);
 
     const {
         register,
@@ -230,8 +232,14 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
             other_category: initialData?.other_category || '',
             custom_category: (initialData as any)?.custom_category || '',
             budget_items: initialData?.budget_items && initialData.budget_items.length > 0
-                ? initialData.budget_items
-                : [{ name: '', description: '', quantity: 1, amount: 0, total: 0 }],
+                ? initialData.budget_items.map((i: any) => ({
+                    ...i,
+                    budget_category: i.budget_category || initialData.budget_category || '',
+                    quantity: Number(i.quantity) || 1,
+                    amount: Number(i.amount) || 0,
+                    total: Number(i.total) || (Number(i.quantity) || 1) * (Number(i.amount) || 0)
+                }))
+                : [{ budget_category: '', name: '', description: '', quantity: 1, amount: 0, total: 0 }],
         },
     });
 
@@ -244,41 +252,63 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
         setValue('is_budget_memo', false);
         setValue('budget_category', '');
         setValue('other_category', '');
-        setValue('budget_items', [{ name: '', budget_item_group: '', specific_item: '', description: '', quantity: 1, amount: 0, total: 0 }]);
+        setValue('budget_items', [{ budget_category: '', name: '', description: '', quantity: 1, amount: 0, total: 0 }]);
+        setCustomItemMode({});
         setIsBudgetModalOpen(false);
         toast.success('Financial Requisition attachment removed.');
     };
 
+    const loadItemsForCategory = async (catName?: string) => {
+        if (!catName || !catName.trim()) return [];
+        const normKey = catName.trim().toLowerCase();
+        if (categoryItems[normKey] !== undefined) return categoryItems[normKey];
 
-    const loadItemsForCategory = async (catNameOrId?: string | number) => {
-        const key = catNameOrId ? String(catNameOrId) : 'all';
-        if (categoryItems[key] && categoryItems[key].length > 0) return;
-        setLoadingItems(true);
-        const items = await getBudgetItemsByListId(catNameOrId);
-        setCategoryItems(prev => ({ ...prev, [key]: items }));
-        setLoadingItems(false);
+        setLoadingCategory(prev => ({ ...prev, [normKey]: true, [catName]: true }));
+        try {
+            const items = await getBudgetItemsByListId(catName.trim());
+            setCategoryItems(prev => ({
+                ...prev,
+                [normKey]: items,
+                [catName]: items
+            }));
+            return items;
+        } finally {
+            setLoadingCategory(prev => ({ ...prev, [normKey]: false, [catName]: false }));
+        }
     };
 
+    const syncTopLevelCategory = () => {
+        const currentItems = watch('budget_items') || [];
+        const cats = Array.from(new Set(currentItems.map(i => i.budget_category).filter(Boolean)));
+        setValue('budget_category', cats.join(', '));
+    };
 
     useEffect(() => {
         if (Object.keys(errors).length > 0) console.log('Form Errors:', errors);
     }, [errors]);
 
     useEffect(() => {
+        if (initialData?.budget_items && initialData.budget_items.length > 0) {
+            const uniqueCats = Array.from(new Set(initialData.budget_items.map((i: any) => i.budget_category || initialData.budget_category).filter(Boolean)));
+            uniqueCats.forEach(catName => {
+                if (catName) loadItemsForCategory(catName as string);
+            });
+        }
+    }, [initialData]);
+
+    useEffect(() => {
         const fetchInitialData = async () => {
-            const [years, categories, depts, curYear, initialItems] = await Promise.all([
+            const [years, categories, depts, curYear] = await Promise.all([
                 getBudgetYears(),
                 getBudgetItemLists(),
                 getDepartments(),
-                getCurrentFiscalYear(),
-                getBudgetItemsByListId()
+                getCurrentFiscalYear()
             ]);
             setBudgetYears(years);
             setBudgetCategories(categories);
             setDepartments(depts);
             setCurrentYear(curYear);
             if (curYear) setValue('year_id', curYear.id);
-            setCategoryItems({ all: initialItems });
         };
         fetchInitialData();
     }, [setValue]);
@@ -299,7 +329,12 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
     };
 
     const handleSubmission = (data: MemoFormValues, isDraft: boolean) => {
-        onSubmit({ ...data, attachments }, isDraft);
+        const cats = Array.from(new Set((data.budget_items || []).map(i => i.budget_category).filter(Boolean)));
+        const finalData = {
+            ...data,
+            budget_category: cats.join(', ') || data.budget_category || ''
+        };
+        onSubmit({ ...finalData, attachments }, isDraft);
     };
 
     const onInvalid = (errors: any) => {
@@ -592,28 +627,35 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                         <h4 className="text-xs font-black text-[#1a365d] uppercase tracking-wider">
                                             Financial Requisition Details
                                         </h4>
-                                        {watch('budget_category') && (
-                                            <span className="bg-emerald-100 text-emerald-800 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded">
-                                                {watch('budget_category')}
+                                        {Array.from(new Set(budgetItems.map(i => i.budget_category).filter(Boolean))).map((cat, ci) => (
+                                            <span key={ci} className="bg-emerald-100 text-emerald-800 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded">
+                                                {cat}
                                             </span>
-                                        )}
+                                        ))}
                                     </div>
                                     {budgetItems.length > 0 && budgetItems.some(i => i.name) ? (
                                         <>
                                             <p className="text-[10px] font-bold text-slate-500">
-                                                {budgetItems.filter(i => i.name).length} item{budgetItems.filter(i => i.name).length !== 1 ? 's' : ''} listed for Fiscal Year: {currentYear?.name || 'Loading...'}
+                                                {budgetItems.filter(i => i.name).length} requisition item{budgetItems.filter(i => i.name).length !== 1 ? 's' : ''} configured for Fiscal Year: {currentYear?.name || 'Active Fiscal Year'}
                                             </p>
                                             <div className="flex flex-wrap gap-1.5 mt-2">
                                                 {budgetItems.filter(i => i.name).map((item, idx) => (
-                                                    <span key={idx} className="bg-white border border-slate-100 text-slate-600 text-[9px] font-bold px-2 py-0.5 rounded-lg">
-                                                        {item.name} ({item.quantity}x)
+                                                    <span key={idx} className="bg-white border border-slate-200/80 text-slate-700 text-[9px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-2xs">
+                                                        {item.budget_category && (
+                                                            <span className="text-emerald-700 font-black">[{item.budget_category}]</span>
+                                                        )}
+                                                        <span>{item.name}</span>
+                                                        <span className="text-slate-400">({item.quantity}x)</span>
+                                                        {Number(item.amount || 0) > 0 && (
+                                                            <span className="text-emerald-600 font-black">₦{((item.quantity || 1) * (item.amount || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                                        )}
                                                     </span>
                                                 ))}
                                             </div>
                                         </>
                                     ) : (
                                         <p className="text-[10px] font-bold text-slate-400">
-                                            No expense line items added yet. Click setup to add items.
+                                            No requisition items added yet. Click &quot;Add Requisition Items&quot; to configure categories and items.
                                         </p>
                                     )}
                                 </div>
@@ -622,7 +664,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                             <div className="flex items-center gap-3 self-end md:self-center shrink-0">
                                 {(budgetItems.length > 0 && budgetItems.some(i => i.name)) && (
                                     <div className="text-right mr-1">
-                                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Calculated Expense</p>
+                                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Requisition Grand Total</p>
                                         <p className="text-sm font-black text-emerald-700">
                                             NGN {grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                         </p>
@@ -742,133 +784,243 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                         </div>
 
                         {/* Modal Body */}
-                        <div className="p-8 space-y-6 flex-1 overflow-y-auto bg-slate-50/50">
-                            {/* Budget Category Selection Card */}
-                            <div className="bg-white border border-slate-200 p-6 rounded-2xl space-y-4 shadow-sm">
-                                <h4 className="text-[10px] font-black text-[#1a365d] uppercase tracking-widest">General Configuration</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                    <div className="space-y-1.5 md:col-span-2">
-                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Budget Category</label>
-                                        <select
-                                            {...register('budget_category', {
-                                                onChange: (e) => {
-                                                    const selectedName = e.target.value;
-                                                    const cat = budgetCategories.find(c => c.name === selectedName);
-                                                    loadItemsForCategory(cat ? cat.id : selectedName);
-                                                }
-                                            })}
-                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:border-emerald-500 outline-none transition-all"
-                                        >
-                                            <option value="">Select Budget Category...</option>
-                                            {budgetCategories.map(cat => (
-                                                <option key={cat.id} value={cat.name}>{cat.name}</option>
-                                            ))}
-                                        </select>
-                                        {errors.budget_category && <p className="text-[9px] text-red-500 font-bold">{errors.budget_category.message}</p>}
+                        <div className="p-6 sm:p-8 space-y-6 flex-1 overflow-y-auto bg-slate-50/50">
+                            {/* Hidden form sync fields */}
+                            <input type="hidden" {...register('year_id')} />
+                            <input type="hidden" {...register('budget_category')} />
+
+                            {/* Info & Quick Actions Banner */}
+                            <div className="bg-white border border-slate-200/80 p-5 rounded-2xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <h4 className="text-xs font-black text-[#1a365d] uppercase tracking-wider">
+                                            Requisition Items Breakdown
+                                        </h4>
+                                        <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md flex items-center gap-1">
+                                            <Check size={10} className="text-emerald-500" />
+                                            FY: {currentYear?.name || 'Active Fiscal Year'}
+                                        </span>
                                     </div>
+                                    <p className="text-[10px] text-slate-500 font-medium">
+                                        Each requisition below has its own budget category and item selection. Click &quot;+ Add Requisition Item&quot; to include multiple requisitions.
+                                    </p>
                                 </div>
-                                <input type="hidden" {...register('year_id')} />
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        append({ budget_category: '', name: '', description: '', quantity: 1, amount: 0, total: 0 });
+                                    }}
+                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm flex items-center gap-1.5 shrink-0 self-start sm:self-center"
+                                >
+                                    <Plus size={13} />
+                                    Add Requisition
+                                </button>
                             </div>
 
-                            {/* Budget line items section */}
+                            {/* Requisition Line Items List */}
                             <div className="space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <h4 className="text-[10px] font-black text-[#1a365d] uppercase tracking-widest">Budget Line Items</h4>
-                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
-                                            Select category above, then pick an item and enter quantity
-                                        </p>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => append({ name: '', description: '', quantity: 1, amount: 0, total: 0 })}
-                                        className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-sm flex items-center gap-1.5"
-                                    >
-                                        <Plus size={12} />
-                                        Add Line Item
-                                    </button>
-                                </div>
-
                                 {fields.length === 0 ? (
-                                    <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-8 text-center space-y-3">
+                                    <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-10 text-center space-y-3 shadow-xs">
                                         <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto border border-emerald-100">
                                             <Wallet size={20} />
                                         </div>
-                                        <p className="text-xs font-black text-slate-700 uppercase tracking-wider">No Requisition Line Items</p>
+                                        <p className="text-xs font-black text-slate-700 uppercase tracking-wider">No Requisition Items Added</p>
                                         <p className="text-[10px] text-slate-400 font-medium max-w-sm mx-auto">
-                                            Click below to add itemized expenses for {watch('budget_category') || 'your budget memo'}.
+                                            Add itemized budget requisitions. Each requisition will have its own category and item selection.
                                         </p>
                                         <button
                                             type="button"
-                                            onClick={() => append({ name: '', description: '', quantity: 1, amount: 0, total: 0 })}
-                                            className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/10"
+                                            onClick={() => append({ budget_category: '', name: '', description: '', quantity: 1, amount: 0, total: 0 })}
+                                            className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/10 inline-flex items-center gap-2"
                                         >
-                                            + Add Requisition Line Item
+                                            <Plus size={14} />
+                                            Add First Requisition Item
                                         </button>
                                     </div>
                                 ) : (
                                     fields.map((field, index) => {
-                                        // Determine which items are available for the selected category
-                                        const selectedCatName = watch('budget_category');
-                                        const cat = budgetCategories.find(c => c.name === selectedCatName);
-                                        const catKey = cat ? String(cat.id) : (selectedCatName || 'all');
-                                        const availableItems = (categoryItems[catKey] && categoryItems[catKey].length > 0)
-                                            ? categoryItems[catKey]
-                                            : (categoryItems['all'] || []);
+                                        const itemCat = watch(`budget_items.${index}.budget_category`) || '';
+                                        const normCat = itemCat.trim().toLowerCase();
+                                        const availableItems = itemCat ? (categoryItems[normCat] || categoryItems[itemCat] || []) : [];
+                                        const isCatLoading = Boolean(itemCat && (loadingCategory[normCat] || loadingCategory[itemCat]));
+                                        const isCustom = Boolean(customItemMode[index] || (itemCat && !isCatLoading && availableItems.length === 0));
 
                                         return (
-                                            <div key={field.id} className="bg-white border border-slate-200 p-5 rounded-2xl space-y-4 relative group shadow-sm hover:border-emerald-200 transition-all">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => remove(index)}
-                                                    className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-300 flex items-center justify-center shadow-sm z-10 transition-all"
-                                                    title="Remove item"
-                                                >
-                                                    <Trash2 size={12} />
-                                                </button>
+                                            <div
+                                                key={field.id}
+                                                className="bg-white border border-slate-200 p-5 sm:p-6 rounded-2xl space-y-4 shadow-sm hover:border-emerald-200 transition-all"
+                                            >
+                                                {/* Requisition Card Header */}
+                                                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                                                    <div className="flex items-center gap-2.5 flex-wrap">
+                                                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-emerald-100 text-emerald-800 text-[10px] font-black">
+                                                            #{index + 1}
+                                                        </span>
+                                                        <span className="text-[11px] font-black text-[#1a365d] uppercase tracking-wider">
+                                                            Requisition Item {index + 1}
+                                                        </span>
+                                                        {itemCat && (
+                                                            <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                                                                {itemCat}
+                                                            </span>
+                                                        )}
+                                                        {watch(`budget_items.${index}.name`) && (
+                                                            <span className="text-[10px] font-bold text-slate-500">
+                                                                · {watch(`budget_items.${index}.name`)}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            remove(index);
+                                                            setTimeout(syncTopLevelCategory, 50);
+                                                        }}
+                                                        className="px-2.5 py-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1"
+                                                        title="Remove this requisition"
+                                                    >
+                                                        <Trash2 size={12} />
+                                                        <span>Remove</span>
+                                                    </button>
+                                                </div>
 
                                                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                                                    {/* Item Selection Dropdown */}
-                                                    <div className="md:col-span-8 space-y-1.5">
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                                                            Budget Item
+                                                    {/* 1. Category Selection */}
+                                                    <div className="md:col-span-5 space-y-1.5">
+                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                                                            Budget Category <span className="text-red-500">*</span>
                                                         </label>
                                                         <select
-                                                            {...register(`budget_items.${index}.name`, {
-                                                                onChange: (e) => {
-                                                                    const selectedName = e.target.value;
-                                                                    const matched = availableItems.find(i => i.name === selectedName);
+                                                            {...register(`budget_items.${index}.budget_category`, {
+                                                                onChange: async (e) => {
+                                                                    const selectedCatName = e.target.value;
+                                                                    setValue(`budget_items.${index}.name`, '');
+                                                                    setValue(`budget_items.${index}.description`, '');
+                                                                    setValue(`budget_items.${index}.amount`, 0);
+                                                                    setValue(`budget_items.${index}.total`, 0);
+                                                                    setCustomItemMode(prev => ({ ...prev, [index]: false }));
+                                                                    if (selectedCatName) {
+                                                                        await loadItemsForCategory(selectedCatName);
+                                                                    }
+                                                                    syncTopLevelCategory();
+                                                                }
+                                                            })}
+                                                            className={cn(
+                                                                "w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold focus:border-emerald-500 outline-none transition-all",
+                                                                errors.budget_items?.[index]?.budget_category && "border-red-400 bg-red-50/20"
+                                                            )}
+                                                        >
+                                                            <option value="">Select Category...</option>
+                                                            {budgetCategories.map(c => (
+                                                                <option key={c.id} value={c.name}>{c.name}</option>
+                                                            ))}
+                                                        </select>
+                                                        {errors.budget_items?.[index]?.budget_category && (
+                                                            <p className="text-[9px] text-red-500 font-bold">{errors.budget_items[index]?.budget_category?.message}</p>
+                                                        )}
+                                                    </div>
+
+                                                    {/* 2. Item Selection (Filtered strictly to selected category) */}
+                                                    <div className="md:col-span-5 space-y-1.5">
+                                                        <div className="flex items-center justify-between">
+                                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                                                                Budget Item <span className="text-red-500">*</span>
+                                                            </label>
+                                                            {itemCat && availableItems.length > 0 && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        const nextState = !isCustom;
+                                                                        setCustomItemMode(prev => ({ ...prev, [index]: nextState }));
+                                                                        setValue(`budget_items.${index}.name`, '');
+                                                                        setValue(`budget_items.${index}.description`, '');
+                                                                        setValue(`budget_items.${index}.amount`, 0);
+                                                                        setValue(`budget_items.${index}.total`, 0);
+                                                                    }}
+                                                                    className="text-[9px] font-bold text-blue-600 hover:text-blue-700 underline"
+                                                                >
+                                                                    {isCustom ? '← Select from list' : '+ Custom Item'}
+                                                                </button>
+                                                            )}
+                                                        </div>
+
+                                                        {isCustom ? (
+                                                            <input
+                                                                type="text"
+                                                                {...register(`budget_items.${index}.name`)}
+                                                                placeholder={availableItems.length === 0 ? `Enter item name under ${itemCat}...` : "Enter custom item name..."}
+                                                                className={cn(
+                                                                    "w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold focus:border-emerald-500 outline-none transition-all",
+                                                                    errors.budget_items?.[index]?.name && "border-red-400 bg-red-50/20"
+                                                                )}
+                                                            />
+                                                        ) : (
+                                                            <select
+                                                                value={watch(`budget_items.${index}.name`) || ''}
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value;
+                                                                    if (val === '__custom__') {
+                                                                        setCustomItemMode(prev => ({ ...prev, [index]: true }));
+                                                                        setValue(`budget_items.${index}.name`, '');
+                                                                        setValue(`budget_items.${index}.description`, '');
+                                                                        setValue(`budget_items.${index}.amount`, 0);
+                                                                        setValue(`budget_items.${index}.total`, 0);
+                                                                        return;
+                                                                    }
+                                                                    setValue(`budget_items.${index}.name`, val);
+                                                                    const matched = availableItems.find(i => i.name === val);
                                                                     if (matched) {
                                                                         setValue(`budget_items.${index}.description`, matched.description || '');
                                                                         setValue(`budget_items.${index}.amount`, matched.amount || 0);
                                                                         const q = watch(`budget_items.${index}.quantity`) || 1;
                                                                         setValue(`budget_items.${index}.total`, q * (matched.amount || 0));
                                                                     }
-                                                                }
-                                                            })}
-                                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold focus:border-emerald-500 outline-none transition-all"
-                                                            disabled={!selectedCatName || loadingItems}
-                                                        >
-                                                            <option value="">
-                                                                {loadingItems ? 'Loading items...' : selectedCatName ? 'Select Budget Item...' : 'Select a category first'}
-                                                            </option>
-                                                            {availableItems.map((item) => (
-                                                                <option key={item.id} value={item.name}>{item.name}</option>
-                                                            ))}
-                                                        </select>
+                                                                }}
+                                                                disabled={!itemCat || isCatLoading}
+                                                                className={cn(
+                                                                    "w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold focus:border-emerald-500 outline-none transition-all",
+                                                                    (!itemCat || isCatLoading) && "opacity-60 cursor-not-allowed",
+                                                                    errors.budget_items?.[index]?.name && "border-red-400 bg-red-50/20"
+                                                                )}
+                                                            >
+                                                                <option value="">
+                                                                    {isCatLoading
+                                                                        ? `Loading items for ${itemCat}...`
+                                                                        : !itemCat
+                                                                            ? '← Select Category first'
+                                                                            : availableItems.length === 0
+                                                                                ? `No items found under ${itemCat}`
+                                                                                : `Select item under ${itemCat} (${availableItems.length} available)...`}
+                                                                </option>
+                                                                {availableItems.map((item) => (
+                                                                    <option key={item.id} value={item.name}>
+                                                                        {item.name} {item.amount > 0 ? `(₦${item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })})` : ''}
+                                                                    </option>
+                                                                ))}
+                                                                {itemCat && availableItems.length > 0 && (
+                                                                    <option value="__custom__">✏️ + Enter Custom Item...</option>
+                                                                )}
+                                                            </select>
+                                                        )}
+
+                                                        {errors.budget_items?.[index]?.name && (
+                                                            <p className="text-[9px] text-red-500 font-bold">{errors.budget_items[index]?.name?.message}</p>
+                                                        )}
                                                     </div>
 
-                                                    {/* Quantity */}
-                                                    <div className="md:col-span-4 space-y-1.5">
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Quantity</label>
+                                                    {/* 3. Quantity */}
+                                                    <div className="md:col-span-2 space-y-1.5">
+                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                                            Qty <span className="text-red-500">*</span>
+                                                        </label>
                                                         <input
                                                             type="number"
                                                             min={1}
                                                             {...register(`budget_items.${index}.quantity`, { valueAsNumber: true })}
-                                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:border-emerald-500 outline-none transition-all"
+                                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold focus:border-emerald-500 outline-none transition-all text-center"
                                                             onChange={(e) => {
                                                                 const raw = e.target.value;
-                                                                const val = raw === '' ? '' : parseInt(raw);
+                                                                const val = raw === '' ? 1 : parseInt(raw);
                                                                 setValue(`budget_items.${index}.quantity`, val as any);
                                                                 const q = typeof val === 'number' && !isNaN(val) ? val : 0;
                                                                 const a = watch(`budget_items.${index}.amount`) || 0;
@@ -877,10 +1029,12 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                                         />
                                                     </div>
 
-                                                    {/* Auto-filled Description (read-only) */}
-                                                    {watch(`budget_items.${index}.description`) && (
+                                                    {/* Description: Read-only if from DB, or editable if custom */}
+                                                    {watch(`budget_items.${index}.description`) && !isCustom && (
                                                         <div className="md:col-span-12 space-y-1.5">
-                                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Item Description (from database)</label>
+                                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                                                Item Description (from database)
+                                                            </label>
                                                             <div className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-xs text-slate-600 font-medium">
                                                                 {watch(`budget_items.${index}.description`)}
                                                             </div>
@@ -888,11 +1042,27 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                                         </div>
                                                     )}
 
-                                                    {/* Unit Price (read-only from DB) and Subtotal */}
-                                                    {(Number(watch(`budget_items.${index}.amount`) || 0) > 0) && (
+                                                    {isCustom && (
+                                                        <div className="md:col-span-12 space-y-1.5">
+                                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                                                Item Description / Specifications (optional)
+                                                            </label>
+                                                            <textarea
+                                                                {...register(`budget_items.${index}.description`)}
+                                                                rows={2}
+                                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:border-emerald-500 outline-none transition-all resize-none"
+                                                                placeholder="Specific details, specs, or model information..."
+                                                            />
+                                                        </div>
+                                                    )}
+
+                                                    {/* Unit Price & Subtotal */}
+                                                    {!isCustom && Number(watch(`budget_items.${index}.amount`) || 0) > 0 ? (
                                                         <>
                                                             <div className="md:col-span-5 space-y-1.5">
-                                                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Unit Price (NGN) — from Budget</label>
+                                                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                                                    Unit Price (NGN) — from Budget
+                                                                </label>
                                                                 <div className="w-full bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-700 flex items-center justify-between">
                                                                     <span>NGN</span>
                                                                     <span>{(watch(`budget_items.${index}.amount`) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
@@ -901,18 +1071,57 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                                             </div>
 
                                                             <div className="md:col-span-7 space-y-1.5">
-                                                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Sub-Total (NGN)</label>
-                                                                <div className="w-full bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-2.5 text-xs font-black text-emerald-700 flex items-center justify-between">
+                                                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                                                    Sub-Total (NGN)
+                                                                </label>
+                                                                <div className="w-full bg-emerald-50 border border-emerald-200/80 rounded-xl px-4 py-2.5 text-xs font-black text-emerald-700 flex items-center justify-between">
                                                                     <span>NGN</span>
                                                                     <span>{((watch(`budget_items.${index}.quantity`) || 0) * (watch(`budget_items.${index}.amount`) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                                                 </div>
+                                                                <input type="hidden" {...register(`budget_items.${index}.total`, { valueAsNumber: true })} />
+                                                            </div>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <div className="md:col-span-5 space-y-1.5">
+                                                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                                                    Unit Price (NGN) <span className="text-red-500">*</span>
+                                                                </label>
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    min={0}
+                                                                    {...register(`budget_items.${index}.amount`, {
+                                                                        valueAsNumber: true,
+                                                                        onChange: (e) => {
+                                                                            const a = parseFloat(e.target.value) || 0;
+                                                                            const q = watch(`budget_items.${index}.quantity`) || 1;
+                                                                            setValue(`budget_items.${index}.total`, q * a);
+                                                                        }
+                                                                    })}
+                                                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:border-emerald-500 outline-none transition-all"
+                                                                    placeholder="0.00"
+                                                                />
+                                                            </div>
+
+                                                            <div className="md:col-span-7 space-y-1.5">
+                                                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                                                    Sub-Total (NGN)
+                                                                </label>
+                                                                <div className="w-full bg-emerald-50 border border-emerald-200/80 rounded-xl px-4 py-2.5 text-xs font-black text-emerald-700 flex items-center justify-between">
+                                                                    <span>NGN</span>
+                                                                    <span>{((watch(`budget_items.${index}.quantity`) || 0) * (watch(`budget_items.${index}.amount`) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                                                </div>
+                                                                <input type="hidden" {...register(`budget_items.${index}.total`, { valueAsNumber: true })} />
                                                             </div>
                                                         </>
                                                     )}
 
                                                     {/* Attachment */}
                                                     <div className="md:col-span-12 space-y-1.5">
-                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Item Attachment / Proforma Invoice (optional)</label>
+                                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                                            Item Attachment / Proforma Invoice (optional)
+                                                        </label>
                                                         <div className="flex items-center gap-3">
                                                             <input
                                                                 type="file"
@@ -951,6 +1160,22 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                         );
                                     })
                                 )}
+
+                                {/* Bottom Add More Button if list is not empty */}
+                                {fields.length > 0 && (
+                                    <div className="pt-2 flex justify-center">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                append({ budget_category: '', name: '', description: '', quantity: 1, amount: 0, total: 0 });
+                                            }}
+                                            className="px-6 py-3 border-2 border-dashed border-emerald-300 hover:border-emerald-500 bg-emerald-50/50 hover:bg-emerald-50 text-emerald-700 rounded-2xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2"
+                                        >
+                                            <Plus size={14} />
+                                            Add Another Requisition Line
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -958,13 +1183,21 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                         <div className="px-8 py-5 border-t border-slate-100 flex items-center justify-between sticky bottom-0 bg-white z-10">
                             <div>
                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Requisition Grand Total</span>
-                                <span className="text-lg font-black text-[#1a365d]">
-                                    NGN {grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                </span>
+                                <div className="flex items-baseline gap-2">
+                                    <span className="text-lg font-black text-[#1a365d]">
+                                        NGN {grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 font-bold">
+                                        ({budgetItems.filter(i => i.name).length} item{budgetItems.filter(i => i.name).length !== 1 ? 's' : ''})
+                                    </span>
+                                </div>
                             </div>
                             <button
                                 type="button"
-                                onClick={() => setIsBudgetModalOpen(false)}
+                                onClick={() => {
+                                    syncTopLevelCategory();
+                                    setIsBudgetModalOpen(false);
+                                }}
                                 className="px-8 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-600/20"
                             >
                                 Done & Apply

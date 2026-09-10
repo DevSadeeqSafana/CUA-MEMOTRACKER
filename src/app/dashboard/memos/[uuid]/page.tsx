@@ -1,0 +1,577 @@
+import { auth } from '@/auth';
+import { query } from '@/lib/db';
+import { notFound } from 'next/navigation';
+import {
+    Calendar,
+    Building,
+    FileText,
+    Clock,
+    CheckCircle2,
+    ArrowLeft,
+    Paperclip,
+    ShieldCheck,
+    Tag,
+    History,
+    Users,
+    Wallet,
+    Target,
+    Pencil,
+    AlertTriangle
+} from 'lucide-react';
+import Link from 'next/link';
+import { cn, formatDate } from '@/lib/utils';
+import ApprovalButtons from '@/components/memos/ApprovalButtons';
+import AcknowledgeButton from '@/components/memos/AcknowledgeButton';
+import MarkAsRead from '@/components/memos/MarkAsRead';
+import MemoHistory from '@/components/memos/MemoHistory';
+import ReviewerDecisionPanel from '@/components/memos/ReviewerDecisionPanel';
+import LineManagerRoutingAdjustment from '@/components/memos/LineManagerRoutingAdjustment';
+import ConsultationThread from '@/components/memos/ConsultationThread';
+import DocumentPreviewModal from '@/components/memos/DocumentPreviewModal';
+import { getRecipients, getManagers, getConsultations } from '@/lib/actions';
+
+export default async function MemoDetailsPage({
+    params,
+}: {
+    params: Promise<{ uuid: string }>;
+}) {
+    const { uuid: memoUuid } = await params;
+    const session = await auth();
+    if (!session?.user?.id) return null;
+    const currentUserId = parseInt(session.user.id);
+
+    // Fetch memo with creator details and potential budget info
+    const memos = await query(
+        `SELECT m.*, 
+                COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as creator_name, 
+                u.email as creator_email, u.line_manager_id as creator_line_manager_id,
+                bi.year_id, bi.budget_category, bi.other_category
+         FROM memos m 
+         JOIN memo_system_users u ON m.created_by = u.id 
+         LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+         LEFT JOIN memo_budget_info bi ON m.id = bi.memo_id
+         WHERE m.uuid = ?`,
+        [memoUuid]
+    ) as any[];
+
+    if (memos.length === 0) {
+        notFound();
+    }
+
+    const memo = memos[0];
+
+    // Fetch budget items if it's a budget memo
+    const budgetItems = await query(
+        `SELECT * FROM memo_budget_items WHERE memo_id = ?`,
+        [memo.id]
+    ) as any[];
+
+    // Fetch attachments
+    const attachments = await query(
+        `SELECT * FROM attachments WHERE memo_id = ?`,
+        [memo.id]
+    ) as any[];
+
+    const budgetGrandTotal = budgetItems.reduce((acc, item) => acc + (parseFloat(item.total) || 0), 0);
+    const creatorInitial = (memo.creator_name && memo.creator_name.length > 0) ? memo.creator_name[0].toUpperCase() : 'U';
+
+    // Fetch approvals
+    const approvals = await query(
+        `SELECT a.*, COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as approver_name 
+      FROM memo_approvals a 
+      JOIN memo_system_users u ON a.approver_id = u.id 
+      LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+      WHERE a.memo_id = ? 
+      ORDER BY a.step_order ASC`,
+        [memo.id]
+    ) as any[];
+
+    // Fetch all recipients for the history timeline
+    const allRecipients = await query(
+        `SELECT mr.*, COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as recipient_name, u.department
+         FROM memo_recipients mr 
+         JOIN memo_system_users u ON mr.recipient_id = u.id 
+         LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+         WHERE mr.memo_id = ?
+         ORDER BY FIELD(mr.recipient_type, 'To', 'CC', 'BCC'), u.username ASC`,
+        [memo.id]
+    ) as any[];
+
+    // Fetch routing adjustment logs — CAST new_value as CHAR to ensure MySQL2 delivers it as a parseable string
+    const routingLogs = await query(
+        `SELECT al.id, al.user_id, al.action, al.timestamp,
+                CAST(al.new_value AS CHAR) as new_value,
+                COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as action_by_name
+         FROM audit_logs al
+         JOIN memo_system_users u ON al.user_id = u.id
+         LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+         WHERE al.table_name = 'memos' AND al.record_id = ? AND al.action = 'ADJUST_ROUTING'
+         ORDER BY al.timestamp DESC`,
+        [memo.id]
+    ) as any[];
+
+    // Role resolution
+    const isCreator = memo.created_by === currentUserId;
+    const currentApproval = approvals.find(a => a.status === 'Pending');
+    const isPendingApprover = !isCreator && !!(currentApproval && currentApproval.approver_id === currentUserId);
+    const isReviewer = !isCreator && (session.user as any).role?.includes('Reviewer');
+    const recipientRecord = allRecipients.find(r => r.recipient_id === currentUserId);
+    const isRecipient = !isCreator && !!recipientRecord;
+    const isApprover = approvals.some(a => a.approver_id === currentUserId);
+    const isCreatorsLineManager = memo.creator_line_manager_id === currentUserId;
+
+    // Edit gate: only available to creator when memo is Draft AND has a rejection record
+    const rejectedApprovals = approvals.filter(a => a.status === 'Rejected');
+    const canEdit = isCreator && memo.status === 'Draft' && rejectedApprovals.length > 0;
+
+    // Role-specific power: allow ANY pending approver to adjust routing (added approvers, line managers, etc)
+    const canAdjustRouting = isPendingApprover;
+
+    // Fetch data for routing adjustment if authorized
+    const availableUsers = canAdjustRouting ? await getRecipients() : [];
+    const availableManagers = canAdjustRouting ? await getManagers() : [];
+
+    // Fetch consultation threads
+    const consultations = await getConsultations(memo.id);
+
+    // canForward: any pending approver OR anyone who has received a forward OR final recipients
+    const isForwardRecipient = consultations.some((c: any) => c.to_user_id === currentUserId);
+    const canForward = isPendingApprover || isForwardRecipient || isRecipient;
+
+    const toRecipients = allRecipients.filter((r: any) => r.recipient_type === 'To');
+    const ccRecipients = allRecipients.filter((r: any) => r.recipient_type === 'CC');
+    const bccRecipients = allRecipients.filter((r: any) => r.recipient_type === 'BCC');
+
+    return (
+        <div className="max-w-7xl mx-auto space-y-8 pb-20 animate-in fade-in duration-700 font-sans">
+            {/* Top Navigation Bar */}
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+                <Link
+                    href="/dashboard"
+                    className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 hover:text-[#1a365d] transition-all group px-3 md:px-4 py-2 bg-white border border-slate-200 rounded-2xl shadow-sm"
+                >
+                    <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
+                    Back
+                    <span className="hidden sm:inline">to Dashboard</span>
+                </Link>
+
+                {/* Edit & Resubmit button — only for creator of rejected memos */}
+                {canEdit && (
+                    <Link
+                        href={`/dashboard/memos/${memo.uuid}/edit`}
+                        className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-amber-500/30 animate-pulse-subtle"
+                    >
+                        <Pencil size={13} />
+                        Edit &amp; Resubmit
+                    </Link>
+                )}
+            </div>
+            {/* Gmail-Style Page Header (Subject) */}
+            <div className="flex flex-col gap-2">
+                <h1 className="text-xl md:text-2xl lg:text-3xl font-black text-[#1a365d] leading-tight font-outfit tracking-tight uppercase">
+                    {memo.title}
+                </h1>
+                <div className="flex items-center gap-2 flex-wrap mt-1">
+                    <div className={cn(
+                        "text-[9px] font-black px-2.5 py-1 rounded-lg border uppercase tracking-widest shadow-sm",
+                        memo.status === 'Draft' && !canEdit && "bg-slate-50 border-slate-200 text-slate-400",
+                        memo.status === 'Draft' && canEdit  && "bg-amber-50 border-amber-200 text-amber-600",
+                        memo.status === 'Line Manager Review' && "bg-amber-50 border border-amber-200 text-amber-700 animate-pulse-subtle",
+                        memo.status === 'Reviewer Approval' && "bg-blue-50 border border-blue-200 text-blue-700 animate-pulse-subtle",
+                        memo.status === 'Distributed' && "bg-emerald-50 border border-emerald-200 text-emerald-700 shadow-emerald-600/10",
+                        memo.status === 'Archived' && "bg-gray-50 border border-gray-200 text-gray-500",
+                    )}>
+                        {canEdit ? 'Rejected — Needs Revision' : memo.status}
+                    </div>
+                    <div className={cn(
+                        "text-[9px] font-black px-2.5 py-1 rounded-lg border uppercase tracking-widest shadow-sm",
+                        memo.priority === 'High' ? "bg-red-50 border border-red-200 text-red-600" :
+                            memo.priority === 'Medium' ? "bg-amber-50 border border-amber-200 text-amber-600" :
+                                "bg-blue-50 border border-blue-200 text-blue-600"
+                    )}>
+                        {memo.priority} Priority
+                    </div>
+                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg">
+                        {memo.memo_type}
+                    </div>
+                </div>
+            </div>
+
+            {/* Rejection banner — only visible to creator when memo needs editing */}
+            {canEdit && (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl overflow-hidden shadow-sm animate-in fade-in duration-500">
+                    <div className="px-5 py-4 border-b border-amber-100 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                                <AlertTriangle size={15} />
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-black text-amber-700 uppercase tracking-[0.18em]">Action Required — Revision Needed</p>
+                                <p className="text-[11px] text-amber-500 font-medium mt-0.5">Your memo was rejected. Review the reason(s) below and edit before resubmitting.</p>
+                            </div>
+                        </div>
+                        <Link
+                            href={`/dashboard/memos/${memo.uuid}/edit`}
+                            className="shrink-0 flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md shadow-amber-500/20"
+                        >
+                            <Pencil size={12} />
+                            Edit Memo
+                        </Link>
+                    </div>
+                    <div className="divide-y divide-amber-100">
+                        {rejectedApprovals.map((a: any) => (
+                            <div key={a.id} className="px-5 py-3 flex items-start gap-3">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-2 shrink-0" />
+                                <div>
+                                    <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">{a.approver_name}</p>
+                                    <p className="text-sm text-amber-900 font-medium leading-relaxed mt-0.5">"{a.comments || 'No reason provided'}"
+                                    </p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Routing Adjustment Notifications — compact inline style */}
+            {routingLogs.length > 0 && isCreator && (
+                <div className="border border-amber-200 bg-amber-50 rounded-xl px-4 py-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                        <Users size={13} className="text-amber-500 shrink-0" />
+                        <span className="text-[10px] font-black text-amber-700 uppercase tracking-widest">Routing Update(s)</span>
+                    </div>
+                    {routingLogs.slice(0, 3).map((log: any) => {
+                        let d: Record<string, any> = {};
+                        try {
+                            const raw = log.new_value;
+                            if (raw !== null && raw !== undefined) {
+                                d = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                            }
+                        } catch (e) { d = {}; }
+
+                        const actor = log.action_by_name || 'Your line manager';
+                        const oldR = (d.oldRecipients || '').trim();
+                        const newR = (d.newRecipients || '').trim();
+                        const approver = (d.addedApprovers || '').trim();
+
+                        let sentence = `${actor} adjusted this memo's routing.`;
+                        if (oldR && newR && oldR !== newR) sentence = `${actor} changed recipient from "${oldR}" → "${newR}".`;
+                        else if ((d.addedRecipients || '').trim()) sentence = `${actor} added "${(d.addedRecipients || '').trim()}" as recipient.`;
+                        else if ((d.removedRecipients || '').trim()) sentence = `${actor} removed "${(d.removedRecipients || '').trim()}" from distribution.`;
+                        if (approver) sentence += ` Added "${approver}" as approver.`;
+
+                        return (
+                            <div key={log.id} className="flex items-start gap-2">
+                                <span className="w-1 h-1 rounded-full bg-amber-400 mt-1.5 shrink-0" />
+                                <p className="text-[11px] font-medium text-amber-900 leading-snug">{sentence}</p>
+                            </div>
+                        );
+                    })}
+                    {routingLogs.length > 3 && (
+                        <p className="text-[9px] font-black text-amber-500 uppercase">+{routingLogs.length - 3} more in audit trail</p>
+                    )}
+                </div>
+            )}
+
+            {/* ─── LINE MANAGER / REVIEWER VIEW: Approval actions ─── */}
+            {isPendingApprover && (
+                isReviewer ? (
+                    <ReviewerDecisionPanel
+                        memoId={memo.id}
+                        approvalId={currentApproval.id}
+                        memoTitle={memo.title}
+                        memoUuid={memo.uuid}
+                        currentUserId={currentUserId}
+                        currentUserName={(session.user as any).name || ''}
+                        consultations={consultations}
+                        canForward={canForward}
+                        canAdjustRouting={canAdjustRouting}
+                        initialRecipients={allRecipients.map(r => ({ id: r.recipient_id, username: r.recipient_name, department: r.department }))}
+                        initialApprovers={approvals.map(a => ({ id: a.approver_id, username: a.approver_name, department: a.department }))}
+                        availableUsers={availableUsers}
+                        availableManagers={availableManagers}
+                    />
+                ) : (
+                    <div className="bg-[#1a365d] border border-blue-900 rounded-2xl p-5 md:p-6 flex flex-col items-start gap-5 shadow-xl relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform"></div>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-4 relative z-10 w-full">
+                            <div className="flex items-center gap-4 text-white">
+                                <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center text-blue-400 border border-white/10 shrink-0">
+                                    <ShieldCheck size={24} />
+                                </div>
+                                <div className="space-y-1">
+                                    <h3 className="text-base md:text-lg font-black font-outfit uppercase tracking-tight">Administrative Review</h3>
+                                    <p className="text-blue-100/70 font-medium text-[11px]">Verification required for internal routing.</p>
+                                </div>
+                            </div>
+
+                            {/* Forward for Input — right next to title */}
+                            {canForward && (
+                                <ConsultationThread
+                                    memoId={memo.id}
+                                    memoUuid={memo.uuid}
+                                    currentUserId={currentUserId}
+                                    currentUserName={(session.user as any).name || ''}
+                                    consultations={consultations}
+                                    canForward={canForward}
+                                    buttonOnly
+                                />
+                            )}
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 relative z-10 w-full">
+                            {canAdjustRouting && (
+                                <LineManagerRoutingAdjustment
+                                    memoId={memo.id}
+                                    initialRecipients={allRecipients.map(r => ({ id: r.recipient_id, username: r.recipient_name, department: r.department }))}
+                                    initialApprovers={approvals.map(a => ({ id: a.approver_id, username: a.approver_name, department: a.department }))}
+                                    availableUsers={availableUsers}
+                                    availableManagers={availableManagers}
+                                />
+                            )}
+                            <ApprovalButtons memoId={memo.id} approvalId={currentApproval.id} />
+                        </div>
+                    </div>
+                )
+            )}
+
+            {/* ─── RECIPIENT VIEW: Acknowledge banner ─── */}
+            {isRecipient && memo.status === 'Distributed' && (
+                <div className="bg-emerald-600 border border-emerald-700 rounded-2xl p-5 md:p-6 flex flex-col gap-5 shadow-xl relative overflow-hidden group">
+                    <MarkAsRead memoId={memo.id} />
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform"></div>
+                    <div className="flex items-center gap-4 md:gap-6 text-white relative z-10">
+                        <div className="w-12 h-12 md:w-16 md:h-16 rounded-xl md:rounded-2xl bg-white/10 flex items-center justify-center text-emerald-200 border border-white/10 shrink-0">
+                            <CheckCircle2 size={24} className="md:hidden" /><CheckCircle2 size={32} className="hidden md:block" />
+                        </div>
+                        <div className="space-y-1">
+                            <h3 className="text-base md:text-xl font-black font-outfit uppercase">Institutional Broadcast</h3>
+                            <p className="text-emerald-50/70 font-medium text-xs md:text-sm">Formal acknowledgment of this communication is mandatory.</p>
+                        </div>
+                    </div>
+
+                    <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                        {canForward && (
+                            <ConsultationThread
+                                memoId={memo.id}
+                                memoUuid={memo.uuid}
+                                currentUserId={currentUserId}
+                                currentUserName={(session.user as any).name || ''}
+                                consultations={consultations}
+                                canForward={canForward}
+                                buttonOnly
+                            />
+                        )}
+                        <AcknowledgeButton
+                            memoId={memo.id}
+                            decision={recipientRecord.decision}
+                        />
+                    </div>
+                </div>
+            )}
+
+            {/* Main Content & Shared Components */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+                <div className="lg:col-span-8 space-y-8">
+                    {/* Gmail-Style Email Reader Card */}
+                    <div className="bg-white border border-slate-200 rounded-[2rem] p-6 md:p-8 shadow-sm space-y-6">
+                        {/* Senders Header row */}
+                        <div className="flex items-start gap-4 justify-between flex-wrap">
+                            <div className="flex items-start gap-4">
+                                <div className="w-10 h-10 rounded-full bg-[#1a365d] text-white flex items-center justify-center font-black text-sm shadow-md shadow-blue-600/10 shrink-0">
+                                    {creatorInitial}
+                                </div>
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-xs font-black text-slate-800">{memo.creator_name}</span>
+                                        <span className="text-[10px] text-slate-400 font-medium font-mono">
+                                            &lt;{memo.creator_email || `${memo.creator_name.toLowerCase().replace(/\s+/g, '')}@cua.edu.ng`}&gt;
+                                        </span>
+                                    </div>
+                                    <div className="text-[10px] text-slate-500 font-medium leading-relaxed">
+                                        <span className="font-bold text-slate-400 uppercase tracking-widest text-[8px] mr-1">To:</span>
+                                        {toRecipients.map(r => r.recipient_name).join(', ')}
+                                        {ccRecipients.length > 0 && (
+                                            <span className="block mt-0.5">
+                                                <span className="font-bold text-slate-400 uppercase tracking-widest text-[8px] mr-1">Cc:</span>
+                                                {ccRecipients.map(r => r.recipient_name).join(', ')}
+                                            </span>
+                                        )}
+                                        {bccRecipients.length > 0 && (
+                                            <span className="block mt-0.5">
+                                                <span className="font-bold text-slate-400 uppercase tracking-widest text-[8px] mr-1">Bcc:</span>
+                                                {bccRecipients.map(r => r.recipient_name).join(', ')}
+                                            </span>
+                                        )}
+                                        <span className="block mt-1.5 text-[9px] font-black text-blue-600 uppercase tracking-widest">
+                                            Department: {memo.department}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="text-right shrink-0">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">
+                                    {formatDate(memo.created_at)}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Divider */}
+                        <div className="h-px bg-slate-100 w-full"></div>
+
+                        {/* Rich Content Statement Body */}
+                        <div className="py-2">
+                            <div
+                                className="prose prose-slate prose-lg max-w-none text-slate-800 leading-relaxed font-sans"
+                                dangerouslySetInnerHTML={{ __html: memo.content }}
+                            />
+                        </div>
+
+                        {/* Unified Budget Details Section (if applicable) */}
+                        {budgetItems.length > 0 && (
+                            <div className="mt-8 pt-8 border-t border-slate-100 space-y-6">
+                                <h4 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Financial Breakdown</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    <div className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-3 flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-900/10">
+                                            <Calendar size={16} />
+                                        </div>
+                                        <div className="overflow-hidden">
+                                            <p className="text-[8px] font-black text-emerald-600 uppercase tracking-widest leading-none mb-1">Fiscal Year</p>
+                                            <p className="text-xs font-black text-slate-900 uppercase truncate">{memo.year_id}</p>
+                                        </div>
+                                    </div>
+                                    <div className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-3 flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-900/10">
+                                            <Tag size={16} />
+                                        </div>
+                                        <div className="overflow-hidden">
+                                            <p className="text-[8px] font-black text-emerald-600 uppercase tracking-widest leading-none mb-1">Category</p>
+                                            <p className="text-xs font-black text-slate-900 uppercase truncate">
+                                                {memo.budget_category === 'Others' ? memo.other_category : memo.budget_category}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="bg-[#1a365d] border border-blue-900 rounded-xl p-3 flex items-center gap-3 shadow-xl shadow-blue-900/10">
+                                        <div className="w-8 h-8 rounded-lg bg-white/10 text-white flex items-center justify-center">
+                                            <span className="text-[10px] font-black">₦</span>
+                                        </div>
+                                        <div className="overflow-hidden">
+                                            <p className="text-[8px] font-black text-blue-300 uppercase tracking-widest leading-none mb-1">Total Commitments</p>
+                                            <p className="text-xs font-black text-white truncate">₦{budgetGrandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm overflow-hidden">
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left">
+                                            <thead>
+                                                <tr className="border-b border-slate-100">
+                                                    <th className="pb-4 text-[9px] font-black text-[#1a365d] uppercase tracking-widest">Line Item</th>
+                                                    <th className="pb-4 text-[9px] font-black text-[#1a365d] uppercase tracking-widest text-center">Qty</th>
+                                                    <th className="pb-4 text-[9px] font-black text-[#1a365d] uppercase tracking-widest text-right">Unit (₦)</th>
+                                                    <th className="pb-4 text-[9px] font-black text-[#1a365d] uppercase tracking-widest text-right">Subtotal (₦)</th>
+                                                    <th className="pb-4 text-[9px] font-black text-[#1a365d] uppercase tracking-widest text-center">Doc</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-50">
+                                                {budgetItems.map((item, idx) => {
+                                                    const match = (item.description || '').match(/^\[(.*?)\]\s*(.*)$/);
+                                                    const itemCat = match ? match[1] : null;
+                                                    const itemDesc = match ? match[2] : item.description;
+
+                                                    return (
+                                                        <tr key={idx} className="group">
+                                                            <td className="py-4 pr-4">
+                                                                <div className="flex items-center gap-2 flex-wrap">
+                                                                    <p className="text-xs font-black text-slate-900 uppercase">{item.name}</p>
+                                                                    {itemCat && (
+                                                                        <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                                                            {itemCat}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                {itemDesc && <p className="text-[9px] text-slate-400 font-bold mt-1 max-w-sm">{itemDesc}</p>}
+                                                            </td>
+                                                            <td className="py-4 text-xs font-bold text-slate-600 text-center">{item.quantity}</td>
+                                                            <td className="py-4 text-xs font-bold text-slate-600 text-right">₦{parseFloat(item.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                                            <td className="py-4 text-xs font-black text-[#1a365d] text-right">₦{parseFloat(item.total).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                                        <td className="py-4 text-center">
+                                                            {item.attachment_path ? (
+                                                                <a 
+                                                                    href={item.attachment_path} 
+                                                                    target="_blank" 
+                                                                    rel="noopener noreferrer"
+                                                                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-blue-100 transition-colors border border-blue-100"
+                                                                >
+                                                                    <Paperclip size={12} />
+                                                                    View
+                                                                </a>
+                                                            ) : (
+                                                                <span className="text-[8px] text-slate-300 font-black uppercase tracking-widest">None</span>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                            <tfoot>
+                                                <tr className="border-t border-slate-100 bg-slate-50/50">
+                                                    <td colSpan={3} className="py-4 pl-4 text-[10px] font-black text-[#1a365d] uppercase tracking-widest text-right">Aggregate Total</td>
+                                                    <td colSpan={2} className="py-4 pr-4 text-sm font-black text-emerald-600 text-right">₦{budgetGrandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Attachments Section inside Main Memo Card */}
+                        {attachments.length > 0 && (
+                            <div className="mt-8 pt-8 border-t border-slate-100 space-y-6">
+                                <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-3">
+                                    <Paperclip size={14} className="text-blue-500" />
+                                    Accompanying Documents
+                                </h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {attachments.map((file: any) => (
+                                        <DocumentPreviewModal 
+                                            key={file.id}
+                                            fileUrl={file.file_path}
+                                            fileName={file.file_name}
+                                            fileType={file.file_type}
+                                            fileSize={file.file_size}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Consultation Thread — read-only view below main card */}
+                    {consultations.length > 0 && (
+                        <ConsultationThread
+                            memoId={memo.id}
+                            memoUuid={memo.uuid}
+                            currentUserId={currentUserId}
+                            currentUserName={(session.user as any).name || ''}
+                            consultations={consultations}
+                            canForward={isForwardRecipient}
+                            buttonOnly={false}
+                        />
+                    )}
+
+                </div>
+
+                {/* Sidebar Context */}
+                <div className="lg:col-span-4">
+                    {/* Full Dedicated History Timeline (Audit Trail) */}
+                    <MemoHistory memo={memo} approvals={approvals} recipients={allRecipients} routingLogs={routingLogs} consultations={consultations} />
+                </div>
+            </div>
+        </div>
+    );
+}
