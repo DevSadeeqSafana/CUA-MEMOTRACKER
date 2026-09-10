@@ -354,7 +354,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
     const totalSelected = selectedRecipientIds.length + selectedCCIds.length + selectedBCCIds.length;
 
     return (
-        <form className="max-w-5xl mx-auto pb-20 font-sans space-y-4">
+        <form className="w-full pb-20 font-sans space-y-4">
 
             {/* ── Top bar: type switcher + actions ── */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
@@ -1056,66 +1056,43 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                                         </div>
                                                     )}
 
-                                                    {/* Unit Price & Subtotal */}
-                                                    {!isCustom && Number(watch(`budget_items.${index}.amount`) || 0) > 0 ? (
-                                                        <>
-                                                            <div className="md:col-span-5 space-y-1.5">
-                                                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                                                                    Unit Price (NGN) — from Budget
-                                                                </label>
-                                                                <div className="w-full bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-700 flex items-center justify-between">
-                                                                    <span>NGN</span>
-                                                                    <span>{(watch(`budget_items.${index}.amount`) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                                                                </div>
-                                                                <input type="hidden" {...register(`budget_items.${index}.amount`, { valueAsNumber: true })} />
-                                                            </div>
+                                                    {/* Unit Price & Subtotal — always editable, pre-filled from DB for catalogue items */}
+                                                    <>
+                                                        <div className="md:col-span-5 space-y-1.5">
+                                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                                                Unit Price (NGN) <span className="text-red-500">*</span>
+                                                                {!isCustom && Number(watch(`budget_items.${index}.amount`) || 0) > 0 && (
+                                                                    <span className="ml-1 text-emerald-600 font-bold normal-case tracking-normal">(editable)</span>
+                                                                )}
+                                                            </label>
+                                                            <input
+                                                                type="number"
+                                                                step="0.01"
+                                                                min={0}
+                                                                {...register(`budget_items.${index}.amount`, {
+                                                                    valueAsNumber: true,
+                                                                    onChange: (e) => {
+                                                                        const a = parseFloat(e.target.value) || 0;
+                                                                        const q = watch(`budget_items.${index}.quantity`) || 1;
+                                                                        setValue(`budget_items.${index}.total`, q * a);
+                                                                    }
+                                                                })}
+                                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 outline-none transition-all"
+                                                                placeholder="0.00"
+                                                            />
+                                                        </div>
 
-                                                            <div className="md:col-span-7 space-y-1.5">
-                                                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                                                                    Sub-Total (NGN)
-                                                                </label>
-                                                                <div className="w-full bg-emerald-50 border border-emerald-200/80 rounded-xl px-4 py-2.5 text-xs font-black text-emerald-700 flex items-center justify-between">
-                                                                    <span>NGN</span>
-                                                                    <span>{((watch(`budget_items.${index}.quantity`) || 0) * (watch(`budget_items.${index}.amount`) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                                                                </div>
-                                                                <input type="hidden" {...register(`budget_items.${index}.total`, { valueAsNumber: true })} />
+                                                        <div className="md:col-span-7 space-y-1.5">
+                                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                                                Sub-Total (NGN)
+                                                            </label>
+                                                            <div className="w-full bg-emerald-50 border border-emerald-200/80 rounded-xl px-4 py-2.5 text-xs font-black text-emerald-700 flex items-center justify-between">
+                                                                <span>NGN</span>
+                                                                <span>{((watch(`budget_items.${index}.quantity`) || 0) * (watch(`budget_items.${index}.amount`) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                                             </div>
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <div className="md:col-span-5 space-y-1.5">
-                                                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                                                                    Unit Price (NGN) <span className="text-red-500">*</span>
-                                                                </label>
-                                                                <input
-                                                                    type="number"
-                                                                    step="0.01"
-                                                                    min={0}
-                                                                    {...register(`budget_items.${index}.amount`, {
-                                                                        valueAsNumber: true,
-                                                                        onChange: (e) => {
-                                                                            const a = parseFloat(e.target.value) || 0;
-                                                                            const q = watch(`budget_items.${index}.quantity`) || 1;
-                                                                            setValue(`budget_items.${index}.total`, q * a);
-                                                                        }
-                                                                    })}
-                                                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold focus:border-emerald-500 outline-none transition-all"
-                                                                    placeholder="0.00"
-                                                                />
-                                                            </div>
-
-                                                            <div className="md:col-span-7 space-y-1.5">
-                                                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                                                                    Sub-Total (NGN)
-                                                                </label>
-                                                                <div className="w-full bg-emerald-50 border border-emerald-200/80 rounded-xl px-4 py-2.5 text-xs font-black text-emerald-700 flex items-center justify-between">
-                                                                    <span>NGN</span>
-                                                                    <span>{((watch(`budget_items.${index}.quantity`) || 0) * (watch(`budget_items.${index}.amount`) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                                                                </div>
-                                                                <input type="hidden" {...register(`budget_items.${index}.total`, { valueAsNumber: true })} />
-                                                            </div>
-                                                        </>
-                                                    )}
+                                                            <input type="hidden" {...register(`budget_items.${index}.total`, { valueAsNumber: true })} />
+                                                        </div>
+                                                    </>
 
                                                     {/* Attachment */}
                                                     <div className="md:col-span-12 space-y-1.5">
