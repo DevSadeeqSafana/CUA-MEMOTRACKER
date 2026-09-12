@@ -1,17 +1,13 @@
 'use client';
 
-import { useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { Loader2, AlertCircle, ArrowRight, ShieldCheck, GraduationCap, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, GraduationCap } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Image from 'next/image';
 import { GoogleLogin, CredentialResponse } from '@react-oauth/google';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
   const handleGoogleSuccess = async (credentialResponse: CredentialResponse) => {
@@ -19,7 +15,7 @@ export default function LoginPage() {
       toast.error('Failed to retrieve credentials from Google.');
       return;
     }
-    setIsLoading(true);
+
     try {
       const result = await signIn('credentials', {
         googleToken: credentialResponse.credential,
@@ -32,38 +28,13 @@ export default function LoginPage() {
         toast.success('Successfully authenticated via Google SSO!');
         router.push('/dashboard');
       }
-    } catch (err) {
+    } catch {
       toast.error('An error occurred during Google Sign-In.');
-    } finally {
-      setIsLoading(false);
     }
   };
 
   const handleGoogleError = () => {
     toast.error('Google Sign-In was cancelled or failed.');
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-
-    try {
-      const result = await signIn('credentials', {
-        email,
-        password,
-        redirect: false,
-      });
-
-      if (result?.error) {
-        toast.error('Invalid credentials. Please contact the ICT department if the issue persists.');
-      } else {
-        router.push('/dashboard');
-      }
-    } catch (err) {
-      toast.error('A system error occurred. Please try again later.');
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   return (
@@ -130,11 +101,10 @@ export default function LoginPage() {
             </div>
             <div className="space-y-2">
               <h1 className="text-3xl md:text-5xl font-black tracking-tight text-[#1a365d] font-outfit">Staff Sign In</h1>
-              <p className="text-slate-500 font-medium text-sm md:text-lg leading-relaxed">Enter your university credentials or sign in with Google SSO.</p>
+              <p className="text-slate-500 font-medium text-sm md:text-lg leading-relaxed">Sign in with Google.</p>
             </div>
           </div>
 
-          {/* Institutional Google Single Sign-On */}
           <div className="space-y-4">
             <div className="flex flex-col items-center justify-center space-y-2">
               <div className="w-full flex justify-center [&>div]:w-full font-bold">
@@ -152,73 +122,7 @@ export default function LoginPage() {
                 Institutional login restricted to <span className="text-[#1a365d] font-bold">@cosmopolitan.edu.ng</span>
               </p>
             </div>
-
-            <div className="relative flex items-center justify-center my-6">
-              <div className="border-t border-slate-200 w-full" />
-              <span className="bg-slate-50 px-4 text-xs font-black uppercase tracking-widest text-slate-400 shrink-0">
-                OR SIGN IN WITH PASSWORD
-              </span>
-              <div className="border-t border-slate-200 w-full" />
-            </div>
           </div>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-5">
-              <div className="space-y-2">
-                <label className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 ml-1" htmlFor="email">
-                  University Email
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none font-bold text-[#1a365d] shadow-sm placeholder:text-slate-300 placeholder:font-normal"
-                  placeholder="name@cosmopolitan.edu.ng"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 ml-1" htmlFor="password">
-                  Password
-                </label>
-                <input
-                  id="password"
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none font-bold text-[#1a365d] shadow-sm placeholder:text-slate-300 placeholder:font-normal"
-                  placeholder="••••••••"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between text-sm">
-              <label className="flex items-center gap-3 cursor-pointer group">
-                <input type="checkbox" className="w-5 h-5 rounded-lg border-slate-300 text-blue-600 focus:ring-blue-500 transition-all cursor-pointer" />
-                <span className="text-slate-500 font-bold group-hover:text-slate-700">Remember session</span>
-              </label>
-              <button type="button" className="font-black text-blue-600 hover:text-[#1a365d] transition-colors uppercase tracking-widest text-[11px]">
-                Reset Password
-              </button>
-            </div>
-
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="flex w-full bg-[#1a365d] text-white py-5 rounded-2xl font-black text-lg shadow-2xl shadow-blue-900/20 hover:bg-[#2c5282] hover:-translate-y-1 transition-all items-center justify-center gap-3 disabled:opacity-50 disabled:translate-y-0 uppercase tracking-widest"
-            >
-              {isLoading ? (
-                <Loader2 className="animate-spin" size={24} />
-              ) : (
-                <>
-                  Enter Portal
-                  <ArrowRight size={22} className="opacity-70" />
-                </>
-              )}
-            </button>
-          </form>
 
           <div className="pt-10 text-center border-t border-slate-100">
             <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] leading-relaxed max-w-[300px] mx-auto">

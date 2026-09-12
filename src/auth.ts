@@ -2,19 +2,27 @@ import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import { authConfig } from './auth.config';
 import { query } from './lib/db';
-import bcrypt from 'bcryptjs';
-import { z } from 'zod';
 import crypto from 'crypto';
 
-async function getUser(email: string) {
+type QueryRow = Record<string, unknown>;
+type UserRecord = QueryRow & {
+    id?: number;
+    email?: string;
+    is_active?: number | boolean;
+    department?: string;
+    password_hash?: string;
+    full_name?: string;
+};
+
+async function getUser(email: string): Promise<UserRecord | undefined> {
     try {
         const users = await query(`
             SELECT u.*, COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as full_name
             FROM memo_system_users u
             LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
             WHERE u.email = ?
-        `, [email]) as any[];
-        return users[0];
+        `, [email]) as QueryRow[];
+        return users[0] as UserRecord | undefined;
     } catch (error) {
         console.error('Failed to fetch user:', error);
         throw new Error('Failed to fetch user.');
@@ -70,10 +78,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                                 SELECT StaffID, FirstName, Surname, DepartmentCode, LineManagerID
                                 FROM hr_staff
                                 WHERE OfficialEmailAddress = ? AND IsActive = 1
-                            `, [payload.email]) as any[];
+                            `, [payload.email]) as QueryRow[];
 
                             if (staffRows.length > 0) {
-                                const staff = staffRows[0];
+                                const staff = staffRows[0] as QueryRow & {
+                                    StaffID?: number;
+                                    DepartmentCode?: string;
+                                    LineManagerID?: number | null;
+                                };
                                 const uuid = crypto.randomUUID();
                                 const username = payload.email.split('@')[0];
                                 const ssoPlaceholderHash = '$2a$10$google_sso_managed_account_no_local_pass';
@@ -81,10 +93,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                                 const insertResult = await query(
                                     'INSERT INTO memo_system_users (uuid, staff_id, username, email, password_hash, department, line_manager_id, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
                                     [uuid, staff.StaffID, username, payload.email, ssoPlaceholderHash, staff.DepartmentCode || 'General', staff.LineManagerID || null]
-                                ) as any;
+                                ) as { insertId: number };
 
                                 const newUserId = insertResult.insertId;
-                                const roleRows = await query("SELECT id FROM roles WHERE name = 'Initiator'", []) as any[];
+                                const roleRows = await query("SELECT id FROM roles WHERE name = 'Initiator'", []) as QueryRow[];
                                 if (roleRows.length > 0) {
                                     await query('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)', [newUserId, roleRows[0].id]);
                                 }
@@ -110,48 +122,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                         SELECT r.name 
                         FROM roles r 
                         JOIN user_roles ur ON r.id = ur.role_id 
-                        WHERE ur.user_id = ?`, [user.id]) as any[];
+                        WHERE ur.user_id = ?`, [user.id]) as QueryRow[];
 
                     return {
-                        id: user.id.toString(),
+                        id: String(user.id),
                         email: user.email,
                         name: user.full_name || payload.name,
                         department: user.department,
-                        role: roles.map(r => r.name),
+                        role: roles.map(r => String(r.name)),
                     };
                 }
 
-                // 2. Standard Email & Password Credentials Authorization Flow
-                const parsedCredentials = z
-                    .object({ email: z.string().email(), password: z.string().min(6) })
-                    .safeParse(credentials);
-
-                if (parsedCredentials.success) {
-                    const { email, password } = parsedCredentials.data;
-                    const user = await getUser(email);
-                    if (!user) return null;
-                    if (user.is_active === 0 || user.is_active === false) return null;
-
-                    const passwordsMatch = await bcrypt.compare(password, user.password_hash);
-
-                    if (passwordsMatch) {
-                        const roles = await query(`
-                            SELECT r.name 
-                            FROM roles r 
-                            JOIN user_roles ur ON r.id = ur.role_id 
-                            WHERE ur.user_id = ?`, [user.id]) as any[];
-
-                        return {
-                            id: user.id.toString(),
-                            email: user.email,
-                            name: user.full_name,
-                            department: user.department,
-                            role: roles.map(r => r.name),
-                        };
-                    }
-                }
-
-                console.log('Invalid credentials');
+                console.log('Google SSO credentials were not provided');
                 return null;
             },
         }),
