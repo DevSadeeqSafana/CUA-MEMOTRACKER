@@ -86,6 +86,20 @@ export default async function MemoDetailsPage({
         [memo.id]
     ) as any[];
 
+    // Fetch finance-processing records for routed budget/finance memos
+    const financeProcessing = await query(
+        `SELECT fp.*, 
+                COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as accountant_name
+         FROM memo_finance_processing fp
+         JOIN memo_system_users u ON fp.accountant_id = u.id
+         LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+         WHERE fp.memo_id = ?
+         LIMIT 1`,
+        [memo.id]
+    ) as any[];
+
+    const financeProcessingRecord = financeProcessing[0] || null;
+
     // Fetch all recipients for the history timeline
     const allRecipients = await query(
         `SELECT mr.*, COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as recipient_name, u.department
@@ -196,6 +210,43 @@ export default async function MemoDetailsPage({
                     </div>
                 </div>
             </div>
+
+            {financeProcessingRecord && (
+                <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                    <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                                <Wallet size={16} />
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Finance Processing</p>
+                                <p className="text-sm font-black text-[#1a365d]">Accountant Queue Status</p>
+                            </div>
+                        </div>
+                        <span className={cn(
+                            "text-[9px] font-black px-2.5 py-1 rounded-full border uppercase tracking-widest shadow-sm",
+                            financeProcessingRecord.status === 'Processed' && 'bg-emerald-50 border-emerald-200 text-emerald-700',
+                            financeProcessingRecord.status === 'Rejected' && 'bg-rose-50 border-rose-200 text-rose-700',
+                            financeProcessingRecord.status === 'In Progress' && 'bg-blue-50 border-blue-200 text-blue-700',
+                            'bg-amber-50 border-amber-200 text-amber-700'
+                        )}>{financeProcessingRecord.status}</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 px-5 py-4">
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Accountant</p>
+                            <p className="text-sm font-bold text-slate-700 mt-1">{financeProcessingRecord.accountant_name}</p>
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Voucher Number</p>
+                            <p className="text-sm font-bold text-slate-700 mt-1">{financeProcessingRecord.voucher_number || 'Not assigned yet'}</p>
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Processing Notes</p>
+                            <p className="text-sm font-bold text-slate-700 mt-1">{financeProcessingRecord.processing_notes || 'No notes recorded yet'}</p>
+                        </div>
+                    </div>
+                </section>
+            )}
 
             {/* Rejection banner — only visible to creator when memo needs editing */}
             {canEdit && (

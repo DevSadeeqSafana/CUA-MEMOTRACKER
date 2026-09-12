@@ -166,9 +166,6 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                     </div>
 
                     <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-xl p-4 shrink-0 flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-300 flex items-center justify-center text-[#1a365d] font-black text-lg shadow-lg">
-                            CTO
-                        </div>
                         <div>
                             <p className="text-xs font-bold uppercase tracking-wider text-slate-300">Accountant In-Charge</p>
                             <p className="text-sm font-black text-white">Chidi Teddy Ojiako</p>

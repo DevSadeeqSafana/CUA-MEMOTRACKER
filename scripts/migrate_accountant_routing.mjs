@@ -75,29 +75,38 @@ async function run() {
             const accountantId = accountants[0].id;
             console.log(`Primary Accountant ID for auto-routing: ${accountantId}`);
 
-            const [financeMemos] = await connection.execute(`
-                SELECT m.id, m.title, m.category 
+            const [distributedMemos] = await connection.execute(`
+                SELECT m.id, m.title, m.category,
+                       (SELECT COUNT(*) FROM memo_budget_info bi WHERE bi.memo_id = m.id) AS budget_info_count,
+                       (SELECT COUNT(*) FROM memo_budget_items bi WHERE bi.memo_id = m.id) AS budget_items_count
                 FROM memos m
-                WHERE (
-                    (SELECT COUNT(*) FROM memo_budget_info bi WHERE bi.memo_id = m.id) > 0
-                    OR m.category LIKE '%Finance%'
-                    OR m.category LIKE '%Budget%'
-                )
-                AND m.status = 'Distributed'
+                WHERE m.status = 'Distributed'
             `);
+
+            const financeTerms = ['finance', 'budget', 'payment', 'expense', 'reimbursement', 'procurement', 'financial', 'accounts', 'accounting', 'funds'];
+            const financeMemos = [];
+
+            for (const memo of distributedMemos) {
+                const categoryLower = (memo.category || '').toLowerCase();
+                const isFinanceCategory = financeTerms.some(term => categoryLower.includes(term));
+                const isBudgetMemo = Number(memo.budget_info_count) > 0 || Number(memo.budget_items_count) > 0 || isFinanceCategory;
+                if (isBudgetMemo) {
+                    financeMemos.push(memo);
+                }
+            }
 
             console.log(`Found ${financeMemos.length} distributed finance/budget memos to backfill.`);
 
             for (const memo of financeMemos) {
-                // Ensure recipient entry exists for accountant
                 await connection.execute(
                     `INSERT IGNORE INTO memo_recipients (memo_id, recipient_id, recipient_type) VALUES (?, ?, 'To')`,
                     [memo.id, accountantId]
                 );
 
-                // Insert into memo_finance_processing
                 await connection.execute(
-                    `INSERT IGNORE INTO memo_finance_processing (memo_id, accountant_id, status) VALUES (?, ?, 'Pending Processing')`,
+                    `INSERT INTO memo_finance_processing (memo_id, accountant_id, status)
+                     VALUES (?, ?, 'Pending Processing')
+                     ON DUPLICATE KEY UPDATE accountant_id = VALUES(accountant_id), status = VALUES(status)` ,
                     [memo.id, accountantId]
                 );
                 console.log(`Routed Memo #${memo.id} ("${memo.title}") to Accountant.`);

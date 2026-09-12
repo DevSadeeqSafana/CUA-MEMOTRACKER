@@ -13,6 +13,8 @@ export default async function MemoCenterPage({
     const session = await auth();
     if (!session?.user) return null;
     const userId = session.user.id;
+    const userRoles = (session.user as any)?.role || [];
+    const isAccountant = userRoles.includes('Accountant') || userRoles.includes('Administrator') || String(session.user.email || '').toLowerCase().includes('chidi.ojiako');
     const folder = resolvedSearchParams.folder || 'inbox';
 
     // 1. Fetch distributed memos (Memos sent to the user as a recipient)
@@ -158,7 +160,7 @@ export default async function MemoCenterPage({
 
     return (
         <div className="space-y-6 animate-in fade-in duration-700">
-            <MemoInboxContainer memos={unifiedMemos} initialFolder={folder} />
+            <MemoInboxContainer memos={unifiedMemos} initialFolder={folder} isAccountant={isAccountant} />
         </div>
     );
 }

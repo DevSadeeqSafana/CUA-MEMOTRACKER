@@ -1831,7 +1831,7 @@ export async function getAccountantFinanceMemos(statusFilter?: string) {
                 m.created_at as memo_created_at,
                 m.updated_at as memo_updated_at,
                 COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as creator_name,
-                hs.Designation as creator_designation,
+                COALESCE(hd.DesignationName, 'Staff') as creator_designation,
                 COALESCE(
                     (SELECT SUM(total) FROM memo_budget_items WHERE memo_id = m.id),
                     0
@@ -1842,6 +1842,7 @@ export async function getAccountantFinanceMemos(statusFilter?: string) {
             JOIN memos m ON fp.memo_id = m.id
             JOIN memo_system_users u ON m.created_by = u.id
             LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+            LEFT JOIN hr_designation hd ON hs.DesignationID = hd.EntryID
             LEFT JOIN memo_budget_info bi ON m.id = bi.memo_id
             ${whereClause}
             ORDER BY fp.created_at DESC

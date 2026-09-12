@@ -24,7 +24,8 @@ import {
     Sparkles,
     Filter,
     CheckSquare,
-    Pencil
+    Pencil,
+    Landmark
 } from 'lucide-react';
 import { cn, formatDate } from '@/lib/utils';
 import { deleteDraftMemo } from '@/lib/actions';
@@ -34,9 +35,10 @@ import ConfirmationModal from '@/components/ui/ConfirmationModal';
 interface MemoInboxContainerProps {
     memos: any[];
     initialFolder?: string;
+    isAccountant?: boolean;
 }
 
-export default function MemoInboxContainer({ memos, initialFolder = 'inbox' }: MemoInboxContainerProps) {
+export default function MemoInboxContainer({ memos, initialFolder = 'inbox', isAccountant = false }: MemoInboxContainerProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
     
@@ -44,7 +46,7 @@ export default function MemoInboxContainer({ memos, initialFolder = 'inbox' }: M
     const folder = searchParams.get('folder') || initialFolder;
     const [deleteDraftId, setDeleteDraftId] = useState<number | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
-    const [tab, setTab] = useState<'all' | 'primary' | 'budget' | 'actions' | 'policy'>('all');
+    const [tab, setTab] = useState<'all' | 'primary' | 'budget' | 'actions' | 'policy' | 'accountant'>('all');
     const [search, setSearch] = useState('');
     const [starredIds, setStarredIds] = useState<Set<number>>(new Set());
 
@@ -108,6 +110,9 @@ export default function MemoInboxContainer({ memos, initialFolder = 'inbox' }: M
             } else if (tab === 'budget') {
                 // Budget requisitions
                 if (!memo.is_budget_memo) return false;
+            } else if (tab === 'accountant') {
+                // Accountant queue view: focus the routed finance/budget memos
+                if (!memo.is_budget_memo) return false;
             } else if (tab === 'actions') {
                 // Signature / decisions / actions needed
                 if (memo.memo_type !== 'Action' && memo.memo_type !== 'Approval' && memo.folder !== 'actions') return false;
@@ -135,8 +140,8 @@ export default function MemoInboxContainer({ memos, initialFolder = 'inbox' }: M
 
     // Calculate unread counts under each tab for Inbox
     const tabCounts = useMemo(() => {
-        const counts = { primary: 0, budget: 0, actions: 0, policy: 0 };
-        
+        const counts = { primary: 0, budget: 0, actions: 0, policy: 0, accountant: 0 };
+
         memos.forEach(memo => {
             // Only count unread received inbox items or active actions
             if (memo.folder !== 'inbox' && memo.folder !== 'actions') return;
@@ -144,6 +149,7 @@ export default function MemoInboxContainer({ memos, initialFolder = 'inbox' }: M
 
             if (memo.is_budget_memo) {
                 counts.budget++;
+                if (isAccountant) counts.accountant++;
             } else if (memo.memo_type === 'Action' || memo.memo_type === 'Approval' || memo.folder === 'actions') {
                 counts.actions++;
             } else if (['Strategic Policy', 'Exams', 'Policy'].includes(memo.category)) {
@@ -154,7 +160,7 @@ export default function MemoInboxContainer({ memos, initialFolder = 'inbox' }: M
         });
 
         return counts;
-    }, [memos]);
+    }, [memos, isAccountant]);
 
     // Quick helper to strip HTML tags for mail preview body snippet
     const getSnippet = (htmlContent: string) => {
@@ -253,6 +259,26 @@ export default function MemoInboxContainer({ memos, initialFolder = 'inbox' }: M
                         </span>
                     )}
                 </button>
+
+                {isAccountant && (
+                    <button
+                        onClick={() => setTab('accountant')}
+                        className={cn(
+                            "flex items-center gap-3 px-6 py-4.5 border-b-2 font-black text-xs uppercase tracking-widest transition-all shrink-0 relative",
+                            tab === 'accountant'
+                                ? "border-emerald-500 text-emerald-700 bg-emerald-50/10"
+                                : "border-transparent text-slate-400 hover:text-slate-600"
+                        )}
+                    >
+                        <Landmark size={15} />
+                        Accountant Queue
+                        {tabCounts.accountant > 0 && (
+                            <span className="bg-emerald-600 text-white font-bold text-[8px] px-1.5 py-0.5 rounded-full shrink-0">
+                                {tabCounts.accountant}
+                            </span>
+                        )}
+                    </button>
+                )}
 
                 {/* 4. Actions Required */}
                 <button
