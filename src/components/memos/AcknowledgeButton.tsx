@@ -7,69 +7,63 @@ import toast from 'react-hot-toast';
 
 interface AcknowledgeButtonProps {
     memoId: number;
+    /** The recipient's recorded decision, if they have already acted. */
     decision: string | null;
+    acknowledgedAt?: string | Date | null;
 }
 
-export default function AcknowledgeButton({ memoId, decision }: AcknowledgeButtonProps) {
+const formatWhen = (value?: string | Date | null) => {
+    if (!value) return '';
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+};
+
+export default function AcknowledgeButton({ memoId, decision, acknowledgedAt }: AcknowledgeButtonProps) {
     const [isLoading, setIsLoading] = useState(false);
 
-    const handleAction = async (action: 'Acknowledged' | 'Approved' | 'Rejected') => {
+    const handleAcknowledge = async () => {
         setIsLoading(true);
         try {
-            const result = await acknowledgeMemo(memoId, action);
+            const result = await acknowledgeMemo(memoId);
             if (result.success) {
-                toast.success(`Memo ${action.toLowerCase()} successfully`);
+                toast.success('Receipt acknowledged');
             } else {
-                toast.error((result as any).error || `Failed to ${action.toLowerCase()} memo`);
+                toast.error((result as any).error || 'Failed to acknowledge memo');
             }
         } catch (error) {
-            console.error('Action failed:', error);
+            console.error('Acknowledge failed:', error);
             toast.error('An error occurred. Please try again.');
         } finally {
             setIsLoading(false);
         }
     };
 
+    // Already acted: show the outcome. "Approved"/"Rejected" here come from
+    // an approver's decision (or older records), "Acknowledged" from a recipient.
     if (decision) {
+        const when = formatWhen(acknowledgedAt);
+        const tone = decision === 'Rejected'
+            ? 'bg-red-50 text-red-700 border-red-200'
+            : decision === 'Approved'
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : 'bg-white/10 text-white border-white/20';
+        const Icon = decision === 'Rejected' ? XCircle : decision === 'Approved' ? ThumbsUp : CheckCircle2;
         return (
-            <div className={`flex items-center gap-2 px-6 py-2 rounded-lg font-medium shadow-sm ${decision === 'Rejected' ? 'bg-red-50 text-red-700 border border-red-200' :
-                    decision === 'Approved' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                        'bg-blue-50 text-[#1a365d] border border-blue-200'
-                }`}>
-                {decision === 'Rejected' ? <XCircle size={18} /> :
-                    decision === 'Approved' ? <ThumbsUp size={18} /> :
-                        <CheckCircle2 size={18} />}
-                <span className="font-bold uppercase tracking-widest text-xs">{decision}</span>
+            <div className={`flex items-center gap-2 px-5 py-2.5 rounded-xl border font-bold text-xs uppercase tracking-widest ${tone}`}>
+                <Icon size={16} />
+                <span>You {decision.toLowerCase()} this memo{when ? ` · ${when}` : ''}</span>
             </div>
         );
     }
 
     return (
-        <div className="flex flex-col sm:flex-row items-center gap-3">
-            <button
-                onClick={() => handleAction('Acknowledged')}
-                disabled={isLoading}
-                className="flex items-center gap-2 px-6 py-2.5 bg-[#1a365d] text-white hover:bg-blue-800 rounded-xl shadow-lg shadow-blue-900/20 transition-all font-bold text-xs uppercase tracking-widest disabled:opacity-50"
-            >
-                {isLoading ? <Loader2 className="animate-spin" size={14} /> : <CheckCircle2 size={14} />}
-                Acknowledge
-            </button>
-            <button
-                onClick={() => handleAction('Approved')}
-                disabled={isLoading}
-                className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 text-white hover:bg-emerald-700 rounded-xl shadow-lg shadow-emerald-900/20 transition-all font-bold text-xs uppercase tracking-widest disabled:opacity-50"
-            >
-                {isLoading ? <Loader2 className="animate-spin" size={14} /> : <ThumbsUp size={14} />}
-                Approve
-            </button>
-            <button
-                onClick={() => handleAction('Rejected')}
-                disabled={isLoading}
-                className="flex items-center gap-2 px-6 py-2.5 bg-red-600 text-white hover:bg-red-700 rounded-xl shadow-lg shadow-red-900/20 transition-all font-bold text-xs uppercase tracking-widest disabled:opacity-50"
-            >
-                {isLoading ? <Loader2 className="animate-spin" size={14} /> : <XCircle size={14} />}
-                Reject
-            </button>
-        </div>
+        <button
+            onClick={handleAcknowledge}
+            disabled={isLoading}
+            className="flex items-center gap-2 px-6 py-2.5 bg-white text-emerald-700 hover:bg-emerald-50 rounded-xl shadow-lg shadow-emerald-900/20 transition-all font-bold text-xs uppercase tracking-widest disabled:opacity-50"
+        >
+            {isLoading ? <Loader2 className="animate-spin" size={14} /> : <CheckCircle2 size={14} />}
+            Acknowledge Receipt
+        </button>
     );
 }

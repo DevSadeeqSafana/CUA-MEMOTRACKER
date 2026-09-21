@@ -138,19 +138,23 @@ export default function MemoHistory({ memo, approvals, recipients, routingLogs =
     }
 
     // 5. Acknowledgments
-    // 5. Acknowledgments & Decisions
-    recipients.filter(r => r.acknowledged_at).forEach((rec) => {
-        const decisionText = rec.decision || 'Acknowledged';
-        events.push({
-            id: `ack-${rec.recipient_id}`,
-            type: decisionText === 'Rejected' ? 'rejection' : 'acknowledgment',
-            title: `Memo ${decisionText}`,
-            description: `${rec.recipient_name} has received and ${decisionText.toLowerCase()} this communication.`,
-            timestamp: rec.acknowledged_at,
-            status: decisionText === 'Rejected' ? 'failed' : 'completed',
-            user: rec.recipient_name
+    // An approver's decision already appears in the review chain above; their
+    // recipient record is marked acknowledged automatically, so skip it here.
+    const approverIds = new Set(approvals.map(a => a.approver_id));
+    recipients
+        .filter(r => r.acknowledged_at && !approverIds.has(r.recipient_id))
+        .forEach((rec) => {
+            const decisionText = rec.decision || 'Acknowledged';
+            events.push({
+                id: `ack-${rec.recipient_id}`,
+                type: decisionText === 'Rejected' ? 'rejection' : 'acknowledgment',
+                title: `Memo ${decisionText}`,
+                description: `${rec.recipient_name} has received and ${decisionText.toLowerCase()} this communication.`,
+                timestamp: rec.acknowledged_at,
+                status: decisionText === 'Rejected' ? 'failed' : 'completed',
+                user: rec.recipient_name
+            });
         });
-    });
 
     // Sort events by timestamp or priority if null
     const sortedEvents = [...events].sort((a, b) => {

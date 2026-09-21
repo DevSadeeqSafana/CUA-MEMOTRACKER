@@ -8,6 +8,27 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
+import { createUploadTicket } from './upload-ticket';
+
+// Attachment already stored by the backend upload endpoint (see client-upload.ts).
+interface UploadedFile { url: string; name: string; size: number; type: string; }
+
+function parseUploaded(raw: FormDataEntryValue | null): UploadedFile[] {
+    if (typeof raw !== 'string' || !raw) return [];
+    try {
+        const list = JSON.parse(raw);
+        return Array.isArray(list) ? list.filter(f => f && typeof f.url === 'string') : [];
+    } catch { return []; }
+}
+
+// Lets a signed-in user upload straight to the backend, so large files never
+// pass through this (size-limited, diskless) server.
+export async function getUploadTicket() {
+    const session = await auth();
+    if (!session?.user?.id) return { success: false as const, error: 'Unauthorized. Please log in again.' };
+    if (!process.env.MEMO_UPLOAD_SECRET) return { success: false as const, error: 'Direct upload is not configured.' };
+    return { success: true as const, token: createUploadTicket(session.user.id) };
+}
 
 async function getVCUserId() {
     try {
@@ -133,6 +154,7 @@ export async function createMemo(data: FormData, isDraft: boolean) {
     const cc_ids = JSON.parse(data.get('cc_ids') as string || '[]');
     const bcc_ids = JSON.parse(data.get('bcc_ids') as string || '[]');
     const files = data.getAll('attachments') as File[];
+    const uploadedFiles = parseUploaded(data.get('uploaded_attachments'));
 
     console.log(`createMemo: User ${userId} is creating a "${title}" memo (isDraft: ${isDraft})`);
 
@@ -182,9 +204,12 @@ export async function createMemo(data: FormData, isDraft: boolean) {
                 
                 // Handle item-specific attachment
                 let itemAttachmentPath = null;
+                const itemUploaded = parseUploaded(data.get(`budget_item_upload_${i}`))[0];
                 const itemFile = data.get(`budget_item_file_${i}`) as File;
-                
-                if (itemFile && itemFile.size > 0) {
+
+                if (itemUploaded) {
+                    itemAttachmentPath = itemUploaded.url;
+                } else if (itemFile && itemFile.size > 0) {
                     itemAttachmentPath = await uploadFile(itemFile, uuid);
                 }
 
@@ -203,6 +228,12 @@ export async function createMemo(data: FormData, isDraft: boolean) {
         }
 
         // 3. Handle Attachments (General)
+        for (const uploaded of uploadedFiles) {
+            await query(
+                'INSERT INTO attachments (memo_id, file_name, file_path, file_type, file_size) VALUES (?, ?, ?, ?, ?)',
+                [memoId, uploaded.name.substring(0, 255), uploaded.url.substring(0, 255), (uploaded.type || '').substring(0, 255), uploaded.size || 0]
+            );
+        }
         if (files.length > 0) {
             for (const file of files) {
                 if (!file || file.size === 0 || typeof file === 'string') continue;
@@ -292,6 +323,17 @@ export async function approveMemo(memoId: number, approvalId: number, comments: 
         await query(
             'UPDATE memo_approvals SET status = "Approved", comments = ?, processed_at = CURRENT_TIMESTAMP WHERE id = ?',
             [comments, approvalId]
+        );
+
+        // An approver who is also on the distribution list has, by approving,
+        // already seen the memo: record that so they are not asked to
+        // acknowledge it again once it is distributed.
+        await query(
+            `UPDATE memo_recipients
+             SET acknowledged_at = COALESCE(acknowledged_at, CURRENT_TIMESTAMP),
+                 decision = COALESCE(decision, 'Approved')
+             WHERE memo_id = ? AND recipient_id = ?`,
+            [memoId, session.user.id]
         );
 
         // Find the next sequential step
@@ -427,13 +469,17 @@ export async function markMemoAsRead(memoId: number) {
     }
 }
 
-export async function acknowledgeMemo(memoId: number, decision: 'Acknowledged' | 'Approved' | 'Rejected' = 'Acknowledged') {
+// Recipients confirm receipt of a distributed memo. Approval decisions are
+// made only by the approval chain (approveMemo / rejectMemo); a distributed
+// memo is final, so there is nothing further for a recipient to approve.
+export async function acknowledgeMemo(memoId: number) {
     const session = await auth();
     if (!session?.user) throw new Error('Unauthorized');
 
     try {
+        const decision = 'Acknowledged';
         await query(
-            'UPDATE memo_recipients SET acknowledged_at = CURRENT_TIMESTAMP, decision = ? WHERE memo_id = ? AND recipient_id = ?',
+            'UPDATE memo_recipients SET acknowledged_at = CURRENT_TIMESTAMP, decision = ? WHERE memo_id = ? AND recipient_id = ? AND acknowledged_at IS NULL',
             [decision, memoId, session.user.id]
         );
 
@@ -441,7 +487,7 @@ export async function acknowledgeMemo(memoId: number, decision: 'Acknowledged' |
         const memoRows = await query('SELECT created_by, title, uuid FROM memos WHERE id = ?', [memoId]) as any[];
         if (memoRows.length > 0) {
             const memo = memoRows[0];
-            const actionText = decision === 'Acknowledged' ? 'acknowledged' : decision.toLowerCase();
+            const actionText = 'acknowledged';
             
             // Fetch current user's full name
             const userRows = await query(`
@@ -1380,8 +1426,8 @@ export async function searchUsersForConsultation(searchTerm: string) {
 
 async function uploadFile(file: File, uuid: string): Promise<string> {
     const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-    const uploadApiUrl = process.env.UPLOAD_API_URL;
-    const uploadSecretToken = process.env.UPLOAD_SECRET_TOKEN;
+    const uploadApiUrl = process.env.UPLOAD_API_URL || process.env.NEXT_PUBLIC_UPLOAD_API_URL;
+    const uploadSecretToken = process.env.UPLOAD_SECRET_TOKEN || process.env.MEMO_UPLOAD_SECRET;
 
     try { await mkdir(uploadDir, { recursive: true }); } catch (e) { }
 

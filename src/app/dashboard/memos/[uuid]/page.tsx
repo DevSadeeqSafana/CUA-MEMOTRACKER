@@ -16,7 +16,8 @@ import {
     Wallet,
     Target,
     Pencil,
-    AlertTriangle
+    AlertTriangle,
+    XCircle
 } from 'lucide-react';
 import Link from 'next/link';
 import { cn, formatDate } from '@/lib/utils';
@@ -132,6 +133,8 @@ export default async function MemoDetailsPage({
     const recipientRecord = allRecipients.find(r => r.recipient_id === currentUserId);
     const isRecipient = !isCreator && !!recipientRecord;
     const isApprover = approvals.some(a => a.approver_id === currentUserId);
+    // The viewer's own completed decision in the approval chain, if any.
+    const myDecision = approvals.find(a => a.approver_id === currentUserId && a.status !== 'Pending') || null;
     const isCreatorsLineManager = memo.creator_line_manager_id === currentUserId;
 
     // Edit gate: only available to creator when memo is Draft AND has a rejection record
@@ -150,7 +153,7 @@ export default async function MemoDetailsPage({
 
     // canForward: any pending approver OR anyone who has received a forward OR final recipients
     const isForwardRecipient = consultations.some((c: any) => c.to_user_id === currentUserId);
-    const canForward = isPendingApprover || isForwardRecipient || isRecipient;
+    const canForward = isPendingApprover || isForwardRecipient || isRecipient || !!myDecision;
 
     const toRecipients = allRecipients.filter((r: any) => r.recipient_type === 'To');
     const ccRecipients = allRecipients.filter((r: any) => r.recipient_type === 'CC');
@@ -386,39 +389,82 @@ export default async function MemoDetailsPage({
                 )
             )}
 
-            {/* ─── RECIPIENT VIEW: Acknowledge banner ─── */}
-            {isRecipient && memo.status === 'Distributed' && (
-                <div className="bg-emerald-600 border border-emerald-700 rounded-2xl p-5 md:p-6 flex flex-col gap-5 shadow-xl relative overflow-hidden group">
-                    <MarkAsRead memoId={memo.id} />
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform"></div>
-                    <div className="flex items-center gap-4 md:gap-6 text-white relative z-10">
-                        <div className="w-12 h-12 md:w-16 md:h-16 rounded-xl md:rounded-2xl bg-white/10 flex items-center justify-center text-emerald-200 border border-white/10 shrink-0">
-                            <CheckCircle2 size={24} className="md:hidden" /><CheckCircle2 size={32} className="hidden md:block" />
-                        </div>
-                        <div className="space-y-1">
-                            <h3 className="text-base md:text-xl font-black font-outfit uppercase">Institutional Broadcast</h3>
-                            <p className="text-emerald-50/70 font-medium text-xs md:text-sm">Formal acknowledgment of this communication is mandatory.</p>
+            {/* ─── AFTER DISTRIBUTION ───
+                An approver who already decided sees their outcome and can only
+                forward; a plain recipient acknowledges receipt and can forward. */}
+            {!isCreator && memo.status === 'Distributed' && (myDecision || isRecipient) && (
+                myDecision ? (
+                    <div className="bg-[#1a365d] border border-blue-900 rounded-2xl p-5 md:p-6 flex flex-col gap-5 shadow-xl relative overflow-hidden group">
+                        {isRecipient && <MarkAsRead memoId={memo.id} />}
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform"></div>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 relative z-10 w-full">
+                            <div className="flex items-center gap-4 text-white">
+                                <div className={cn(
+                                    "w-12 h-12 rounded-xl flex items-center justify-center border border-white/10 shrink-0 bg-white/10",
+                                    myDecision.status === 'Approved' ? "text-emerald-300" : "text-red-300"
+                                )}>
+                                    {myDecision.status === 'Approved' ? <CheckCircle2 size={24} /> : <XCircle size={24} />}
+                                </div>
+                                <div className="space-y-1">
+                                    <h3 className="text-base md:text-lg font-black font-outfit uppercase tracking-tight">
+                                        You {myDecision.status.toLowerCase()} this memo
+                                    </h3>
+                                    <p className="text-blue-100/70 font-medium text-[11px]">
+                                        Decision recorded{myDecision.processed_at ? ` on ${formatDate(myDecision.processed_at)}` : ''}. The memo has been distributed; forward it if further input is needed.
+                                    </p>
+                                </div>
+                            </div>
+                            {canForward && (
+                                <ConsultationThread
+                                    memoId={memo.id}
+                                    memoUuid={memo.uuid}
+                                    currentUserId={currentUserId}
+                                    currentUserName={(session.user as any).name || ''}
+                                    consultations={consultations}
+                                    canForward={canForward}
+                                    buttonOnly
+                                />
+                            )}
                         </div>
                     </div>
+                ) : (
+                    <div className="bg-emerald-600 border border-emerald-700 rounded-2xl p-5 md:p-6 flex flex-col gap-5 shadow-xl relative overflow-hidden group">
+                        <MarkAsRead memoId={memo.id} />
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform"></div>
+                        <div className="flex items-center gap-4 md:gap-6 text-white relative z-10">
+                            <div className="w-12 h-12 md:w-16 md:h-16 rounded-xl md:rounded-2xl bg-white/10 flex items-center justify-center text-emerald-200 border border-white/10 shrink-0">
+                                <CheckCircle2 size={24} className="md:hidden" /><CheckCircle2 size={32} className="hidden md:block" />
+                            </div>
+                            <div className="space-y-1">
+                                <h3 className="text-base md:text-xl font-black font-outfit uppercase">Institutional Broadcast</h3>
+                                <p className="text-emerald-50/70 font-medium text-xs md:text-sm">
+                                    {recipientRecord?.acknowledged_at
+                                        ? 'Thank you — your acknowledgment has been recorded.'
+                                        : 'Please acknowledge receipt of this communication.'}
+                                </p>
+                            </div>
+                        </div>
 
-                    <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                        {canForward && (
-                            <ConsultationThread
+                        <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                            <AcknowledgeButton
                                 memoId={memo.id}
-                                memoUuid={memo.uuid}
-                                currentUserId={currentUserId}
-                                currentUserName={(session.user as any).name || ''}
-                                consultations={consultations}
-                                canForward={canForward}
-                                buttonOnly
+                                decision={recipientRecord?.decision || null}
+                                acknowledgedAt={recipientRecord?.acknowledged_at || null}
                             />
-                        )}
-                        <AcknowledgeButton
-                            memoId={memo.id}
-                            decision={recipientRecord.decision}
-                        />
+                            {canForward && (
+                                <ConsultationThread
+                                    memoId={memo.id}
+                                    memoUuid={memo.uuid}
+                                    currentUserId={currentUserId}
+                                    currentUserName={(session.user as any).name || ''}
+                                    consultations={consultations}
+                                    canForward={canForward}
+                                    buttonOnly
+                                />
+                            )}
+                        </div>
                     </div>
-                </div>
+                )
             )}
 
             {/* Main Content & Shared Components */}

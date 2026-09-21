@@ -64,7 +64,12 @@ export default function RichTextEditor({
     const editor = useEditor({
         immediatelyRender: false,
         extensions: [
-            StarterKit,
+            // StarterKit v3 already bundles Link and Underline; disable its
+            // copies so the configured ones below are the only instances.
+            StarterKit.configure({
+                link: false,
+                underline: false,
+            }),
             Underline,
             Link.configure({
                 openOnClick: false,

@@ -143,7 +143,7 @@ export async function sendMemoNotificationEmail(
         comments?: string;
     }
 ) {
-    const BASE_URL = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+    const BASE_URL = process.env.NEXTAUTH_URL || 'http://localhost:3001';
 
     try {
         console.log(`[Mailer] Processing notification email for memo ID ${memoId}, event: ${eventType}`);
