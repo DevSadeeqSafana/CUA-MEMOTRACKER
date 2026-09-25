@@ -139,10 +139,10 @@ export default async function DashboardPage() {
                             <ShieldCheck size={20} />
                         </div>
                     </div>
-                    <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Broadcasts</h3>
+                    <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Sent</h3>
                     <p className="text-2xl font-black text-[#1a365d] tracking-tighter">{university_total}</p>
                     <div className="mt-4 flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">
-                        Broadcasted
+                        Sent
                     </div>
                 </div>
             </div>

@@ -29,7 +29,7 @@ import ReviewerDecisionPanel from '@/components/memos/ReviewerDecisionPanel';
 import LineManagerRoutingAdjustment from '@/components/memos/LineManagerRoutingAdjustment';
 import ConsultationThread from '@/components/memos/ConsultationThread';
 import DocumentPreviewModal from '@/components/memos/DocumentPreviewModal';
-import { getRecipients, getManagers, getConsultations } from '@/lib/actions';
+import { getRecipients, getManagers, getConsultations, isCurrentUserApproverGroupMember } from '@/lib/actions';
 
 export default async function MemoDetailsPage({
     params,
@@ -143,6 +143,7 @@ export default async function MemoDetailsPage({
 
     // Role-specific power: allow ANY pending approver to adjust routing (added approvers, line managers, etc)
     const canAdjustRouting = isPendingApprover;
+    const canSendToAccountant = isPendingApprover && await isCurrentUserApproverGroupMember();
 
     // Fetch data for routing adjustment if authorized
     const availableUsers = canAdjustRouting ? await getRecipients() : [];
@@ -154,6 +155,13 @@ export default async function MemoDetailsPage({
     // canForward: any pending approver OR anyone who has received a forward OR final recipients
     const isForwardRecipient = consultations.some((c: any) => c.to_user_id === currentUserId);
     const canForward = isPendingApprover || isForwardRecipient || isRecipient || !!myDecision;
+
+    // Revise gate: creator may edit content/attachments of a submitted memo once
+    // someone has requested input from them or commented to them on it
+    const inputRequestsToCreator = isCreator
+        ? consultations.filter((c: any) => c.to_user_id === currentUserId && c.from_user_id !== currentUserId)
+        : [];
+    const canRevise = isCreator && memo.status !== 'Draft' && inputRequestsToCreator.length > 0;
 
     const toRecipients = allRecipients.filter((r: any) => r.recipient_type === 'To');
     const ccRecipients = allRecipients.filter((r: any) => r.recipient_type === 'CC');
@@ -180,6 +188,17 @@ export default async function MemoDetailsPage({
                     >
                         <Pencil size={13} />
                         Edit &amp; Resubmit
+                    </Link>
+                )}
+
+                {/* Edit Memo button — for the creator once input has been requested */}
+                {canRevise && (
+                    <Link
+                        href={`/dashboard/memos/${memo.uuid}/revise`}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-500/30"
+                    >
+                        <Pencil size={13} />
+                        Edit Memo
                     </Link>
                 )}
             </div>
@@ -287,6 +306,30 @@ export default async function MemoDetailsPage({
                 </div>
             )}
 
+            {/* Input requested banner — creator can revise content/attachments */}
+            {canRevise && (
+                <div className="bg-blue-50 border border-blue-200 rounded-2xl px-5 py-4 flex items-center justify-between gap-3 shadow-sm animate-in fade-in duration-500">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                            <AlertTriangle size={15} />
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black text-blue-700 uppercase tracking-[0.18em]">Input Requested</p>
+                            <p className="text-[11px] text-blue-500 font-medium mt-0.5">
+                                {inputRequestsToCreator[inputRequestsToCreator.length - 1].from_name} has requested your input. You can edit the memo content and attachments.
+                            </p>
+                        </div>
+                    </div>
+                    <Link
+                        href={`/dashboard/memos/${memo.uuid}/revise`}
+                        className="shrink-0 flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md shadow-blue-500/20"
+                    >
+                        <Pencil size={12} />
+                        Edit Memo
+                    </Link>
+                </div>
+            )}
+
             {/* Routing Adjustment Notifications — compact inline style */}
             {routingLogs.length > 0 && isCreator && (
                 <div className="border border-amber-200 bg-amber-50 rounded-xl px-4 py-3 space-y-2">
@@ -344,6 +387,7 @@ export default async function MemoDetailsPage({
                         initialApprovers={approvals.map(a => ({ id: a.approver_id, username: a.approver_name, department: a.department }))}
                         availableUsers={availableUsers}
                         availableManagers={availableManagers}
+                        canSendToAccountant={canSendToAccountant}
                     />
                 ) : (
                     <div className="bg-[#1a365d] border border-blue-900 rounded-2xl p-5 md:p-6 flex flex-col items-start gap-5 shadow-xl relative overflow-hidden group">
@@ -383,7 +427,7 @@ export default async function MemoDetailsPage({
                                     availableManagers={availableManagers}
                                 />
                             )}
-                            <ApprovalButtons memoId={memo.id} approvalId={currentApproval.id} />
+                            <ApprovalButtons memoId={memo.id} approvalId={currentApproval.id} canSendToAccountant={canSendToAccountant} />
                         </div>
                     </div>
                 )
@@ -436,7 +480,7 @@ export default async function MemoDetailsPage({
                                 <CheckCircle2 size={24} className="md:hidden" /><CheckCircle2 size={32} className="hidden md:block" />
                             </div>
                             <div className="space-y-1">
-                                <h3 className="text-base md:text-xl font-black font-outfit uppercase">Institutional Broadcast</h3>
+                                <h3 className="text-base md:text-xl font-black font-outfit uppercase">Institutional Send</h3>
                                 <p className="text-emerald-50/70 font-medium text-xs md:text-sm">
                                     {recipientRecord?.acknowledged_at
                                         ? 'Thank you — your acknowledgment has been recorded.'

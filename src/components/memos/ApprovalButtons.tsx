@@ -9,20 +9,22 @@ import toast from 'react-hot-toast';
 interface ApprovalButtonsProps {
     memoId: number;
     approvalId: number;
+    // Approver-group members may also approve and send the memo to the Accountant
+    canSendToAccountant?: boolean;
 }
 
-export default function ApprovalButtons({ memoId, approvalId }: ApprovalButtonsProps) {
+export default function ApprovalButtons({ memoId, approvalId, canSendToAccountant = false }: ApprovalButtonsProps) {
     const [isLoading, setIsLoading] = useState(false);
     const [isCompleted, setIsCompleted] = useState(false);
     const [showRejectModal, setShowRejectModal] = useState(false);
     const [showApproveModal, setShowApproveModal] = useState(false);
 
-    const handleApprove = async (comments: string = '') => {
+    const handleApprove = async (comments: string = '', sendToAccountant: boolean = false) => {
         setIsLoading(true);
         try {
-            const result = await approveMemo(memoId, approvalId, comments);
+            const result = await approveMemo(memoId, approvalId, comments, sendToAccountant);
             if (result.success) {
-                toast.success('Memo approved successfully');
+                toast.success(sendToAccountant ? 'Memo approved and sent to the Accountant' : 'Memo approved successfully');
                 setIsCompleted(true);
                 setShowApproveModal(false);
             } else {
@@ -98,11 +100,15 @@ export default function ApprovalButtons({ memoId, approvalId }: ApprovalButtonsP
             <PromptModal
                 isOpen={showApproveModal}
                 onClose={() => setShowApproveModal(false)}
-                onConfirm={handleApprove}
+                onConfirm={(comments) => handleApprove(comments)}
                 title="Approve Memo"
-                description="Optional: Add a signature note or administrative comment to this approval."
+                description={canSendToAccountant
+                    ? 'Approve only, or approve and send this memo to the Accountant for processing. You may add an optional note.'
+                    : 'Optional: Add a signature note or administrative comment to this approval.'}
                 placeholder="Write a note (optional)..."
-                confirmText="Approve Memo"
+                confirmText={canSendToAccountant ? 'Approve Only' : 'Approve Memo'}
+                secondaryConfirmText={canSendToAccountant ? 'Approve & Send to Accountant' : undefined}
+                onSecondaryConfirm={canSendToAccountant ? (comments) => handleApprove(comments, true) : undefined}
                 isLoading={isLoading}
             />
         </div>

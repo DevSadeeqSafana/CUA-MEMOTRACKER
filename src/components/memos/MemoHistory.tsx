@@ -131,7 +131,7 @@ export default function MemoHistory({ memo, approvals, recipients, routingLogs =
             id: 'distribution',
             type: 'distribution',
             title: 'Official Distribution',
-            description: 'Memo has been cleared and broadcasted to all targets.',
+            description: 'Memo has been cleared and sent to all targets.',
             timestamp: memo.updated_at,
             status: 'completed'
         });

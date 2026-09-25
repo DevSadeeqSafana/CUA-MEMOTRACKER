@@ -14,11 +14,13 @@ import {
     ShieldCheck,
     Eye,
     EyeOff,
-    X
+    X,
+    UserCheck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { changePassword } from '@/lib/actions';
 import toast from 'react-hot-toast';
+import ApproverSettings from './ApproverSettings';
 
 interface SettingsTabsProps {
     user: any;
@@ -36,6 +38,7 @@ export default function SettingsTabs({ user, roles }: SettingsTabsProps) {
         { id: 'profile', label: 'Personal Profile', icon: User },
         { id: 'password', label: 'Change Password', icon: Lock },
         { id: 'notifications', label: 'Alert Preferences', icon: Bell },
+        ...(roles.includes('Administrator') ? [{ id: 'approvers', label: "Approver's Settings", icon: UserCheck }] : []),
     ];
 
     return (
@@ -48,15 +51,17 @@ export default function SettingsTabs({ user, roles }: SettingsTabsProps) {
                             {activeTab === 'profile' && <User size={18} />}
                             {activeTab === 'password' && <Lock size={18} />}
                             {activeTab === 'notifications' && <Bell size={18} />}
+                            {activeTab === 'approvers' && <UserCheck size={18} />}
                         </div>
                         <h2 className="text-lg font-black text-[#1a365d] uppercase tracking-tight font-outfit">
-                            {activeTab === 'profile' ? 'Official Profile' : activeTab === 'password' ? 'Change Password' : 'Alert Preferences'}
+                            {activeTab === 'profile' ? 'Official Profile' : activeTab === 'password' ? 'Change Password' : activeTab === 'approvers' ? "Approver's Settings" : 'Alert Preferences'}
                         </h2>
                     </div>
                     <p className="text-xs text-slate-400 font-bold uppercase tracking-wider pl-11">
                         {activeTab === 'profile' && 'Verified information from the University Registry'}
                         {activeTab === 'password' && 'Update your university portal password'}
                         {activeTab === 'notifications' && 'Configure active dispatch methods and reminders'}
+                        {activeTab === 'approvers' && 'Manage who can approve and send memos to the Accountant'}
                     </p>
                 </div>
             </div>
@@ -237,6 +242,8 @@ export default function SettingsTabs({ user, roles }: SettingsTabsProps) {
                         </div>
                     </div>
                 )}
+
+                {activeTab === 'approvers' && roles.includes('Administrator') && <ApproverSettings />}
 
                 {activeTab === 'notifications' && (
                     <div className="space-y-4">

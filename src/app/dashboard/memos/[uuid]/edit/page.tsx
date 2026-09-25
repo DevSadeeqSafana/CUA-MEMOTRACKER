@@ -36,7 +36,7 @@ export default async function EditMemoPage({
 
     // Gate 3: must have at least one Rejected approval record
     const rejections = await query(
-        `SELECT id, comments, processed_at,
+        `SELECT a.id, a.comments, a.processed_at,
                 COALESCE(CONCAT(hs.FirstName, ' ', hs.Surname), u.username) as rejector_name
          FROM memo_approvals a
          JOIN memo_system_users u ON a.approver_id = u.id
@@ -78,6 +78,11 @@ export default async function EditMemoPage({
         };
     });
 
+    const attachments = await query(
+        `SELECT id, file_name, file_size FROM attachments WHERE memo_id = ? ORDER BY id ASC`,
+        [memo.id]
+    ) as any[];
+
     const recipients = await getRecipients();
 
     const toIds  = existingRecipients.filter((r: any) => r.recipient_type === 'To').map((r: any) => r.recipient_id);
@@ -92,6 +97,7 @@ export default async function EditMemoPage({
                 memoUuid={uuid}
                 rejections={rejections}
                 recipients={recipients}
+                attachments={attachments.map((a: any) => ({ id: a.id, file_name: a.file_name, file_size: Number(a.file_size) || 0 }))}
                 initialData={{
                     title: memo.title,
                     department: memo.department,

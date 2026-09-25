@@ -78,11 +78,19 @@ const memoSchema = z.object({
 
 type MemoFormValues = z.infer<typeof memoSchema>;
 
+interface ExistingAttachment {
+    id: number;
+    file_name: string;
+    file_size?: number;
+}
+
 interface MemoFormProps {
     initialData?: Partial<MemoFormValues>;
-    onSubmit: (data: MemoFormValues & { attachments: File[] }, isDraft: boolean) => void;
+    onSubmit: (data: MemoFormValues & { attachments: File[]; removed_attachment_ids: number[] }, isDraft: boolean) => void;
     isLoading?: boolean;
     recipients?: any[];
+    // Attachments already saved on the memo (edit mode); the user may remove them
+    existingAttachments?: ExistingAttachment[];
 }
 
 
@@ -191,8 +199,10 @@ function RecipientRow({
     );
 }
 
-export default function MemoForm({ initialData, onSubmit, isLoading, recipients = [] }: MemoFormProps) {
+export default function MemoForm({ initialData, onSubmit, isLoading, recipients = [], existingAttachments = [] }: MemoFormProps) {
     const [attachments, setAttachments] = useState<File[]>([]);
+    const [removedAttachmentIds, setRemovedAttachmentIds] = useState<number[]>([]);
+    const keptAttachments = existingAttachments.filter(a => !removedAttachmentIds.includes(a.id));
     const [showBCC, setShowBCC] = useState(false);
     const [showMeta, setShowMeta] = useState(false);
     const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
@@ -334,7 +344,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
             ...data,
             budget_category: cats.join(', ') || data.budget_category || ''
         };
-        onSubmit({ ...finalData, attachments }, isDraft);
+        onSubmit({ ...finalData, attachments, removed_attachment_ids: removedAttachmentIds }, isDraft);
     };
 
     const onInvalid = (errors: any) => {
@@ -583,9 +593,24 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                 </div>
 
                 {/* Attachments list */}
-                {attachments.length > 0 && (
+                {(attachments.length > 0 || keptAttachments.length > 0) && (
                     <div className="px-6 py-3 border-t border-slate-100">
                         <div className="flex flex-wrap gap-2">
+                            {keptAttachments.map(file => (
+                                <div key={`existing-${file.id}`} className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 group">
+                                    <Paperclip size={12} className="text-slate-400 shrink-0" />
+                                    <span className="text-[11px] font-bold text-slate-600 max-w-[160px] truncate">{file.file_name}</span>
+                                    {!!file.file_size && <span className="text-[9px] text-slate-400 font-bold">{(file.file_size / 1024).toFixed(0)}KB</span>}
+                                    <button
+                                        type="button"
+                                        title="Remove attachment"
+                                        onClick={() => setRemovedAttachmentIds(prev => [...prev, file.id])}
+                                        className="text-slate-300 hover:text-red-500 transition-all"
+                                    >
+                                        <X size={12} />
+                                    </button>
+                                </div>
+                            ))}
                             {attachments.map((file, idx) => (
                                 <div key={idx} className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 group">
                                     <Paperclip size={12} className="text-slate-400 shrink-0" />

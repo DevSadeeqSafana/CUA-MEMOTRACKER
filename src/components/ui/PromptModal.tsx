@@ -16,6 +16,9 @@ interface PromptModalProps {
     cancelText?: string;
     isLoading?: boolean;
     required?: boolean;
+    // Optional second confirm button (e.g. "Approve & Send to Accountant")
+    secondaryConfirmText?: string;
+    onSecondaryConfirm?: (value: string) => void;
 }
 
 export default function PromptModal({
@@ -28,7 +31,9 @@ export default function PromptModal({
     confirmText = 'Submit',
     cancelText = 'Cancel',
     isLoading = false,
-    required = false
+    required = false,
+    secondaryConfirmText,
+    onSecondaryConfirm
 }: PromptModalProps) {
     const [value, setValue] = useState('');
     const [mounted, setMounted] = useState(false);
@@ -48,7 +53,7 @@ export default function PromptModal({
     const modalContent = (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6 animate-in fade-in duration-300">
             <div className="fixed inset-0 bg-[#1a365d]/40 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl p-10 animate-in zoom-in-95 duration-300">
+            <div className={cn("relative bg-white w-full rounded-[2.5rem] shadow-2xl p-10 animate-in zoom-in-95 duration-300", onSecondaryConfirm ? "max-w-2xl" : "max-w-lg")}>
                 <button
                     onClick={onClose}
                     className="absolute top-8 right-8 text-slate-400 hover:text-slate-600 transition-colors"
@@ -87,6 +92,19 @@ export default function PromptModal({
                         >
                             {isLoading ? 'Processing...' : confirmText}
                         </button>
+                        {onSecondaryConfirm && secondaryConfirmText && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (required && !value.trim()) return;
+                                    onSecondaryConfirm(value);
+                                }}
+                                disabled={isLoading || (required && !value.trim())}
+                                className="flex-[2] py-4 rounded-2xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-900/20 active:scale-95 disabled:opacity-50"
+                            >
+                                {isLoading ? 'Processing...' : secondaryConfirmText}
+                            </button>
+                        )}
                         <button
                             type="button"
                             onClick={onClose}

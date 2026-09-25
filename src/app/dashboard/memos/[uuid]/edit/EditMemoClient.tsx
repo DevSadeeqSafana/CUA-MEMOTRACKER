@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import MemoForm from '@/components/memos/MemoForm';
 import { updateRejectedMemo } from '@/lib/actions';
+import { appendGeneralAttachments } from '@/lib/client-upload';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { AlertTriangle, ArrowLeft, Clock, User } from 'lucide-react';
@@ -23,6 +24,7 @@ interface EditMemoClientProps {
     rejections: RejectionRecord[];
     recipients: any[];
     initialData: any;
+    attachments: { id: number; file_name: string; file_size?: number }[];
 }
 
 export default function EditMemoClient({
@@ -32,6 +34,7 @@ export default function EditMemoClient({
     rejections,
     recipients,
     initialData,
+    attachments,
 }: EditMemoClientProps) {
     const [isLoading, setIsLoading] = useState(false);
     const router = useRouter();
@@ -62,6 +65,18 @@ export default function EditMemoClient({
                     return rest;
                 }) || [];
                 formData.append('budget_items', JSON.stringify(cleanedItems));
+            }
+
+            formData.append('removed_attachment_ids', JSON.stringify(data.removed_attachment_ids || []));
+            const newFiles: File[] = data.attachments || [];
+            const toastId = newFiles.length > 0 ? toast.loading(`Uploading attachments (0/${newFiles.length})…`) : undefined;
+            try {
+                await appendGeneralAttachments(formData, newFiles, (done, total) =>
+                    toast.loading(`Uploading attachments (${done}/${total})…`, { id: toastId }));
+                if (toastId) toast.dismiss(toastId);
+            } catch (e: any) {
+                toast.error(e?.message || 'Attachment upload failed', toastId ? { id: toastId } : undefined);
+                return;
             }
 
             const result = await updateRejectedMemo(memoId, formData, !isDraft);
@@ -153,6 +168,7 @@ export default function EditMemoClient({
                 onSubmit={handleFormSubmit}
                 isLoading={isLoading}
                 recipients={recipients}
+                existingAttachments={attachments}
             />
         </div>
     );

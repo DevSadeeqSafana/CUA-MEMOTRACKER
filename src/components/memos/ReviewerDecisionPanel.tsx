@@ -28,6 +28,8 @@ interface ReviewerDecisionPanelProps {
     initialApprovers?: any[];
     availableUsers?: any[];
     availableManagers?: any[];
+    // Approver-group members may also approve and send the memo to the Accountant
+    canSendToAccountant?: boolean;
 }
 
 import ConsultationThread from '@/components/memos/ConsultationThread';
@@ -46,7 +48,8 @@ export default function ReviewerDecisionPanel({
     initialRecipients,
     initialApprovers,
     availableUsers,
-    availableManagers
+    availableManagers,
+    canSendToAccountant = false
 }: ReviewerDecisionPanelProps) {
     const [isLoading, setIsLoading] = useState(false);
     const [isCompleted, setIsCompleted] = useState(false);
@@ -54,12 +57,12 @@ export default function ReviewerDecisionPanel({
     const [rejectionComments, setRejectionComments] = useState('');
     const [showApproveConfirm, setShowApproveConfirm] = useState(false);
 
-    const handleApprove = async (comments: string = '') => {
+    const handleApprove = async (comments: string = '', sendToAccountant: boolean = false) => {
         setIsLoading(true);
         try {
-            const result = await approveMemo(memoId, approvalId, comments);
+            const result = await approveMemo(memoId, approvalId, comments, sendToAccountant);
             if (result.success) {
-                toast.success('Memo approved and distributed institutionally');
+                toast.success(sendToAccountant ? 'Memo approved and sent to the Accountant' : 'Memo approved and distributed institutionally');
                 setIsCompleted(true);
                 setShowApproveConfirm(false);
             } else {
@@ -123,7 +126,7 @@ export default function ReviewerDecisionPanel({
                             <h3 className="text-xl font-black text-white font-outfit uppercase tracking-tight">Final Decision Desk</h3>
                             <p className="text-blue-100/60 text-[11px] font-medium flex items-center gap-2">
                                 <FileSignature size={12} />
-                                Formal authorization required for institutional broadcasting.
+                                Formal authorization required for institutional sending.
                             </p>
                         </div>
                     </div>
@@ -208,7 +211,7 @@ export default function ReviewerDecisionPanel({
                     <AlertTriangle className="text-amber-400 shrink-0" size={20} />
                     <p className="text-xs leading-relaxed text-blue-100/40 font-medium">
                         <span className="text-amber-400 font-bold uppercase tracking-tight mr-1">Institutional Warning:</span>
-                        This decision is binding and will be recorded in the CUA Digital Archive. Approval will immediately broadcast this memo to all selected recipients.
+                        This decision is binding and will be recorded in the CUA Digital Archive. Approval will immediately send this memo to all selected recipients.
                     </p>
                 </div>
             </div>
@@ -216,10 +219,14 @@ export default function ReviewerDecisionPanel({
             <PromptModal
                 isOpen={showApproveConfirm}
                 onClose={() => setShowApproveConfirm(false)}
-                onConfirm={handleApprove}
+                onConfirm={(comments) => handleApprove(comments)}
                 title="Institutional Approval"
-                description={`Provide final authorization for "${memoTitle}". You may add an optional administrative note to this distribution.`}
-                confirmText="Approve & Distribute"
+                description={canSendToAccountant
+                    ? `Provide final authorization for "${memoTitle}". Approve only, or approve and send it to the Accountant for processing. You may add an optional administrative note.`
+                    : `Provide final authorization for "${memoTitle}". You may add an optional administrative note to this distribution.`}
+                confirmText={canSendToAccountant ? 'Approve Only' : 'Approve & Distribute'}
+                secondaryConfirmText={canSendToAccountant ? 'Approve & Send to Accountant' : undefined}
+                onSecondaryConfirm={canSendToAccountant ? (comments) => handleApprove(comments, true) : undefined}
                 placeholder="Administrative note (optional)..."
                 isLoading={isLoading}
             />

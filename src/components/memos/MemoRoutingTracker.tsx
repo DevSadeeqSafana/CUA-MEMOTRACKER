@@ -89,7 +89,7 @@ export default function MemoRoutingTracker({ memo, approvals, recipients, curren
     steps.push({
         id: 'distributed',
         label: isDistributed
-            ? `Broadcasted`
+            ? `Sent`
             : 'Distribution Pending',
         sublabel: isOneOfRecipients ? `You & ${totalRecipients - 1} others` : `${totalRecipients} Recipient(s)`,
         status: recipientStatus,

@@ -21,6 +21,40 @@ function parseUploaded(raw: FormDataEntryValue | null): UploadedFile[] {
     } catch { return []; }
 }
 
+// Applies attachment edits from a memo edit form: removes the attachments
+// listed in `removed_attachment_ids`, then stores any new ones.
+async function applyAttachmentChanges(memoId: number, uuid: string, data: FormData) {
+    let removedIds: number[] = [];
+    try {
+        const parsed = JSON.parse((data.get('removed_attachment_ids') as string) || '[]');
+        if (Array.isArray(parsed)) removedIds = parsed.map(Number).filter(Number.isInteger);
+    } catch { /* ignore malformed input */ }
+
+    for (const id of removedIds) {
+        await query('DELETE FROM attachments WHERE id = ? AND memo_id = ?', [id, memoId]);
+    }
+
+    const added: string[] = [];
+    for (const uploaded of parseUploaded(data.get('uploaded_attachments'))) {
+        await query(
+            'INSERT INTO attachments (memo_id, file_name, file_path, file_type, file_size) VALUES (?, ?, ?, ?, ?)',
+            [memoId, uploaded.name.substring(0, 255), uploaded.url.substring(0, 255), (uploaded.type || '').substring(0, 255), uploaded.size || 0]
+        );
+        added.push(uploaded.name);
+    }
+    for (const file of data.getAll('attachments') as File[]) {
+        if (!file || typeof file === 'string' || file.size === 0) continue;
+        const filePath = await uploadFile(file, uuid);
+        await query(
+            'INSERT INTO attachments (memo_id, file_name, file_path, file_type, file_size) VALUES (?, ?, ?, ?, ?)',
+            [memoId, file.name.substring(0, 255), filePath.substring(0, 255), file.type.substring(0, 255), file.size]
+        );
+        added.push(file.name);
+    }
+
+    return { removedCount: removedIds.length, added };
+}
+
 // Lets a signed-in user upload straight to the backend, so large files never
 // pass through this (size-limited, diskless) server.
 export async function getUploadTicket() {
@@ -70,6 +104,51 @@ async function getAccountantUserId() {
         console.error('Failed to get Accountant user ID:', error);
         return null;
     }
+}
+
+// Members of the approver group (VC, DVC, Registrar, COO, ...) may send any
+// memo they approve straight to the Accountant. Returns false if the group
+// table has not been migrated yet.
+async function isApproverGroupMember(userId: number | string) {
+    try {
+        const rows = await query('SELECT 1 FROM memo_approver_group WHERE user_id = ? LIMIT 1', [userId]) as any[];
+        return rows.length > 0;
+    } catch (error) {
+        console.error('Failed to check approver group membership:', error);
+        return false;
+    }
+}
+
+// Routes a memo an approver-group member explicitly sent to the Accountant,
+// regardless of whether it looks like a finance memo.
+async function sendMemoToAccountant(memoId: number, senderId: number | string) {
+    const accountantId = await getAccountantUserId();
+    if (!accountantId) throw new Error('No Accountant is configured to receive this memo.');
+
+    const rows = await query(`
+        SELECT m.title, COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as sender_name
+        FROM memos m
+        JOIN memo_system_users u ON u.id = ?
+        LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+        WHERE m.id = ?
+    `, [senderId, memoId]) as any[];
+    const { title, sender_name } = rows[0] || {};
+
+    await query(`
+        INSERT INTO memo_finance_processing (memo_id, accountant_id, status)
+        VALUES (?, ?, 'Pending Processing')
+        ON DUPLICATE KEY UPDATE accountant_id = VALUES(accountant_id)
+    `, [memoId, accountantId]);
+
+    await query(`
+        INSERT IGNORE INTO memo_recipients (memo_id, recipient_id, recipient_type)
+        VALUES (?, ?, 'To')
+    `, [memoId, accountantId]);
+
+    await query(`
+        INSERT INTO notifications (user_id, memo_id, message)
+        VALUES (?, ?, ?)
+    `, [accountantId, memoId, `${sender_name} approved the memo "${title}" and sent it to you for processing.`]);
 }
 
 export async function routeApprovedFinanceMemoToAccountant(memoId: number) {
@@ -310,11 +389,24 @@ export async function createMemo(data: FormData, isDraft: boolean) {
     }
 }
 
-export async function approveMemo(memoId: number, approvalId: number, comments: string = '') {
+export async function approveMemo(memoId: number, approvalId: number, comments: string = '', sendToAccountant: boolean = false) {
     const session = await auth();
     if (!session?.user) throw new Error('Unauthorized');
 
     try {
+        if (sendToAccountant) {
+            const ownStep = await query(
+                'SELECT id FROM memo_approvals WHERE id = ? AND memo_id = ? AND approver_id = ? AND status = "Pending"',
+                [approvalId, memoId, session.user.id]
+            ) as any[];
+            if (ownStep.length === 0 || !(await isApproverGroupMember(session.user.id!))) {
+                return { success: false, error: 'You are not authorized to send memos to the Accountant.' };
+            }
+            if (!(await getAccountantUserId())) {
+                return { success: false, error: 'No Accountant is configured to receive this memo.' };
+            }
+        }
+
         // Fetch step_order before modifying the record
         const approvedStep = await query('SELECT step_order FROM memo_approvals WHERE id = ?', [approvalId]) as any[];
         const stepOrder = approvedStep.length > 0 ? approvedStep[0].step_order : null;
@@ -367,7 +459,7 @@ export async function approveMemo(memoId: number, approvalId: number, comments: 
         } else {
             // Final approval complete: Distribute
             await query('UPDATE memos SET status = "Distributed" WHERE id = ?', [memoId]);
-            await routeApprovedFinanceMemoToAccountant(memoId);
+            if (!sendToAccountant) await routeApprovedFinanceMemoToAccountant(memoId);
             const memo = await query('SELECT created_by, title FROM memos WHERE id = ?', [memoId]) as any[];
 
             await query(
@@ -405,18 +497,23 @@ export async function approveMemo(memoId: number, approvalId: number, comments: 
             await sendMemoNotificationEmail(memoId, 'DISTRIBUTED');
         }
 
+        if (sendToAccountant) {
+            await sendMemoToAccountant(memoId, session.user.id!);
+            revalidatePath('/dashboard/accountant');
+        }
+
         await query(
             'INSERT INTO audit_logs (user_id, action, table_name, record_id, new_value) VALUES (?, ?, ?, ?, ?)',
-            [session.user.id, 'APPROVE_MEMO', 'memo_approvals', approvalId, JSON.stringify({ comments })]
+            [session.user.id, sendToAccountant ? 'APPROVE_MEMO_TO_ACCOUNTANT' : 'APPROVE_MEMO', 'memo_approvals', approvalId, JSON.stringify({ comments, sendToAccountant })]
         );
 
         revalidatePath(`/dashboard/memos/${memoId}`);
         revalidatePath('/dashboard');
         revalidatePath('/dashboard/approvals');
         return { success: true };
-    } catch (error) {
+    } catch (error: any) {
         console.error('Approval Error:', error);
-        return { success: false };
+        return { success: false, error: error?.message };
     }
 }
 
@@ -1790,7 +1887,10 @@ export async function updateRejectedMemo(memoId: number, data: FormData, submitN
             }
         }
 
-        // 6. Re-submit flow
+        // 6. Attachments (remove existing / add new)
+        await applyAttachmentChanges(memoId, uuid, data);
+
+        // 7. Re-submit flow
         if (submitNow) {
             // Clear ALL previous approval records (Rejected + any old Pending) for a clean re-submission
             await query(`DELETE FROM memo_approvals WHERE memo_id = ?`, [memoId]);
@@ -1840,6 +1940,91 @@ export async function updateRejectedMemo(memoId: number, data: FormData, submitN
         return { success: true, memoUuid: uuid };
     } catch (e: any) {
         console.error('updateRejectedMemo error:', e);
+        return { success: false, error: e.message || 'Update failed' };
+    }
+}
+
+// ─── REVISE MEMO AFTER AN INPUT REQUEST ──────────────────────────────────────
+
+// A memo in review or already distributed can be revised by its creator once
+// someone has asked them for input or commented on it (a consultation
+// addressed to the creator). Rejected memos use updateRejectedMemo instead.
+async function fetchInputRequests(memoId: number, creatorId: number) {
+    return await query(`
+        SELECT mc.id, mc.from_user_id, mc.message, mc.type, mc.created_at,
+               COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as from_name
+        FROM memo_consultations mc
+        JOIN memo_system_users u ON mc.from_user_id = u.id
+        LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+        WHERE mc.memo_id = ? AND mc.to_user_id = ? AND mc.from_user_id != ?
+        ORDER BY mc.created_at DESC
+    `, [memoId, creatorId, creatorId]) as any[];
+}
+
+// Input requests addressed to the signed-in user on a memo they created.
+export async function getMyInputRequests(memoId: number) {
+    const session = await auth();
+    if (!session?.user?.id) return [];
+    const userId = parseInt(session.user.id);
+    const owns = await query('SELECT 1 FROM memos WHERE id = ? AND created_by = ?', [memoId, userId]) as any[];
+    return owns.length > 0 ? fetchInputRequests(memoId, userId) : [];
+}
+
+export async function reviseMemoContent(memoId: number, data: FormData) {
+    const session = await auth();
+    if (!session?.user?.id) return { success: false, error: 'Unauthorized' };
+    const userId = parseInt(session.user.id);
+
+    try {
+        const rows = await query(
+            `SELECT id, uuid, title, content, status FROM memos WHERE id = ? AND created_by = ? LIMIT 1`,
+            [memoId, userId]
+        ) as any[];
+        if (rows.length === 0) return { success: false, error: 'Memo not found.' };
+        const memo = rows[0];
+        if (memo.status === 'Draft') return { success: false, error: 'Draft memos are edited from the draft editor.' };
+
+        const requests = await fetchInputRequests(memoId, userId);
+        if (requests.length === 0) {
+            return { success: false, error: 'This memo can only be edited after input has been requested from you.' };
+        }
+
+        const title = ((data.get('title') as string) || '').trim();
+        const content = (data.get('content') as string) || '';
+        if (!title) return { success: false, error: 'Title is required.' };
+        if (!content.replace(/<[^>]*>/g, '').trim()) return { success: false, error: 'Memo content cannot be empty.' };
+
+        await query('UPDATE memos SET title = ?, content = ?, updated_at = NOW() WHERE id = ?', [title, content, memoId]);
+        const { removedCount, added } = await applyAttachmentChanges(memoId, memo.uuid, data);
+
+        await query(
+            'INSERT INTO audit_logs (user_id, action, table_name, record_id, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)',
+            [userId, 'REVISE_MEMO', 'memos', memoId,
+                JSON.stringify({ title: memo.title, content: memo.content }),
+                JSON.stringify({ title, content, removedAttachments: removedCount, addedAttachments: added })]
+        );
+
+        // Let everyone who asked for input (and the current approver) know
+        const notifyIds = new Set<number>(requests.map((r: any) => r.from_user_id));
+        const pending = await query(
+            'SELECT approver_id FROM memo_approvals WHERE memo_id = ? AND status = "Pending" ORDER BY step_order ASC LIMIT 1',
+            [memoId]
+        ) as any[];
+        if (pending.length > 0) notifyIds.add(pending[0].approver_id);
+        notifyIds.delete(userId);
+
+        for (const id of notifyIds) {
+            await query(
+                'INSERT INTO notifications (user_id, memo_id, message) VALUES (?, ?, ?)',
+                [id, memoId, `${session.user.name} has updated the memo "${title}" in response to the input requested.`]
+            );
+        }
+
+        revalidatePath(`/dashboard/memos/${memo.uuid}`);
+        revalidatePath('/dashboard');
+        return { success: true, memoUuid: memo.uuid };
+    } catch (e: any) {
+        console.error('reviseMemoContent error:', e);
         return { success: false, error: e.message || 'Update failed' };
     }
 }
@@ -1965,4 +2150,96 @@ export async function updateFinanceMemoProcessingStatus(
     }
 }
 
+// ─── APPROVER GROUP (Settings > Approvers Settings) ──────────────────────────
 
+export async function isCurrentUserApproverGroupMember() {
+    const session = await auth();
+    if (!session?.user?.id) return false;
+    return isApproverGroupMember(session.user.id);
+}
+
+function isAdministrator(session: any) {
+    return !!session?.user && (session.user as any).role?.includes('Administrator');
+}
+
+export async function getApproverGroupMembers() {
+    const session = await auth();
+    if (!isAdministrator(session)) return { success: false as const, error: 'Unauthorized' };
+
+    try {
+        const members = await query(`
+            SELECT u.id, u.email, u.department, g.created_at as added_at,
+                   COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as full_name,
+                   hd.DesignationName as designation
+            FROM memo_approver_group g
+            JOIN memo_system_users u ON g.user_id = u.id
+            LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+            LEFT JOIN hr_designation hd ON hs.DesignationID = hd.EntryID
+            ORDER BY g.created_at ASC
+        `) as any[];
+        return { success: true as const, members };
+    } catch (error: any) {
+        console.error('getApproverGroupMembers error:', error);
+        return { success: false as const, error: 'Failed to load approvers. Has the approver group migration been run?' };
+    }
+}
+
+export async function searchUsersForApproverGroup(searchTerm: string) {
+    const session = await auth();
+    if (!isAdministrator(session)) return [];
+
+    try {
+        const users = await query(`
+            SELECT u.id, u.email, u.department,
+                   COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as full_name,
+                   hd.DesignationName as designation
+            FROM memo_system_users u
+            LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+            LEFT JOIN hr_designation hd ON hs.DesignationID = hd.EntryID
+            WHERE u.is_active = 1
+            AND u.id NOT IN (SELECT user_id FROM memo_approver_group)
+            AND (u.username LIKE ? OR u.email LIKE ? OR hs.FirstName LIKE ? OR hs.Surname LIKE ? OR hd.DesignationName LIKE ?)
+            LIMIT 15
+        `, Array(5).fill(`%${searchTerm}%`)) as any[];
+        return users;
+    } catch (error) {
+        console.error('searchUsersForApproverGroup error:', error);
+        return [];
+    }
+}
+
+export async function addApproverGroupMember(userId: number) {
+    const session = await auth();
+    if (!isAdministrator(session)) return { success: false, error: 'Unauthorized' };
+
+    try {
+        await query('INSERT IGNORE INTO memo_approver_group (user_id, added_by) VALUES (?, ?)', [userId, session!.user!.id]);
+        await query(
+            'INSERT INTO audit_logs (user_id, action, table_name, record_id) VALUES (?, ?, ?, ?)',
+            [session!.user!.id, 'ADD_APPROVER_GROUP_MEMBER', 'memo_approver_group', userId]
+        );
+        revalidatePath('/dashboard/settings');
+        return { success: true };
+    } catch (error) {
+        console.error('addApproverGroupMember error:', error);
+        return { success: false, error: 'Failed to add approver.' };
+    }
+}
+
+export async function removeApproverGroupMember(userId: number) {
+    const session = await auth();
+    if (!isAdministrator(session)) return { success: false, error: 'Unauthorized' };
+
+    try {
+        await query('DELETE FROM memo_approver_group WHERE user_id = ?', [userId]);
+        await query(
+            'INSERT INTO audit_logs (user_id, action, table_name, record_id) VALUES (?, ?, ?, ?)',
+            [session!.user!.id, 'REMOVE_APPROVER_GROUP_MEMBER', 'memo_approver_group', userId]
+        );
+        revalidatePath('/dashboard/settings');
+        return { success: true };
+    } catch (error) {
+        console.error('removeApproverGroupMember error:', error);
+        return { success: false, error: 'Failed to remove approver.' };
+    }
+}

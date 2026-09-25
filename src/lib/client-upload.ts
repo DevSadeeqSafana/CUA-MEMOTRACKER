@@ -59,3 +59,28 @@ export async function uploadFilesDirect(
     }
     return results;
 }
+
+/**
+ * Adds general attachments to a memo FormData: uploaded straight to the
+ * backend when direct upload is configured (sent as `uploaded_attachments`
+ * metadata), otherwise appended as raw `attachments` files. Throws with a
+ * user-facing message on oversized files or a failed upload.
+ */
+export async function appendGeneralAttachments(
+    formData: FormData,
+    files: File[],
+    onProgress?: (done: number, total: number) => void,
+) {
+    const oversized = files.find(f => f.size > MAX_ATTACHMENT_BYTES);
+    if (oversized) {
+        throw new Error(`"${oversized.name}" is ${formatBytes(oversized.size)}; attachments must be under ${formatBytes(MAX_ATTACHMENT_BYTES)}.`);
+    }
+    if (files.length === 0) return;
+
+    if (directUploadEnabled()) {
+        const uploaded = await uploadFilesDirect(files, onProgress);
+        formData.append('uploaded_attachments', JSON.stringify(uploaded));
+    } else {
+        files.forEach(file => formData.append('attachments', file));
+    }
+}
