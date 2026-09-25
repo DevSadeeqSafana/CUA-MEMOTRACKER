@@ -138,9 +138,13 @@ export function getEmailTemplate(options: {
  */
 export async function sendMemoNotificationEmail(
     memoId: number,
-    eventType: 'SUBMITTED' | 'REJECTED' | 'APPROVED_BY_LM' | 'DISTRIBUTED' | 'RESUBMITTED',
+    eventType: 'SUBMITTED' | 'REJECTED' | 'APPROVED_BY_LM' | 'DISTRIBUTED' | 'RESUBMITTED' | 'SENT_TO_ACCOUNTANT',
     extraData?: {
         comments?: string;
+        /** SENT_TO_ACCOUNTANT: who approved and sent it */
+        approverName?: string;
+        /** SENT_TO_ACCOUNTANT: 'final' when a recipient acts on a distributed memo */
+        stage?: 'approver' | 'final';
     }
 ) {
     const BASE_URL = process.env.NEXTAUTH_URL || 'http://localhost:3001';
@@ -171,6 +175,20 @@ export async function sendMemoNotificationEmail(
         const creatorEmail = memo.creator_email;
         const creatorName = memo.creator_name;
         const memoUrl = `${BASE_URL}/dashboard/memos/${memoUuid}`;
+
+        // Approved steps in order. Step 1 is always the creator's Line Manager,
+        // whose approval validates the submission; later steps are approvals.
+        const approvedSteps = await query(`
+            SELECT a.step_order,
+                   COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as approver_name
+            FROM memo_approvals a
+            JOIN memo_system_users u ON a.approver_id = u.id
+            LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+            WHERE a.memo_id = ? AND a.status = 'Approved'
+            ORDER BY a.step_order ASC
+        `, [memoId]) as any[];
+        const lineManagerStep = approvedSteps.find((a: any) => a.step_order === 1);
+        const laterApprovals = approvedSteps.filter((a: any) => a.step_order !== 1);
 
         if (eventType === 'SUBMITTED' || eventType === 'RESUBMITTED') {
             // Find the pending manager approval step
@@ -267,23 +285,24 @@ export async function sendMemoNotificationEmail(
             }
         } 
         else if (eventType === 'APPROVED_BY_LM') {
-            // Find the line manager who approved
-            const managerRows = await query(`
-                SELECT COALESCE(CONCAT(hs_mgr.FirstName, ' ', IFNULL(CONCAT(hs_mgr.MiddleName, ' '), ''), hs_mgr.Surname), u_mgr.username) as manager_name
-                FROM memo_system_users u_creator
-                JOIN memo_system_users u_mgr ON u_creator.line_manager_id = u_mgr.id
-                LEFT JOIN hr_staff hs_mgr ON u_mgr.staff_id = hs_mgr.StaffID
-                WHERE u_creator.id = ?
+            // Line Manager validated the memo and it moves on to further approvers
+            const managerName = lineManagerStep?.approver_name || 'your Line Manager';
+            const nextRows = await query(`
+                SELECT COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as approver_name
+                FROM memo_approvals a
+                JOIN memo_system_users u ON a.approver_id = u.id
+                LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+                WHERE a.memo_id = ? AND a.status = 'Pending'
+                ORDER BY a.step_order ASC
                 LIMIT 1
-            `, [memo.created_by]) as any[];
+            `, [memoId]) as any[];
+            const nextApprover = nextRows.length > 0 ? nextRows[0].approver_name : 'the next approver';
 
-            const managerName = managerRows.length > 0 ? managerRows[0].manager_name : 'Line Manager';
-
-            const subject = `[CUA Memo] Update: Memo Approved by Line Manager - ${memoTitle}`;
-            const previewText = `Your memo "${memoTitle}" has been approved by your Line Manager.`;
+            const subject = `[CUA Memo] Line Manager Validation (Not Final Approval) - ${memoTitle}`;
+            const previewText = `Your memo "${memoTitle}" has been validated by your Line Manager and is awaiting approval from ${nextApprover}.`;
             const paragraphs = [
-                `Your memo titled "${memoTitle}" has been approved by your Line Manager, ${managerName}.`,
-                `It has now progressed to the next stage of approval and review in the sequential approval pipeline.`
+                `Your memo titled "${memoTitle}" has been <strong>validated by your Line Manager</strong>, ${managerName}.`,
+                `Please note that this is a validation of your submission, <strong>not the final approval</strong>. The memo is now awaiting approval from ${nextApprover}, and you will be notified once a final decision is made.`
             ];
 
             const html = getEmailTemplate({
@@ -302,12 +321,45 @@ export async function sendMemoNotificationEmail(
             }
         } 
         else if (eventType === 'DISTRIBUTED') {
-            // 1. Notify the Creator
-            const creatorSubject = `[CUA Memo] Distributed: ${memoTitle}`;
-            const creatorPreviewText = `Your memo "${memoTitle}" has been fully approved and distributed.`;
-            const creatorParagraphs = [
-                `Your memo titled "${memoTitle}" has been fully approved and distributed to all designated recipients.`
-            ];
+            // 1. Notify the Creator, saying exactly which approval this was:
+            //    Line Manager validation only, a final approval, or none at all
+            const toRows = await query(`
+                SELECT COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as name
+                FROM memo_recipients mr
+                JOIN memo_system_users u ON mr.recipient_id = u.id
+                LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+                WHERE mr.memo_id = ? AND mr.recipient_type = 'To'
+            `, [memoId]) as any[];
+            const toNames = toRows.map((r: any) => r.name).join(', ') || 'the designated recipients';
+            const inFinanceQueue = (await query('SELECT 1 FROM memo_finance_processing WHERE memo_id = ? LIMIT 1', [memoId]) as any[]).length > 0;
+            const financeNote = inFinanceQueue ? ' It has also been sent to the Accountant for processing.' : '';
+
+            let creatorSubject: string;
+            let creatorPreviewText: string;
+            let creatorParagraphs: string[];
+            if (laterApprovals.length > 0) {
+                const finalApprover = laterApprovals[laterApprovals.length - 1].approver_name;
+                creatorSubject = `[CUA Memo] Final Approval Granted - ${memoTitle}`;
+                creatorPreviewText = `Your memo "${memoTitle}" has received final approval from ${finalApprover}.`;
+                creatorParagraphs = [
+                    `Your memo titled "${memoTitle}" has received <strong>final approval</strong> from ${finalApprover}${lineManagerStep ? `, following validation by your Line Manager, ${lineManagerStep.approver_name}` : ''}.`,
+                    `It has been sent to ${toNames}.${financeNote}`
+                ];
+            } else if (lineManagerStep) {
+                creatorSubject = `[CUA Memo] Validated by Line Manager & Sent to Recipients (Not Final Approval) - ${memoTitle}`;
+                creatorPreviewText = `Your memo "${memoTitle}" has been validated by your Line Manager and sent to ${toNames}.`;
+                creatorParagraphs = [
+                    `Your memo titled "${memoTitle}" has been <strong>validated by your Line Manager</strong>, ${lineManagerStep.approver_name}, and sent to ${toNames}.${financeNote}`,
+                    `Please note that Line Manager validation confirms your submission; it is <strong>not the final approval</strong>. The recipient(s) will review and act on the memo, and you can follow their response on the memo page.`
+                ];
+            } else {
+                creatorSubject = `[CUA Memo] Sent to Recipients - ${memoTitle}`;
+                creatorPreviewText = `Your memo "${memoTitle}" has been sent to ${toNames}.`;
+                creatorParagraphs = [
+                    `Your memo titled "${memoTitle}" has been sent to ${toNames}.${financeNote}`,
+                    `The recipient(s) will review and act on the memo, and you can follow their response on the memo page.`
+                ];
+            }
             
             const creatorHtml = getEmailTemplate({
                 recipientName: creatorName,
@@ -356,6 +408,37 @@ export async function sendMemoNotificationEmail(
                 const recipientText = `${recipientPreviewText}\n\nView here: ${memoUrl}`;
 
                 await sendMemoEmail({ to: rec.recipient_email, subject: recipientSubject, bodyHtml: recipientHtml, bodyText: recipientText });
+            }
+        }
+        else if (eventType === 'SENT_TO_ACCOUNTANT') {
+            // An approver-group member approved the memo and sent it to the Accountant
+            const approverName = extraData?.approverName || 'An approver';
+            const isFinal = extraData?.stage === 'final';
+
+            const subject = isFinal
+                ? `[CUA Memo] Final Approval: Sent to Accountant - ${memoTitle}`
+                : `[CUA Memo] Approved & Sent to Accountant - ${memoTitle}`;
+            const previewText = `${approverName} approved your memo "${memoTitle}" and sent it to the Accountant for processing.`;
+            const paragraphs = [
+                isFinal
+                    ? `Your memo titled "${memoTitle}" has received <strong>final approval</strong> from ${approverName}, who has sent it to the Accountant for processing.`
+                    : `Your memo titled "${memoTitle}" has been <strong>approved by ${approverName}</strong> and sent to the Accountant for processing.`,
+                `You will be notified as the Accountant updates its processing status.`
+            ];
+
+            const html = getEmailTemplate({
+                recipientName: creatorName,
+                title: subject,
+                previewText,
+                paragraphs,
+                actionUrl: memoUrl,
+                actionLabel: 'View Memo Status'
+            });
+
+            const text = `${previewText}\n\nView here: ${memoUrl}`;
+
+            if (creatorEmail) {
+                await sendMemoEmail({ to: creatorEmail, subject, bodyHtml: html, bodyText: text });
             }
         }
     } catch (error) {

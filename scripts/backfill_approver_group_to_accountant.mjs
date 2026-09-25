@@ -30,12 +30,20 @@ async function run() {
         if (accountants.length === 0) throw new Error('No Accountant user found.');
         const accountantId = accountants[0].id;
 
+        // A group member "approved" a memo either as a step in the approval
+        // chain (memo_approvals) or, under the earlier recipient flow, by
+        // recording an Approved decision as a recipient (memo_recipients).
+        // Memos created by Baba Ladan (user 104) are excluded on request.
         const [memos] = await connection.execute(`
             SELECT DISTINCT m.id, m.reference_number, m.title, m.status
-            FROM memo_approvals a
-            JOIN memo_approver_group g ON a.approver_id = g.user_id
-            JOIN memos m ON a.memo_id = m.id
-            WHERE a.status = 'Approved'
+            FROM memos m
+            WHERE m.created_by != 104
+            AND (
+                EXISTS (SELECT 1 FROM memo_approvals a JOIN memo_approver_group g ON a.approver_id = g.user_id
+                        WHERE a.memo_id = m.id AND a.status = 'Approved')
+                OR EXISTS (SELECT 1 FROM memo_recipients mr JOIN memo_approver_group g ON mr.recipient_id = g.user_id
+                           WHERE mr.memo_id = m.id AND mr.decision = 'Approved')
+            )
             AND NOT EXISTS (SELECT 1 FROM memo_finance_processing fp WHERE fp.memo_id = m.id)
             ORDER BY m.id
         `);

@@ -23,6 +23,7 @@ import Link from 'next/link';
 import { cn, formatDate } from '@/lib/utils';
 import ApprovalButtons from '@/components/memos/ApprovalButtons';
 import AcknowledgeButton from '@/components/memos/AcknowledgeButton';
+import SendToAccountantButton from '@/components/memos/SendToAccountantButton';
 import MarkAsRead from '@/components/memos/MarkAsRead';
 import MemoHistory from '@/components/memos/MemoHistory';
 import ReviewerDecisionPanel from '@/components/memos/ReviewerDecisionPanel';
@@ -101,6 +102,23 @@ export default async function MemoDetailsPage({
 
     const financeProcessingRecord = financeProcessing[0] || null;
 
+    // Finance and revision activity for the audit trail: approver-group sends
+    // to the Accountant, the Accountant's processing updates, content revisions
+    const activityLogs = await query(
+        `SELECT al.id, al.action, al.timestamp,
+                CAST(al.new_value AS CHAR) as new_value,
+                COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as action_by_name
+         FROM audit_logs al
+         JOIN memo_system_users u ON al.user_id = u.id
+         LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+         WHERE (al.table_name = 'memos' AND al.record_id = ? AND al.action IN ('SEND_TO_ACCOUNTANT', 'REVISE_MEMO'))
+            OR (al.table_name = 'memo_approvals' AND al.action = 'APPROVE_MEMO_TO_ACCOUNTANT'
+                AND al.record_id IN (SELECT id FROM memo_approvals WHERE memo_id = ?))
+            OR (al.table_name = 'memo_finance_processing' AND al.action = 'UPDATE_FINANCE_PROCESSING' AND al.record_id = ?)
+         ORDER BY al.timestamp ASC`,
+        [memo.id, memo.id, financeProcessingRecord?.id ?? 0]
+    ) as any[];
+
     // Fetch all recipients for the history timeline
     const allRecipients = await query(
         `SELECT mr.*, COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as recipient_name, u.department
@@ -143,7 +161,12 @@ export default async function MemoDetailsPage({
 
     // Role-specific power: allow ANY pending approver to adjust routing (added approvers, line managers, etc)
     const canAdjustRouting = isPendingApprover;
-    const canSendToAccountant = isPendingApprover && await isCurrentUserApproverGroupMember();
+    const isApproverGroupMember = !isCreator && await isCurrentUserApproverGroupMember();
+    const canSendToAccountant = isPendingApprover && isApproverGroupMember;
+    // After distribution, a group member who received or approved the memo
+    // can still send it to the Accountant if it is not already queued
+    const canSendReceivedToAccountant = isApproverGroupMember && memo.status === 'Distributed'
+        && !financeProcessingRecord && (isRecipient || myDecision?.status === 'Approved');
 
     // Fetch data for routing adjustment if authorized
     const availableUsers = canAdjustRouting ? await getRecipients() : [];
@@ -458,6 +481,8 @@ export default async function MemoDetailsPage({
                                     </p>
                                 </div>
                             </div>
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                            {canSendReceivedToAccountant && <SendToAccountantButton memoId={memo.id} memoTitle={memo.title} />}
                             {canForward && (
                                 <ConsultationThread
                                     memoId={memo.id}
@@ -469,6 +494,7 @@ export default async function MemoDetailsPage({
                                     buttonOnly
                                 />
                             )}
+                            </div>
                         </div>
                     </div>
                 ) : (
@@ -495,6 +521,7 @@ export default async function MemoDetailsPage({
                                 decision={recipientRecord?.decision || null}
                                 acknowledgedAt={recipientRecord?.acknowledged_at || null}
                             />
+                            {canSendReceivedToAccountant && <SendToAccountantButton memoId={memo.id} memoTitle={memo.title} />}
                             {canForward && (
                                 <ConsultationThread
                                     memoId={memo.id}
@@ -710,7 +737,7 @@ export default async function MemoDetailsPage({
                 {/* Sidebar Context */}
                 <div className="lg:col-span-4">
                     {/* Full Dedicated History Timeline (Audit Trail) */}
-                    <MemoHistory memo={memo} approvals={approvals} recipients={allRecipients} routingLogs={routingLogs} consultations={consultations} />
+                    <MemoHistory memo={memo} approvals={approvals} recipients={allRecipients} routingLogs={routingLogs} consultations={consultations} financeRecord={financeProcessingRecord} activityLogs={activityLogs} />
                 </div>
             </div>
         </div>

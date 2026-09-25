@@ -106,6 +106,16 @@ async function getAccountantUserId() {
     }
 }
 
+async function getUserFullName(userId: number | string) {
+    const rows = await query(`
+        SELECT COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as full_name
+        FROM memo_system_users u
+        LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+        WHERE u.id = ?
+    `, [userId]) as any[];
+    return rows.length > 0 ? rows[0].full_name : 'An approver';
+}
+
 // Members of the approver group (VC, DVC, Registrar, COO, ...) may send any
 // memo they approve straight to the Accountant. Returns false if the group
 // table has not been migrated yet.
@@ -149,6 +159,67 @@ async function sendMemoToAccountant(memoId: number, senderId: number | string) {
         INSERT INTO notifications (user_id, memo_id, message)
         VALUES (?, ?, ?)
     `, [accountantId, memoId, `${sender_name} approved the memo "${title}" and sent it to you for processing.`]);
+}
+
+// An approver-group member who received a distributed memo (or approved it
+// earlier in the chain) sends it to the Accountant after the fact.
+export async function sendReceivedMemoToAccountant(memoId: number) {
+    const session = await auth();
+    if (!session?.user?.id) return { success: false, error: 'Unauthorized' };
+    const userId = parseInt(session.user.id);
+
+    try {
+        if (!(await isApproverGroupMember(userId))) {
+            return { success: false, error: 'You are not authorized to send memos to the Accountant.' };
+        }
+
+        const rows = await query(`
+            SELECT m.uuid, m.status,
+                   EXISTS (SELECT 1 FROM memo_recipients mr WHERE mr.memo_id = m.id AND mr.recipient_id = ?) as is_recipient,
+                   EXISTS (SELECT 1 FROM memo_approvals a WHERE a.memo_id = m.id AND a.approver_id = ? AND a.status = 'Approved') as approved_it,
+                   EXISTS (SELECT 1 FROM memo_finance_processing fp WHERE fp.memo_id = m.id) as in_queue
+            FROM memos m WHERE m.id = ?
+        `, [userId, userId, memoId]) as any[];
+        const memo = rows[0];
+        if (!memo || memo.status !== 'Distributed' || !(memo.is_recipient || memo.approved_it)) {
+            return { success: false, error: 'This memo cannot be sent to the Accountant.' };
+        }
+        if (memo.in_queue) return { success: false, error: 'This memo is already in the Accountant\'s finance queue.' };
+        if (!(await getAccountantUserId())) return { success: false, error: 'No Accountant is configured to receive this memo.' };
+
+        await sendMemoToAccountant(memoId, userId);
+
+        // Sending it on is an approval: record it on the recipient row too
+        await query(
+            `UPDATE memo_recipients
+             SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP),
+                 acknowledged_at = COALESCE(acknowledged_at, CURRENT_TIMESTAMP),
+                 decision = 'Approved'
+             WHERE memo_id = ? AND recipient_id = ?`,
+            [memoId, userId]
+        );
+
+        await query(
+            'INSERT INTO audit_logs (user_id, action, table_name, record_id, new_value) VALUES (?, ?, ?, ?, ?)',
+            [userId, 'SEND_TO_ACCOUNTANT', 'memos', memoId, JSON.stringify({ via: memo.is_recipient ? 'recipient' : 'approver' })]
+        );
+
+        // A recipient's approval of a distributed memo is the final approval
+        const approverName = await getUserFullName(userId);
+        const creatorRows = await query('SELECT created_by, title FROM memos WHERE id = ?', [memoId]) as any[];
+        await query(
+            'INSERT INTO notifications (user_id, memo_id, message) VALUES (?, ?, ?)',
+            [creatorRows[0].created_by, memoId, `${approverName} gave final approval to your memo "${creatorRows[0].title}" and sent it to the Accountant for processing.`]
+        );
+        await sendMemoNotificationEmail(memoId, 'SENT_TO_ACCOUNTANT', { approverName, stage: 'final' });
+
+        revalidatePath(`/dashboard/memos/${memo.uuid}`);
+        revalidatePath('/dashboard/accountant');
+        return { success: true };
+    } catch (error: any) {
+        console.error('sendReceivedMemoToAccountant error:', error);
+        return { success: false, error: error?.message || 'Failed to send memo to the Accountant.' };
+    }
 }
 
 export async function routeApprovedFinanceMemoToAccountant(memoId: number) {
@@ -428,11 +499,19 @@ export async function approveMemo(memoId: number, approvalId: number, comments: 
             [memoId, session.user.id]
         );
 
+        if (sendToAccountant) {
+            await sendMemoToAccountant(memoId, session.user.id!);
+            revalidatePath('/dashboard/accountant');
+        }
+
         // Find the next sequential step
         const nextSteps = await query(
             'SELECT id, approver_id FROM memo_approvals WHERE memo_id = ? AND status = "Pending" ORDER BY step_order ASC LIMIT 1',
             [memoId]
         ) as any[];
+
+        const memoInfo = await query('SELECT created_by, title FROM memos WHERE id = ?', [memoId]) as any[];
+        const { created_by: creatorId, title: memoTitle } = memoInfo[0];
 
         if (nextSteps.length > 0) {
             // Move to next approver
@@ -452,19 +531,41 @@ export async function approveMemo(memoId: number, approvalId: number, comments: 
                 [nextSteps[0].approver_id, memoId, message]
             );
 
-            // Trigger APPROVED_BY_LM notification if the Line Manager just approved (step_order === 1)
-            if (stepOrder === 1) {
+            // Tell the creator which approval this was. A Line Manager's
+            // approval (step 1) only validates the submission.
+            if (sendToAccountant) {
+                const approverName = await getUserFullName(session.user.id!);
+                await query(
+                    'INSERT INTO notifications (user_id, memo_id, message) VALUES (?, ?, ?)',
+                    [creatorId, memoId, `${approverName} approved your memo "${memoTitle}" and sent it to the Accountant for processing.`]
+                );
+                await sendMemoNotificationEmail(memoId, 'SENT_TO_ACCOUNTANT', { approverName, stage: 'approver' });
+            } else if (stepOrder === 1) {
+                await query(
+                    'INSERT INTO notifications (user_id, memo_id, message) VALUES (?, ?, ?)',
+                    [creatorId, memoId, `Your memo "${memoTitle}" has been validated by your Line Manager (not final approval) and is awaiting further approval.`]
+                );
                 await sendMemoNotificationEmail(memoId, 'APPROVED_BY_LM');
             }
         } else {
-            // Final approval complete: Distribute
+            // Last step complete: Distribute
             await query('UPDATE memos SET status = "Distributed" WHERE id = ?', [memoId]);
             if (!sendToAccountant) await routeApprovedFinanceMemoToAccountant(memoId);
-            const memo = await query('SELECT created_by, title FROM memos WHERE id = ?', [memoId]) as any[];
+            const memo = [{ created_by: creatorId, title: memoTitle }];
+
+            // Only the Line Manager in the chain means the memo was validated
+            // and sent out, not given final approval
+            const laterApprovals = await query(
+                'SELECT COUNT(*) as n FROM memo_approvals WHERE memo_id = ? AND status = "Approved" AND step_order != 1',
+                [memoId]
+            ) as any[];
+            const creatorMessage = Number(laterApprovals[0].n) > 0
+                ? `Your memo "${memoTitle}" has received final approval and has been sent to its recipients.`
+                : `Your memo "${memoTitle}" has been validated by your Line Manager (not final approval) and sent to its recipients.`;
 
             await query(
                 'INSERT INTO notifications (user_id, memo_id, message) VALUES (?, ?, ?)',
-                [memo[0].created_by, memoId, `Your memo "${memo[0].title}" has been fully approved and distributed.`]
+                [creatorId, memoId, creatorMessage]
             );
 
             // Notify all recipients
@@ -495,11 +596,6 @@ export async function approveMemo(memoId: number, approvalId: number, comments: 
 
             // Trigger email notification for distribution
             await sendMemoNotificationEmail(memoId, 'DISTRIBUTED');
-        }
-
-        if (sendToAccountant) {
-            await sendMemoToAccountant(memoId, session.user.id!);
-            revalidatePath('/dashboard/accountant');
         }
 
         await query(
@@ -2031,9 +2127,21 @@ export async function reviseMemoContent(memoId: number, data: FormData) {
 
 // ─── ACCOUNTANT FINANCE PROCESSING ACTIONS ───────────────────────────────────
 
+// The Accountant works the finance queue; Administrators can view and act on it too.
+function isAccountantUser(session: any) {
+    const roles: string[] = (session?.user as any)?.role || [];
+    return roles.includes('Accountant') || String(session?.user?.email || '').toLowerCase().includes('chidi.ojiako');
+}
+
+function canAccessFinanceQueue(session: any) {
+    const roles: string[] = (session?.user as any)?.role || [];
+    return isAccountantUser(session) || roles.includes('Administrator');
+}
+
 export async function getAccountantFinanceMemos(statusFilter?: string) {
     const session = await auth();
     if (!session?.user?.id) throw new Error('Unauthorized');
+    if (!canAccessFinanceQueue(session)) return { success: false, error: 'Unauthorized' };
 
     try {
         let whereClause = '';
@@ -2094,6 +2202,7 @@ export async function updateFinanceMemoProcessingStatus(
 ) {
     const session = await auth();
     if (!session?.user?.id) throw new Error('Unauthorized');
+    if (!canAccessFinanceQueue(session)) return { success: false, error: 'Unauthorized' };
     const userId = parseInt(session.user.id);
 
     try {
@@ -2117,10 +2226,12 @@ export async function updateFinanceMemoProcessingStatus(
                 processing_notes = ?,
                 voucher_number = ?,
                 processed_at = ?,
-                accountant_id = ?,
+                accountant_id = COALESCE(?, accountant_id),
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-        `, [status, notes || null, voucherNumber || null, isFinal ? new Date() : null, userId, processingId]);
+        `, [status, notes || null, voucherNumber || null, isFinal ? new Date() : null,
+            // An Administrator acting on the queue keeps the assigned accountant
+            isAccountantUser(session) ? userId : null, processingId]);
 
         // Notify creator
         let message = `Financial processing status for memo "${record.title}" updated to: ${status}`;

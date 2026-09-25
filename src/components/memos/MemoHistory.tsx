@@ -8,13 +8,15 @@ import {
     User,
     ArrowDown,
     FilePlus,
-    Send
+    Send,
+    Landmark,
+    Pencil
 } from 'lucide-react';
 import { cn, formatDate } from '@/lib/utils';
 
 interface TimelineEvent {
     id: string | number;
-    type: 'creation' | 'approval' | 'rejection' | 'distribution' | 'acknowledgment';
+    type: 'creation' | 'approval' | 'rejection' | 'distribution' | 'acknowledgment' | 'finance' | 'revision';
     title: string;
     description: string;
     timestamp: string | Date;
@@ -28,9 +30,19 @@ interface MemoHistoryProps {
     recipients: any[];
     routingLogs?: any[];
     consultations?: any[];
+    /** memo_finance_processing row, if the memo is in the Accountant's queue */
+    financeRecord?: any;
+    /** audit_logs rows: SEND_TO_ACCOUNTANT, APPROVE_MEMO_TO_ACCOUNTANT, UPDATE_FINANCE_PROCESSING, REVISE_MEMO */
+    activityLogs?: any[];
 }
 
-export default function MemoHistory({ memo, approvals, recipients, routingLogs = [], consultations = [] }: MemoHistoryProps) {
+function parseLogValue(value: any): Record<string, any> {
+    if (!value) return {};
+    if (typeof value === 'object') return value;
+    try { return JSON.parse(value); } catch { return {}; }
+}
+
+export default function MemoHistory({ memo, approvals, recipients, routingLogs = [], consultations = [], financeRecord = null, activityLogs = [] }: MemoHistoryProps) {
     // Build timeline events
     const events: TimelineEvent[] = [];
 
@@ -156,6 +168,62 @@ export default function MemoHistory({ memo, approvals, recipients, routingLogs =
             });
         });
 
+    // 6. Finance queue: when the memo reached the Accountant, then each
+    // processing update the Accountant (or an Administrator) made
+    if (financeRecord) {
+        const sender = activityLogs.find(l => l.action === 'SEND_TO_ACCOUNTANT' || l.action === 'APPROVE_MEMO_TO_ACCOUNTANT');
+        events.push({
+            id: 'finance-routed',
+            type: 'finance',
+            title: 'Sent to Accountant',
+            description: sender
+                ? `${sender.action_by_name} approved this memo and sent it to the Accountant (${financeRecord.accountant_name}) for processing.`
+                : `Placed in the Accountant's finance queue (${financeRecord.accountant_name}) for processing.`,
+            timestamp: financeRecord.created_at,
+            status: 'completed',
+            user: sender?.action_by_name
+        });
+    }
+
+    activityLogs
+        .filter(l => l.action === 'UPDATE_FINANCE_PROCESSING')
+        .forEach((log) => {
+            const d = parseLogValue(log.new_value);
+            const details = [
+                d.voucherNumber ? `Payment voucher: ${d.voucherNumber}.` : '',
+                d.notes ? `Notes: ${d.notes}` : ''
+            ].filter(Boolean).join(' ');
+            events.push({
+                id: `finance-${log.id}`,
+                type: d.status === 'Rejected' ? 'rejection' : 'finance',
+                title: `Finance Processing: ${d.status || 'Updated'}`,
+                description: `${log.action_by_name} marked the finance processing as ${String(d.status || 'updated').toLowerCase()}.${details ? ` ${details}` : ''}`,
+                timestamp: log.timestamp,
+                status: d.status === 'Rejected' ? 'failed' : 'completed',
+                user: log.action_by_name
+            });
+        });
+
+    // 7. Content revisions made by the creator after an input request
+    activityLogs
+        .filter(l => l.action === 'REVISE_MEMO')
+        .forEach((log) => {
+            const d = parseLogValue(log.new_value);
+            const changes = [
+                d.addedAttachments?.length ? `added ${d.addedAttachments.length} attachment(s)` : '',
+                d.removedAttachments ? `removed ${d.removedAttachments} attachment(s)` : ''
+            ].filter(Boolean).join(' and ');
+            events.push({
+                id: `revise-${log.id}`,
+                type: 'revision',
+                title: 'Memo Content Updated',
+                description: `${log.action_by_name} updated the memo in response to input requested${changes ? ` and ${changes}` : ''}.`,
+                timestamp: log.timestamp,
+                status: 'completed',
+                user: log.action_by_name
+            });
+        });
+
     // Sort events by timestamp or priority if null
     const sortedEvents = [...events].sort((a, b) => {
         const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
@@ -187,6 +255,8 @@ export default function MemoHistory({ memo, approvals, recipients, routingLogs =
                             {(event.type === 'approval' || event.type === 'acknowledgment') && <CheckCircle2 size={14} />}
                             {event.type === 'rejection' && <XCircle size={14} />}
                             {event.type === 'distribution' && <Send size={14} />}
+                            {event.type === 'finance' && <Landmark size={14} />}
+                            {event.type === 'revision' && <Pencil size={14} />}
                         </div>
 
                         <div className="flex-grow space-y-0.5 pt-0.5">

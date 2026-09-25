@@ -161,7 +161,7 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                             University Accountant Finance Queue
                         </h1>
                         <p className="text-slate-300 text-xs md:text-sm mt-1 max-w-xl font-medium">
-                            Automated queue for fully approved financial budget memos. Verify budget allocations, assign Payment Voucher (PV) numbers, and process disbursement requests.
+                            Queue of approved memos sent for financial processing. Verify budget allocations, assign Payment Voucher (PV) numbers, and process disbursement requests.
                         </p>
                     </div>
 
