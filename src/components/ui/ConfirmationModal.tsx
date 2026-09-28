@@ -39,7 +39,7 @@ export default function ConfirmationModal({
     const variantStyles = {
         danger: 'bg-red-600 hover:bg-red-700 shadow-red-900/20',
         warning: 'bg-amber-600 hover:bg-amber-700 shadow-amber-900/20',
-        info: 'bg-[#1a365d] hover:bg-blue-800 shadow-blue-900/20'
+        info: 'bg-[#0b2a5b] hover:bg-blue-800 shadow-blue-900/20'
     };
 
     const iconStyles = {
@@ -50,8 +50,8 @@ export default function ConfirmationModal({
 
     const modalContent = (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6 animate-in fade-in duration-300">
-            <div className="fixed inset-0 bg-[#1a365d]/40 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative bg-white w-full max-w-md rounded-none shadow-2xl p-8 border border-slate-200 animate-in zoom-in-95 duration-300">
+            <div className="fixed inset-0 bg-[#0b2a5b]/40 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative bg-white w-full max-w-md rounded-2xl shadow-2xl p-8 border border-slate-200 animate-in zoom-in-95 duration-300">
                 <button
                     onClick={onClose}
                     className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 transition-colors"
@@ -60,12 +60,12 @@ export default function ConfirmationModal({
                 </button>
 
                 <div className="flex flex-col items-center text-center space-y-5">
-                    <div className={cn("w-16 h-16 rounded-none flex items-center justify-center border", iconStyles[variant])}>
+                    <div className={cn("w-16 h-16 rounded-xl flex items-center justify-center border", iconStyles[variant])}>
                         <AlertCircle size={32} />
                     </div>
 
                     <div className="space-y-2">
-                        <h3 className="text-xl font-black text-[#1a365d] font-outfit tracking-tight uppercase">{title}</h3>
+                        <h3 className="text-xl font-medium text-[#0b2a5b] font-display tracking-tight">{title}</h3>
                         <p className="text-xs text-slate-500 font-medium leading-relaxed">{description}</p>
                     </div>
 
@@ -74,7 +74,7 @@ export default function ConfirmationModal({
                             onClick={onConfirm}
                             disabled={isLoading}
                             className={cn(
-                                "flex-1 py-3 rounded-none text-white text-xs uppercase tracking-wider font-bold transition-all shadow-md disabled:opacity-50",
+                                "flex-1 py-3 rounded-xl text-white text-xs uppercase tracking-wider font-bold transition-all shadow-md disabled:opacity-50",
                                 variantStyles[variant]
                             )}
                         >
@@ -83,7 +83,7 @@ export default function ConfirmationModal({
                         <button
                             onClick={onClose}
                             disabled={isLoading}
-                            className="flex-1 py-3 rounded-none bg-slate-100 text-slate-600 text-xs uppercase tracking-wider font-bold hover:bg-slate-200 transition-all border border-slate-200 disabled:opacity-50"
+                            className="flex-1 py-3 rounded-xl bg-slate-100 text-slate-600 text-xs uppercase tracking-wider font-bold hover:bg-slate-200 transition-all border border-slate-200 disabled:opacity-50"
                         >
                             {cancelText}
                         </button>

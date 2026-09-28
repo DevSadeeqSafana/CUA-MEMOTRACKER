@@ -369,13 +369,13 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
             {/* ── Top bar: type switcher + actions ── */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
                 {/* Memo type pill */}
-                <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-none p-1.5 shadow-sm w-fit">
+                <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl p-1.5 shadow-sm w-fit">
                     <button
                         type="button"
                         onClick={() => setValue('is_budget_memo', false)}
                         className={cn(
-                            'flex items-center gap-2 px-4 py-1.5 rounded-none text-[10px] font-black uppercase tracking-widest transition-all duration-200',
-                            !isBudgetMemo ? 'bg-[#1a365d] text-white shadow-md shadow-blue-900/20' : 'text-slate-400 hover:text-slate-600'
+                            'flex items-center gap-2 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-200',
+                            !isBudgetMemo ? 'bg-[#0b2a5b] text-white shadow-md shadow-blue-900/20' : 'text-slate-400 hover:text-slate-600'
                         )}
                     >
                         <FileTextIcon size={12} /> General Memo
@@ -384,7 +384,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                         type="button"
                         onClick={() => setValue('is_budget_memo', true)}
                         className={cn(
-                            'flex items-center gap-2 px-4 py-1.5 rounded-none text-[10px] font-black uppercase tracking-widest transition-all duration-200',
+                            'flex items-center gap-2 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-200',
                             isBudgetMemo ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/20' : 'text-slate-400 hover:text-slate-600'
                         )}
                     >
@@ -398,7 +398,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                         type="button"
                         onClick={handleSubmit(data => handleSubmission(data, true), onInvalid)}
                         disabled={isLoading}
-                        className="flex items-center gap-2 px-5 py-2.5 border border-slate-200 bg-white rounded-none font-bold text-xs text-slate-600 hover:bg-slate-50 transition-all disabled:opacity-50 shadow-sm"
+                        className="flex items-center gap-2 px-5 py-2.5 border border-slate-200 bg-white rounded-xl font-bold text-xs text-slate-600 hover:bg-slate-50 transition-all disabled:opacity-50 shadow-sm"
                     >
                         {isLoading ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
                         Save Draft
@@ -407,7 +407,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                         type="button"
                         onClick={handleSubmit(data => handleSubmission(data, false), onInvalid)}
                         disabled={isLoading}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-[#1a365d] text-white rounded-none font-bold text-xs shadow-lg shadow-blue-900/20 hover:bg-[#2c5282] transition-all disabled:opacity-50 outline-none"
+                        className="flex items-center gap-2 px-5 py-2.5 bg-[#0b2a5b] text-white rounded-xl font-bold text-xs shadow-lg shadow-blue-900/20 hover:bg-[#1a5aa6] transition-all disabled:opacity-50 outline-none"
                     >
                         {isLoading ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
                         Route for Approval
@@ -416,14 +416,14 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
             </div>
 
             {/* ── Main compose card ── */}
-            <div className="bg-white border border-slate-200 rounded-none shadow-sm overflow-hidden">
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
 
                 {/* Subject line */}
                 <div className="px-6 py-4 border-b border-slate-100">
                     <input
                         {...register('title')}
                         className={cn(
-                            'w-full bg-transparent outline-none text-base font-black text-[#1a365d] placeholder:text-slate-300 tracking-tight',
+                            'w-full bg-transparent outline-none text-base font-black text-[#0b2a5b] placeholder:text-slate-300 tracking-tight',
                             errors.title && 'placeholder:text-red-300'
                         )}
                         placeholder="Memo subject / title..."
@@ -649,7 +649,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                 </div>
                                 <div className="space-y-1">
                                     <div className="flex items-center gap-2 flex-wrap">
-                                        <h4 className="text-xs font-black text-[#1a365d] uppercase tracking-wider">
+                                        <h4 className="text-xs font-black text-[#0b2a5b] uppercase tracking-wider">
                                             Financial Requisition Details
                                         </h4>
                                         {Array.from(new Set(budgetItems.map(i => i.budget_category).filter(Boolean))).map((cat, ci) => (
@@ -702,7 +702,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                         "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm",
                                         budgetItems.length > 0 && budgetItems.some(i => i.name)
                                             ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/10"
-                                            : "bg-[#1a365d] hover:bg-[#2c5282] text-white shadow-blue-900/10"
+                                            : "bg-[#0b2a5b] hover:bg-[#1a5aa6] text-white shadow-blue-900/10"
                                     )}
                                 >
                                     {budgetItems.length > 0 && budgetItems.some(i => i.name) ? 'Edit Requisition' : 'Add Requisition Items'}
@@ -726,7 +726,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                 {/* Bottom toolbar */}
                 <div className="px-6 py-3 border-t border-slate-100 flex items-center gap-3 flex-wrap">
                     {/* Attach file */}
-                    <label className="cursor-pointer flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-[#1a365d] transition-colors">
+                    <label className="cursor-pointer flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-[#0b2a5b] transition-colors">
                         <Paperclip size={15} />
                         Attach
                         <input type="file" multiple className="hidden" onChange={handleFileChange} />
@@ -755,7 +755,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                             type="button"
                             onClick={handleSubmit(data => handleSubmission(data, false), onInvalid)}
                             disabled={isLoading}
-                            className="flex items-center gap-2 px-5 py-2 bg-[#1a365d] text-white rounded-xl font-bold text-[10px] uppercase tracking-widest shadow-lg shadow-blue-900/20 hover:bg-[#2c5282] transition-all disabled:opacity-50"
+                            className="flex items-center gap-2 px-5 py-2 bg-[#0b2a5b] text-white rounded-xl font-bold text-[10px] uppercase tracking-widest shadow-lg shadow-blue-900/20 hover:bg-[#1a5aa6] transition-all disabled:opacity-50"
                         >
                             {isLoading ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
                             Route for Approval
@@ -776,7 +776,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                 </div>
                                 <div>
                                     <div className="flex items-center gap-2">
-                                        <h3 className="text-sm font-black text-[#1a365d] uppercase tracking-tight">Manage Budget Requisition</h3>
+                                        <h3 className="text-sm font-black text-[#0b2a5b] uppercase tracking-tight">Manage Budget Requisition</h3>
                                         <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md flex items-center gap-1">
                                             <Check size={10} className="text-emerald-500" />
                                             FY: {currentYear?.name || 'Active Fiscal Year'}
@@ -818,7 +818,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                             <div className="bg-white border border-slate-200/80 p-5 rounded-2xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                 <div className="space-y-1">
                                     <div className="flex items-center gap-2 flex-wrap">
-                                        <h4 className="text-xs font-black text-[#1a365d] uppercase tracking-wider">
+                                        <h4 className="text-xs font-black text-[#0b2a5b] uppercase tracking-wider">
                                             Requisition Items Breakdown
                                         </h4>
                                         <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md flex items-center gap-1">
@@ -881,7 +881,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                                         <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-emerald-100 text-emerald-800 text-[10px] font-black">
                                                             #{index + 1}
                                                         </span>
-                                                        <span className="text-[11px] font-black text-[#1a365d] uppercase tracking-wider">
+                                                        <span className="text-[11px] font-black text-[#0b2a5b] uppercase tracking-wider">
                                                             Requisition Item {index + 1}
                                                         </span>
                                                         {itemCat && (
@@ -1186,7 +1186,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                             <div>
                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Requisition Grand Total</span>
                                 <div className="flex items-baseline gap-2">
-                                    <span className="text-lg font-black text-[#1a365d]">
+                                    <span className="text-lg font-black text-[#0b2a5b]">
                                         NGN {grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                     </span>
                                     <span className="text-[10px] text-slate-400 font-bold">

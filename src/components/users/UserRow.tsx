@@ -104,18 +104,18 @@ export default function UserRow({ user, managers }: UserRowProps) {
     const assignModal = mounted && isAssigningLM && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6 animate-in fade-in duration-200">
             {/* Backdrop */}
-            <div className="fixed inset-0 bg-[#1a365d]/50 backdrop-blur-sm" onClick={closeModal} />
+            <div className="fixed inset-0 bg-[#0b2a5b]/50 backdrop-blur-sm" onClick={closeModal} />
 
             {/* Modal */}
             <div className="relative bg-white w-full max-w-lg rounded-[2rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
                 {/* Header */}
                 <div className="px-8 pt-8 pb-5 border-b border-slate-100 flex items-center justify-between shrink-0">
                     <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-blue-50 text-[#1a365d] flex items-center justify-center border border-blue-100">
+                        <div className="w-9 h-9 rounded-xl bg-blue-50 text-[#0b2a5b] flex items-center justify-center border border-blue-100">
                             <Users size={16} />
                         </div>
                         <div>
-                            <h3 className="text-sm font-black text-[#1a365d] uppercase tracking-tight">
+                            <h3 className="text-sm font-black text-[#0b2a5b] uppercase tracking-tight">
                                 {user.line_manager_id ? 'Change Line Manager' : 'Assign Line Manager'}
                             </h3>
                             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
@@ -137,7 +137,7 @@ export default function UserRow({ user, managers }: UserRowProps) {
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Current Manager</p>
                         <div className="flex items-center justify-between gap-2.5">
                             <div className="flex items-center gap-2.5">
-                                <div className="w-7 h-7 rounded-lg bg-[#1a365d] text-white flex items-center justify-center font-black text-xs">
+                                <div className="w-7 h-7 rounded-lg bg-[#0b2a5b] text-white flex items-center justify-center font-black text-xs">
                                     {user.manager_name[0]}
                                 </div>
                                 <span className="text-sm font-bold text-slate-700">{user.manager_name}</span>
@@ -236,7 +236,7 @@ export default function UserRow({ user, managers }: UserRowProps) {
                         </button>
                         <div className={cn(
                             "w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs text-center leading-none select-none uppercase",
-                            user.is_active ? "bg-[#1a365d] text-white" : "bg-slate-200 text-slate-500"
+                            user.is_active ? "bg-[#0b2a5b] text-white" : "bg-slate-200 text-slate-500"
                         )}>
                             {(user.username && user.username[0]) || 'U'}
                         </div>
@@ -335,12 +335,12 @@ export default function UserRow({ user, managers }: UserRowProps) {
                                     <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mb-3">Reporting To</p>
                                     {user.manager_name ? (
                                         <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-xl bg-[#1a365d] text-white flex items-center justify-center font-black text-sm relative">
+                                            <div className="w-10 h-10 rounded-xl bg-[#0b2a5b] text-white flex items-center justify-center font-black text-sm relative">
                                                 <Shield size={20} className="opacity-10 absolute" />
                                                 <span>{user.manager_name[0]}</span>
                                             </div>
                                             <div>
-                                                <p className="text-sm font-black text-[#1a365d] uppercase tracking-tight">{user.manager_name}</p>
+                                                <p className="text-sm font-black text-[#0b2a5b] uppercase tracking-tight">{user.manager_name}</p>
                                                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Line Manager</p>
                                             </div>
                                         </div>
@@ -353,7 +353,7 @@ export default function UserRow({ user, managers }: UserRowProps) {
                                     <div className="mt-4 flex gap-2">
                                         <button
                                             onClick={openModal}
-                                            className="flex-1 px-4 py-2 bg-[#1a365d] text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#2c5282] transition-all shadow-sm"
+                                            className="flex-1 px-4 py-2 bg-[#0b2a5b] text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#1a5aa6] transition-all shadow-sm"
                                         >
                                             {user.line_manager_id ? 'Change Manager' : 'Assign Manager'}
                                         </button>

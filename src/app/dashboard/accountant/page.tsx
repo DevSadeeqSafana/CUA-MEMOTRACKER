@@ -11,7 +11,7 @@ export const metadata = {
 export default async function AccountantDashboardPage() {
     const session = await auth();
     if (!session?.user?.id) {
-        redirect('/login');
+        redirect('/');
     }
 
     const userRoles: string[] = (session.user as any).role || [];

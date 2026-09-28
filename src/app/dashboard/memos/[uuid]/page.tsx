@@ -7,7 +7,6 @@ import {
     FileText,
     Clock,
     CheckCircle2,
-    ArrowLeft,
     Paperclip,
     ShieldCheck,
     Tag,
@@ -20,6 +19,7 @@ import {
     XCircle
 } from 'lucide-react';
 import Link from 'next/link';
+import BackButton from '@/components/ui/BackButton';
 import { cn, formatDate } from '@/lib/utils';
 import ApprovalButtons from '@/components/memos/ApprovalButtons';
 import AcknowledgeButton from '@/components/memos/AcknowledgeButton';
@@ -194,14 +194,7 @@ export default async function MemoDetailsPage({
         <div className="max-w-7xl mx-auto space-y-8 pb-20 animate-in fade-in duration-700 font-sans">
             {/* Top Navigation Bar */}
             <div className="flex items-center justify-between gap-2 flex-wrap">
-                <Link
-                    href="/dashboard"
-                    className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 hover:text-[#1a365d] transition-all group px-3 md:px-4 py-2 bg-white border border-slate-200 rounded-2xl shadow-sm"
-                >
-                    <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
-                    Back
-                    <span className="hidden sm:inline">to Dashboard</span>
-                </Link>
+                <BackButton fallback="/dashboard/tasks?folder=inbox" />
 
                 {/* Edit & Resubmit button — only for creator of rejected memos */}
                 {canEdit && (
@@ -227,7 +220,7 @@ export default async function MemoDetailsPage({
             </div>
             {/* Gmail-Style Page Header (Subject) */}
             <div className="flex flex-col gap-2">
-                <h1 className="text-xl md:text-2xl lg:text-3xl font-black text-[#1a365d] leading-tight font-outfit tracking-tight uppercase">
+                <h1 className="text-xl md:text-3xl lg:text-3xl font-medium text-[#0b2a5b] leading-tight font-display tracking-tight">
                     {memo.title}
                 </h1>
                 <div className="flex items-center gap-2 flex-wrap mt-1">
@@ -265,7 +258,7 @@ export default async function MemoDetailsPage({
                             </div>
                             <div>
                                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Finance Processing</p>
-                                <p className="text-sm font-black text-[#1a365d]">Accountant Queue Status</p>
+                                <p className="text-sm font-black text-[#0b2a5b]">Accountant Queue Status</p>
                             </div>
                         </div>
                         <span className={cn(
@@ -413,7 +406,7 @@ export default async function MemoDetailsPage({
                         canSendToAccountant={canSendToAccountant}
                     />
                 ) : (
-                    <div className="bg-[#1a365d] border border-blue-900 rounded-2xl p-5 md:p-6 flex flex-col items-start gap-5 shadow-xl relative overflow-hidden group">
+                    <div className="bg-[#0b2a5b] border border-blue-900 rounded-2xl p-5 md:p-6 flex flex-col items-start gap-5 shadow-xl relative overflow-hidden group">
                         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform"></div>
                         <div className="flex flex-col sm:flex-row sm:items-center gap-4 relative z-10 w-full">
                             <div className="flex items-center gap-4 text-white">
@@ -421,7 +414,7 @@ export default async function MemoDetailsPage({
                                     <ShieldCheck size={24} />
                                 </div>
                                 <div className="space-y-1">
-                                    <h3 className="text-base md:text-lg font-black font-outfit uppercase tracking-tight">Administrative Review</h3>
+                                    <h3 className="text-base md:text-lg font-medium font-display tracking-tight">Administrative Review</h3>
                                     <p className="text-blue-100/70 font-medium text-[11px]">Verification required for internal routing.</p>
                                 </div>
                             </div>
@@ -461,7 +454,7 @@ export default async function MemoDetailsPage({
                 forward; a plain recipient acknowledges receipt and can forward. */}
             {!isCreator && memo.status === 'Distributed' && (myDecision || isRecipient) && (
                 myDecision ? (
-                    <div className="bg-[#1a365d] border border-blue-900 rounded-2xl p-5 md:p-6 flex flex-col gap-5 shadow-xl relative overflow-hidden group">
+                    <div className="bg-[#0b2a5b] border border-blue-900 rounded-2xl p-5 md:p-6 flex flex-col gap-5 shadow-xl relative overflow-hidden group">
                         {isRecipient && <MarkAsRead memoId={memo.id} />}
                         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform"></div>
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 relative z-10 w-full">
@@ -473,7 +466,7 @@ export default async function MemoDetailsPage({
                                     {myDecision.status === 'Approved' ? <CheckCircle2 size={24} /> : <XCircle size={24} />}
                                 </div>
                                 <div className="space-y-1">
-                                    <h3 className="text-base md:text-lg font-black font-outfit uppercase tracking-tight">
+                                    <h3 className="text-base md:text-lg font-medium font-display tracking-tight">
                                         You {myDecision.status.toLowerCase()} this memo
                                     </h3>
                                     <p className="text-blue-100/70 font-medium text-[11px]">
@@ -506,7 +499,7 @@ export default async function MemoDetailsPage({
                                 <CheckCircle2 size={24} className="md:hidden" /><CheckCircle2 size={32} className="hidden md:block" />
                             </div>
                             <div className="space-y-1">
-                                <h3 className="text-base md:text-xl font-black font-outfit uppercase">Institutional Send</h3>
+                                <h3 className="text-base md:text-xl font-medium font-display">Institutional Send</h3>
                                 <p className="text-emerald-50/70 font-medium text-xs md:text-sm">
                                     {recipientRecord?.acknowledged_at
                                         ? 'Thank you — your acknowledgment has been recorded.'
@@ -546,7 +539,7 @@ export default async function MemoDetailsPage({
                         {/* Senders Header row */}
                         <div className="flex items-start gap-4 justify-between flex-wrap">
                             <div className="flex items-start gap-4">
-                                <div className="w-10 h-10 rounded-full bg-[#1a365d] text-white flex items-center justify-center font-black text-sm shadow-md shadow-blue-600/10 shrink-0">
+                                <div className="w-10 h-10 rounded-full bg-[#0b2a5b] text-white flex items-center justify-center font-black text-sm shadow-md shadow-blue-600/10 shrink-0">
                                     {creatorInitial}
                                 </div>
                                 <div className="space-y-1">
@@ -621,7 +614,7 @@ export default async function MemoDetailsPage({
                                             </p>
                                         </div>
                                     </div>
-                                    <div className="bg-[#1a365d] border border-blue-900 rounded-xl p-3 flex items-center gap-3 shadow-xl shadow-blue-900/10">
+                                    <div className="bg-[#0b2a5b] border border-blue-900 rounded-xl p-3 flex items-center gap-3 shadow-xl shadow-blue-900/10">
                                         <div className="w-8 h-8 rounded-lg bg-white/10 text-white flex items-center justify-center">
                                             <span className="text-[10px] font-black">₦</span>
                                         </div>
@@ -637,11 +630,11 @@ export default async function MemoDetailsPage({
                                         <table className="w-full text-left">
                                             <thead>
                                                 <tr className="border-b border-slate-100">
-                                                    <th className="pb-4 text-[9px] font-black text-[#1a365d] uppercase tracking-widest">Line Item</th>
-                                                    <th className="pb-4 text-[9px] font-black text-[#1a365d] uppercase tracking-widest text-center">Qty</th>
-                                                    <th className="pb-4 text-[9px] font-black text-[#1a365d] uppercase tracking-widest text-right">Unit (₦)</th>
-                                                    <th className="pb-4 text-[9px] font-black text-[#1a365d] uppercase tracking-widest text-right">Subtotal (₦)</th>
-                                                    <th className="pb-4 text-[9px] font-black text-[#1a365d] uppercase tracking-widest text-center">Doc</th>
+                                                    <th className="pb-4 text-[9px] font-black text-[#0b2a5b] uppercase tracking-widest">Line Item</th>
+                                                    <th className="pb-4 text-[9px] font-black text-[#0b2a5b] uppercase tracking-widest text-center">Qty</th>
+                                                    <th className="pb-4 text-[9px] font-black text-[#0b2a5b] uppercase tracking-widest text-right">Unit (₦)</th>
+                                                    <th className="pb-4 text-[9px] font-black text-[#0b2a5b] uppercase tracking-widest text-right">Subtotal (₦)</th>
+                                                    <th className="pb-4 text-[9px] font-black text-[#0b2a5b] uppercase tracking-widest text-center">Doc</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-50">
@@ -665,7 +658,7 @@ export default async function MemoDetailsPage({
                                                             </td>
                                                             <td className="py-4 text-xs font-bold text-slate-600 text-center">{item.quantity}</td>
                                                             <td className="py-4 text-xs font-bold text-slate-600 text-right">₦{parseFloat(item.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                                            <td className="py-4 text-xs font-black text-[#1a365d] text-right">₦{parseFloat(item.total).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                                            <td className="py-4 text-xs font-black text-[#0b2a5b] text-right">₦{parseFloat(item.total).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                                         <td className="py-4 text-center">
                                                             {item.attachment_path ? (
                                                                 <a 
@@ -687,7 +680,7 @@ export default async function MemoDetailsPage({
                                             </tbody>
                                             <tfoot>
                                                 <tr className="border-t border-slate-100 bg-slate-50/50">
-                                                    <td colSpan={3} className="py-4 pl-4 text-[10px] font-black text-[#1a365d] uppercase tracking-widest text-right">Aggregate Total</td>
+                                                    <td colSpan={3} className="py-4 pl-4 text-[10px] font-black text-[#0b2a5b] uppercase tracking-widest text-right">Aggregate Total</td>
                                                     <td colSpan={2} className="py-4 pr-4 text-sm font-black text-emerald-600 text-right">₦{budgetGrandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                                 </tr>
                                             </tfoot>

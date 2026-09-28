@@ -200,8 +200,8 @@ export default function UserTableActions({ user, managers }: UserTableActionsPro
             />
 
             {isEditOpen && mounted && createPortal(
-                <div className="fixed inset-0 bg-[#1a365d]/40 backdrop-blur-sm z-[9999] flex items-center justify-center p-6 animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-2xl rounded-none shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-300">
+                <div className="fixed inset-0 bg-[#0b2a5b]/40 backdrop-blur-sm z-[9999] flex items-center justify-center p-6 animate-in fade-in duration-300">
+                    <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-300">
                         <EditUserForm
                             user={user}
                             managers={managers}

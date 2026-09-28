@@ -148,7 +148,7 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
     return (
         <div className="space-y-8">
             {/* Header Banner */}
-            <div className="relative overflow-hidden bg-gradient-to-br from-[#1a365d] via-[#1e293b] to-[#0f172a] rounded-2xl p-8 text-white shadow-xl border border-white/10">
+            <div className="relative overflow-hidden bg-gradient-to-br from-[#0b2a5b] via-[#1e293b] to-[#0f172a] rounded-2xl p-8 text-white shadow-xl border border-white/10">
                 <div className="absolute right-0 top-0 translate-x-12 -translate-y-12 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
                 
                 <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -236,7 +236,7 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                                 className={cn(
                                     "px-4 py-2 rounded-lg font-bold text-xs transition-all whitespace-nowrap",
                                     selectedTab === tab
-                                        ? "bg-[#1a365d] text-white shadow-sm"
+                                        ? "bg-[#0b2a5b] text-white shadow-sm"
                                         : "bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200"
                                 )}
                             >
@@ -367,7 +367,7 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                                             <td className="py-4 px-4 text-right whitespace-nowrap">
                                                 <button
                                                     onClick={() => openProcessingModal(memo)}
-                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#1a365d] hover:bg-[#152a48] text-white rounded-lg font-bold text-xs shadow-sm transition-all hover:scale-105 active:scale-95"
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0b2a5b] hover:bg-[#082352] text-white rounded-lg font-bold text-xs shadow-sm transition-all hover:scale-105 active:scale-95"
                                                 >
                                                     <Edit3 size={13} />
                                                     Process Status
@@ -387,7 +387,7 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden">
                         {/* Modal Header */}
-                        <div className="bg-gradient-to-r from-[#1a365d] to-[#0f172a] p-5 text-white flex items-center justify-between">
+                        <div className="bg-gradient-to-r from-[#0b2a5b] to-[#0f172a] p-5 text-white flex items-center justify-between">
                             <div>
                                 <div className="inline-flex items-center gap-1.5 text-blue-300 font-bold text-[10px] uppercase tracking-wider">
                                     <Landmark size={12} />
@@ -517,7 +517,7 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                                     type="button"
                                     onClick={handleSaveProcessing}
                                     disabled={isSubmitting}
-                                    className="px-5 py-2 bg-[#1a365d] hover:bg-[#142b4b] text-white font-bold text-xs rounded-xl transition-all shadow-md disabled:opacity-50 flex items-center gap-2"
+                                    className="px-5 py-2 bg-[#0b2a5b] hover:bg-[#082352] text-white font-bold text-xs rounded-xl transition-all shadow-md disabled:opacity-50 flex items-center gap-2"
                                 >
                                     {isSubmitting ? 'Saving...' : 'Save Processing Record'}
                                 </button>

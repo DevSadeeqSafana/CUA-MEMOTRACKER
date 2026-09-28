@@ -49,7 +49,7 @@ export default async function ApprovalsPage() {
             {/* Pending Section */}
             <div className="space-y-6">
                 <div>
-                    <h2 className="text-xl font-black text-[#1a365d] font-outfit uppercase tracking-tight flex items-center gap-3">
+                    <h2 className="text-xl font-medium text-[#0b2a5b] font-display tracking-tight flex items-center gap-3">
                         <Clock className="text-blue-500" size={24} />
                         Pending Approvals
                     </h2>
@@ -79,7 +79,7 @@ export default async function ApprovalsPage() {
                                             <span className="text-slate-300">•</span>
                                             <span className="font-black text-blue-600 uppercase tracking-widest">Step {item.step_order}</span>
                                         </div>
-                                        <h3 className="font-black text-[#1a365d] font-outfit text-base truncate group-hover:text-blue-600 transition-colors uppercase tracking-tight">
+                                        <h3 className="font-medium text-[#0b2a5b] font-display text-base truncate group-hover:text-blue-600 transition-colors tracking-tight">
                                             {item.title}
                                         </h3>
                                         <div className="text-[10px] text-slate-400 flex flex-wrap items-center gap-2 font-medium mt-0.5">
@@ -106,7 +106,7 @@ export default async function ApprovalsPage() {
             {/* Processed Section */}
             <div className="space-y-6">
                 <div>
-                    <h2 className="text-xl font-black text-slate-800 font-outfit uppercase tracking-tight flex items-center gap-3">
+                    <h2 className="text-xl font-medium text-slate-800 font-display tracking-tight flex items-center gap-3">
                         <FileText className="text-emerald-500" size={24} />
                         My Processing History
                     </h2>
@@ -141,7 +141,7 @@ export default async function ApprovalsPage() {
                                                 item.my_decision === 'Approved' ? "text-emerald-600" : "text-red-600"
                                             )}>Your Action: {item.my_decision}</span>
                                         </div>
-                                        <h3 className="font-black text-slate-700 font-outfit text-base truncate group-hover:text-blue-600 transition-colors uppercase tracking-tight">
+                                        <h3 className="font-medium text-slate-700 font-display text-base truncate group-hover:text-blue-600 transition-colors tracking-tight">
                                             {item.title}
                                         </h3>
                                         <div className="text-[10px] text-slate-400 flex flex-wrap items-center gap-2 font-medium mt-0.5">

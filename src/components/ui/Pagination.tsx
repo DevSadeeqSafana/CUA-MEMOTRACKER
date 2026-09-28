@@ -41,7 +41,7 @@ export default function Pagination({ totalPages, currentPage }: PaginationProps)
                     className={cn(
                         "w-10 h-10 rounded-xl font-bold text-xs transition-all",
                         currentPage === i
-                            ? "bg-[#1a365d] text-white shadow-lg shadow-blue-900/20"
+                            ? "bg-[#0b2a5b] text-white shadow-lg shadow-blue-900/20"
                             : "bg-white text-slate-500 border border-slate-200 hover:border-blue-400 hover:text-blue-600"
                     )}
                 >

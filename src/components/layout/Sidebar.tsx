@@ -17,10 +17,22 @@ import {
     Star,
     AlertCircle,
     Send,
-    Landmark
+    Landmark,
+    ArrowRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getSidebarCounts } from '@/lib/actions';
+import { useTrackInAppNavigation } from '@/lib/nav-history';
+
+function SealBadge({ size, className }: { size: number, className?: string }) {
+    return (
+        <div className={cn("shrink-0 rounded-full p-[3px] bg-[#e3ac3a] shadow-lg shadow-black/30", className)} style={{ width: size, height: size }}>
+            <div className="w-full h-full rounded-full overflow-hidden bg-[#0d2a5c]">
+                <Image src="/CUALogo.png" alt="Cosmopolitan University seal" width={size} height={size} className="w-full h-full object-cover" />
+            </div>
+        </div>
+    );
+}
 
 export default function Sidebar({ user, userRoles, handleSignOut }: { user: any, userRoles: string[], handleSignOut: () => void }) {
     const [isOpen, setIsOpen] = useState(false);
@@ -36,6 +48,21 @@ export default function Sidebar({ user, userRoles, handleSignOut }: { user: any,
         const result = await getSidebarCounts();
         setCounts(result);
     };
+
+    useTrackInAppNavigation();
+
+    // Mobile drawer: Esc closes it, and the page behind it doesn't scroll while open
+    useEffect(() => {
+        if (!isOpen) return;
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsOpen(false); };
+        document.addEventListener('keydown', onKey);
+        const prevOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.removeEventListener('keydown', onKey);
+            document.body.style.overflow = prevOverflow;
+        };
+    }, [isOpen]);
 
     // Close sidebar on path change (mobile)
     useEffect(() => {
@@ -73,15 +100,18 @@ export default function Sidebar({ user, userRoles, handleSignOut }: { user: any,
     return (
         <>
             {/* Mobile Header (Visible only on mobile) */}
-            <div className="md:hidden flex items-center justify-between border-b bg-[#1a365d] text-white p-4 shrink-0 transition-all z-40 fixed top-0 w-full h-16 shadow-lg">
-                <Link href="/dashboard" className="flex items-center gap-2">
-                    <div className="bg-white p-1 rounded border border-white/20">
-                        <Image src="/CUALogo.png" alt="CUA Logo" width={24} height={24} className="object-contain" />
+            <div className="md:hidden flex items-center justify-between bg-[linear-gradient(115deg,#082352_0%,#0d3470_60%,#1a5aa6_100%)] text-white px-4 shrink-0 transition-all z-40 fixed top-0 w-full h-16 shadow-lg">
+                <Link href="/dashboard" className="flex items-center gap-3">
+                    <SealBadge size={40} />
+                    <div className="flex flex-col">
+                        <span className="font-display text-base leading-tight">Cosmopolitan University</span>
+                        <span className="text-[10px] text-[#a9d4f5] tracking-wide">Internal Memo System</span>
                     </div>
-                    <span className="font-black text-sm uppercase tracking-widest">CUA IMTS</span>
                 </Link>
                 <button
                     onClick={() => setIsOpen(!isOpen)}
+                    aria-label={isOpen ? 'Close menu' : 'Open menu'}
+                    aria-expanded={isOpen}
                     className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all"
                 >
                     {isOpen ? <X size={20} /> : <Menu size={20} />}
@@ -98,31 +128,33 @@ export default function Sidebar({ user, userRoles, handleSignOut }: { user: any,
 
             {/* Sidebar (Fixed Viewport Left) */}
             <aside className={cn(
-                "fixed top-0 left-0 h-screen w-72 bg-[#1a365d] flex flex-col text-white shadow-2xl z-50 transition-transform duration-300 ease-in-out md:translate-x-0 border-r border-white/10 rounded-none",
+                "fixed top-0 left-0 h-screen w-72 overflow-hidden bg-[linear-gradient(170deg,#082352_0%,#0d3470_55%,#14498f_100%)] flex flex-col text-white shadow-2xl shadow-[#0b2a5b]/30 z-50 transition-transform duration-300 ease-in-out md:translate-x-0 rounded-none",
                 isOpen ? "translate-x-0" : "-translate-x-full"
             )}>
-                <div className="p-8 border-b border-white/10 hidden md:block shrink-0">
-                    <Link href="/dashboard" className="flex items-center gap-3 group">
-                        <div className="bg-white p-1 rounded-lg group-hover:scale-110 transition-transform shadow-lg shadow-white/10">
-                            <Image src="/CUALogo.png" alt="CUA Logo" width={32} height={32} className="object-contain" />
-                        </div>
+                {/* Soft glow and arc, echoing the login screen */}
+                <div className="pointer-events-none absolute -right-24 top-1/3 w-56 h-72 bg-[#6fa6e0]/25 blur-[80px] rounded-full" />
+                <div className="pointer-events-none absolute -left-[70%] -top-40 w-[190%] aspect-square rounded-full border border-white/10" />
+
+                <div className="relative px-7 pt-8 pb-7 border-b border-white/10 hidden md:block shrink-0">
+                    <Link href="/dashboard" className="flex items-center gap-3.5 group">
+                        <SealBadge size={56} className="group-hover:scale-105 transition-transform" />
                         <div className="flex flex-col">
-                            <span className="font-bold text-base leading-tight group-hover:text-blue-200 transition-colors">CUA IMTS</span>
-                            <span className="text-[9px] opacity-60 uppercase tracking-widest font-bold">University Portal</span>
+                            <span className="font-display text-lg leading-[1.1]">Cosmopolitan<br />University</span>
+                            <span className="mt-1.5 text-[9px] text-white/75 uppercase tracking-[0.16em] font-medium whitespace-nowrap">Internal Memo System</span>
                         </div>
                     </Link>
                 </div>
 
                 {/* Mobile close button inside sidebar */}
-                <div className="md:hidden flex items-center justify-between p-4 border-b border-white/10 shrink-0">
-                    <span className="font-bold text-lg uppercase tracking-widest text-blue-200 ml-2">Menu</span>
-                    <button onClick={() => setIsOpen(false)} className="p-2 bg-white/10 rounded-lg hover:bg-white/20">
+                <div className="relative md:hidden flex items-center justify-between p-4 border-b border-white/10 shrink-0">
+                    <span className="font-display text-xl text-white ml-2">Menu</span>
+                    <button onClick={() => setIsOpen(false)} aria-label="Close menu" className="p-2 bg-white/10 rounded-lg hover:bg-white/20">
                         <X size={20} />
                     </button>
                 </div>
 
-                <nav className="flex-grow p-6 space-y-2 overflow-y-auto custom-scrollbar">
-                    <p className="text-[9px] font-bold text-white/40 uppercase tracking-[0.2em] px-3 mb-4">Main Navigation</p>
+                <nav aria-label="Main" className="relative flex-grow p-6 space-y-1.5 overflow-y-auto scrollbar-hide">
+                    <p className="text-[9px] font-medium text-[#a9d4f5]/70 uppercase tracking-[0.25em] px-3 mb-3">Main Navigation</p>
 
                     {navLinks.filter(l => canSeeLink(l.roles)).map(link => {
                         const Icon = link.icon;
@@ -138,26 +170,27 @@ export default function Sidebar({ user, userRoles, handleSignOut }: { user: any,
                                 <Link
                                     key={link.href}
                                     href={link.href}
-                                    className="flex items-center justify-center gap-3 w-full py-3.5 mt-2 mb-6 bg-white text-[#1a365d] hover:bg-slate-50 font-black rounded-2xl shadow-lg hover:shadow-xl transition-all duration-200 border border-slate-100/10 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 text-xs uppercase tracking-wider shrink-0"
+                                    className="group/compose flex items-center gap-3 w-full px-5 py-3.5 mt-1 mb-6 bg-white text-[#0b2a5b] hover:bg-slate-50 font-semibold rounded-xl shadow-lg shadow-black/20 transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] text-sm shrink-0"
                                 >
-                                    <PlusCircle size={18} className="text-blue-500" />
-                                    <span>Compose</span>
+                                    <PlusCircle size={18} className="text-[#1a5aa6]" />
+                                    <span className="flex-1">Compose memo</span>
+                                    <ArrowRight size={16} className="transition-transform group-hover/compose:translate-x-1" />
                                 </Link>
                             );
                         }
 
                         return (
-                            <Link key={link.href} href={link.href} className={cn(
-                                "flex items-center gap-3 px-4 py-3 rounded-xl transition-all group",
-                                isActive ? "bg-white/15 text-white shadow-sm border border-white/5 font-bold" : "hover:bg-white/10 text-white/80 hover:text-white font-medium"
+                            <Link key={link.href} href={link.href} aria-current={isActive ? 'page' : undefined} className={cn(
+                                "flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all group",
+                                isActive ? "bg-white/[0.12] text-white border border-white/15 font-semibold" : "border border-transparent hover:bg-white/[0.07] text-white/80 hover:text-white font-medium"
                             )}>
                                 <Icon size={18} className={cn(
                                     "transition-all shrink-0",
-                                    isActive ? "opacity-100 text-blue-300" : "opacity-70 group-hover:opacity-100"
+                                    isActive ? "opacity-100 text-[#a9d4f5]" : "opacity-70 group-hover:opacity-100"
                                 )} />
-                                <span className="text-xs tracking-wide">{link.label}</span>
+                                <span className="text-sm">{link.label}</span>
                                 {link.badgeKey && (counts[link.badgeKey] ?? 0) > 0 && (
-                                    <span className="ml-auto bg-blue-500/25 border border-blue-400/20 text-blue-200 font-black text-[9px] px-2 py-0.5 rounded-full shadow-sm shrink-0">
+                                    <span className="ml-auto bg-[#a9d4f5]/15 border border-[#a9d4f5]/25 text-[#a9d4f5] font-black text-[9px] px-2 py-0.5 rounded-full shadow-sm shrink-0">
                                         {counts[link.badgeKey]}
                                     </span>
                                 )}
@@ -169,18 +202,18 @@ export default function Sidebar({ user, userRoles, handleSignOut }: { user: any,
 
                     {adminLinks.some(l => canSeeLink(l.roles)) && (
                         <>
-                            <p className="text-[9px] font-bold text-white/40 uppercase tracking-[0.2em] px-3 mb-4">Administration</p>
+                            <p className="text-[9px] font-medium text-[#a9d4f5]/70 uppercase tracking-[0.25em] px-3 mb-3">Administration</p>
                             {adminLinks.filter(l => canSeeLink(l.roles)).map(link => {
                                 const Icon = link.icon;
                                 const isActive = pathname === link.href;
 
                                 return (
-                                    <Link key={link.href} href={link.href} className={cn(
-                                        "flex items-center gap-3 px-4 py-3 rounded-xl transition-all group",
-                                        isActive ? "bg-white/15 text-white shadow-sm border border-white/5" : "hover:bg-white/10 text-white/80 hover:text-white"
+                                    <Link key={link.href} href={link.href} aria-current={isActive ? 'page' : undefined} className={cn(
+                                        "flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all group",
+                                        isActive ? "bg-white/[0.12] text-white border border-white/15" : "border border-transparent hover:bg-white/[0.07] text-white/80 hover:text-white"
                                     )}>
-                                        <Icon size={20} className={cn(
-                                            "transition-all",
+                                        <Icon size={18} className={cn(
+                                            "transition-all shrink-0",
                                             isActive ? "opacity-100" : "opacity-70 group-hover:opacity-100",
                                             link.special === 'emerald' ? 'text-emerald-400' : ''
                                         )} />
@@ -192,25 +225,25 @@ export default function Sidebar({ user, userRoles, handleSignOut }: { user: any,
                     )}
 
                     <div className="pt-4" />
-                    <Link href="/dashboard/settings" className={cn(
-                        "flex items-center gap-3 px-4 py-3 rounded-xl transition-all group",
-                        pathname === '/dashboard/settings' ? "bg-white/15 text-white" : "hover:bg-white/10 text-white/80 hover:text-white"
+                    <Link href="/dashboard/settings" aria-current={pathname === '/dashboard/settings' ? 'page' : undefined} className={cn(
+                        "flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all group",
+                        pathname === '/dashboard/settings' ? "bg-white/[0.12] text-white border border-white/15" : "border border-transparent hover:bg-white/[0.07] text-white/80 hover:text-white"
                     )}>
-                        <Settings size={20} className={cn(pathname === '/dashboard/settings' ? "opacity-100" : "opacity-70 group-hover:opacity-100")} />
+                        <Settings size={18} className={cn("shrink-0", pathname === '/dashboard/settings' ? "opacity-100" : "opacity-70 group-hover:opacity-100")} />
                         <span className={cn("text-sm", pathname === '/dashboard/settings' ? "font-bold" : "font-medium")}>Account Settings</span>
                     </Link>
                 </nav>
 
-                <div className="p-6 border-t border-white/10 bg-black/20 shrink-0">
+                <div className="relative p-6 border-t border-white/10 bg-black/15 shrink-0">
                     <div className="flex items-center gap-4 px-2 py-4">
-                        <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center text-white border border-white/20 shadow-inner font-black text-lg">
+                        <div className="w-12 h-12 shrink-0 rounded-full bg-white/10 flex items-center justify-center text-white ring-2 ring-[#e3ac3a]/80 font-display text-xl">
                             {user?.name?.[0].toUpperCase() || 'U'}
                         </div>
                         <div className="flex-grow overflow-hidden">
                             <p className="text-sm font-bold truncate leading-none mb-1.5">{user?.name}</p>
                             <div className="flex flex-wrap gap-1">
                                 {userRoles.map((role: string) => (
-                                    <span key={role} className="px-2 py-0.5 bg-blue-500/20 border border-blue-400/30 shadow-sm rounded text-[7px] font-black uppercase tracking-widest text-blue-200">
+                                    <span key={role} className="px-2 py-0.5 bg-[#a9d4f5]/10 border border-[#a9d4f5]/25 rounded-full text-[7px] font-black uppercase tracking-widest text-[#a9d4f5]">
                                         {role}
                                     </span>
                                 ))}

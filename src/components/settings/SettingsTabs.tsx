@@ -53,7 +53,7 @@ export default function SettingsTabs({ user, roles }: SettingsTabsProps) {
                             {activeTab === 'notifications' && <Bell size={18} />}
                             {activeTab === 'approvers' && <UserCheck size={18} />}
                         </div>
-                        <h2 className="text-lg font-black text-[#1a365d] uppercase tracking-tight font-outfit">
+                        <h2 className="text-lg font-medium text-[#0b2a5b] tracking-tight font-display">
                             {activeTab === 'profile' ? 'Official Profile' : activeTab === 'password' ? 'Change Password' : activeTab === 'approvers' ? "Approver's Settings" : 'Alert Preferences'}
                         </h2>
                     </div>
@@ -107,7 +107,7 @@ export default function SettingsTabs({ user, roles }: SettingsTabsProps) {
                             </div>
                             <div className="space-y-1">
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Assigned Department</p>
-                                <p className="text-base font-bold text-[#1a365d]">{user.department || 'General Administration'}</p>
+                                <p className="text-base font-bold text-[#0b2a5b]">{user.department || 'General Administration'}</p>
                             </div>
                             <div className="space-y-1">
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">University Staff ID</p>
@@ -117,12 +117,12 @@ export default function SettingsTabs({ user, roles }: SettingsTabsProps) {
 
                         {/* Access Control list */}
                         <div className="space-y-4">
-                            <h3 className="text-[10px] font-black text-[#1a365d] uppercase tracking-[0.2em] pl-1">Authorized Roles</h3>
+                            <h3 className="text-[10px] font-black text-[#0b2a5b] uppercase tracking-[0.2em] pl-1">Authorized Roles</h3>
                             <div className="flex flex-wrap gap-4">
                                 {roles.map((role: string) => (
                                     <div key={role} className="flex items-center gap-3 px-5 py-3 bg-blue-50 border border-blue-100 rounded-2xl transition-all hover:bg-blue-100">
-                                        <Shield size={18} className="text-[#1a365d]" />
-                                        <span className="text-xs font-black text-[#1a365d] uppercase tracking-wider">{role}</span>
+                                        <Shield size={18} className="text-[#0b2a5b]" />
+                                        <span className="text-xs font-black text-[#0b2a5b] uppercase tracking-wider">{role}</span>
                                     </div>
                                 ))}
                                 {roles.length === 0 && (
@@ -135,7 +135,7 @@ export default function SettingsTabs({ user, roles }: SettingsTabsProps) {
                         <div className="bg-amber-50/50 border border-amber-100 rounded-3xl p-6 md:p-8 flex items-start gap-4 md:gap-5 shadow-sm">
                             <AlertIcon className="text-amber-600 shrink-0 mt-1" size={20} />
                             <div className="space-y-2">
-                                <h3 className="text-xs font-black text-amber-900 font-outfit uppercase tracking-wider">Data Integrity Policy</h3>
+                                <h3 className="text-xs font-black text-amber-900 uppercase tracking-wider">Data Integrity Policy</h3>
                                 <p className="text-xs text-amber-800 font-semibold leading-relaxed">
                                     Profile details and departmental assignments are synchronized with the Central University Registry.
                                     For corrections regarding your name, department, or staff ID, please contact the **Directorate of ICT** at Cosmopolitan University Abuja.
@@ -210,7 +210,7 @@ export default function SettingsTabs({ user, roles }: SettingsTabsProps) {
                                     <button
                                         type="submit"
                                         disabled={pwdStatus.loading}
-                                        className="flex-1 bg-[#1a365d] text-white py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider hover:bg-blue-800 transition-all disabled:opacity-50"
+                                        className="flex-1 bg-[#0b2a5b] text-white py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider hover:bg-blue-800 transition-all disabled:opacity-50"
                                     >
                                         {pwdStatus.loading ? "Updating..." : "Update Password"}
                                     </button>

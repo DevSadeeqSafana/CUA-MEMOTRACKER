@@ -170,12 +170,12 @@ export default function MemoInboxContainer({ memos, initialFolder = 'inbox', isA
     };
 
     return (
-        <div className="bg-white border border-slate-200 rounded-none shadow-sm overflow-hidden flex flex-col font-sans h-full min-h-[600px] animate-in fade-in duration-500">
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col font-sans h-full min-h-[600px] animate-in fade-in duration-500">
             {/* Topbar: Title, Stats, Search */}
             <div className="p-5 md:p-6 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
                 <div className="space-y-1">
                     <div className="flex items-center gap-3.5">
-                        <div className="w-9 h-9 bg-[#1a365d] text-white flex items-center justify-center font-bold shrink-0 rounded-none">
+                        <div className="w-10 h-10 bg-[#0b2a5b] text-white flex items-center justify-center font-bold shrink-0 rounded-full ring-2 ring-[#e3ac3a]/70 ring-offset-2">
                             {folder === 'inbox' && <Inbox size={18} />}
                             {folder === 'important' && <Star size={18} className="text-amber-400 fill-amber-400" />}
                             {folder === 'actions' && <AlertCircle size={18} />}
@@ -183,7 +183,7 @@ export default function MemoInboxContainer({ memos, initialFolder = 'inbox', isA
                             {folder === 'drafts' && <FileText size={18} />}
                         </div>
                         <div>
-                            <h1 className="text-xl md:text-2xl font-black text-[#1a365d] uppercase tracking-tight font-outfit">
+                            <h1 className="text-xl md:text-3xl font-medium text-[#0b2a5b] tracking-tight font-display">
                                 {folder === 'inbox' ? 'Inbox' : folder === 'actions' ? 'Action Queue' : folder === 'sent' ? 'Sent Memos' : folder}
                             </h1>
                             <p className="text-xs text-slate-500 font-medium">
@@ -201,7 +201,7 @@ export default function MemoInboxContainer({ memos, initialFolder = 'inbox', isA
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                         placeholder="Search memos..."
-                        className="w-full bg-white border border-slate-200 focus:border-blue-500 outline-none rounded-none pl-11 pr-4 py-2.5 text-xs font-bold transition-all shadow-sm placeholder:text-slate-300 text-slate-700"
+                        className="w-full bg-white border border-slate-200 focus:border-blue-500 outline-none rounded-xl pl-11 pr-4 py-2.5 text-xs font-bold transition-all shadow-sm placeholder:text-slate-300 text-slate-700"
                     />
                 </div>
             </div>
@@ -326,7 +326,7 @@ export default function MemoInboxContainer({ memos, initialFolder = 'inbox', isA
                         <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto border border-slate-100 text-slate-200">
                             <Clock size={32} />
                         </div>
-                        <h3 className="text-sm font-black text-[#1a365d] uppercase tracking-wider">Inbox is Empty</h3>
+                        <h3 className="text-sm font-black text-[#0b2a5b] uppercase tracking-wider">Inbox is Empty</h3>
                         <p className="text-xs text-slate-400 font-bold max-w-sm uppercase tracking-wider leading-relaxed">
                             No memos match the selected folder, filter tab, or search criteria.
                         </p>

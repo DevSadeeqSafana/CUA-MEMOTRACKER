@@ -52,7 +52,7 @@ export default function PromptModal({
 
     const modalContent = (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6 animate-in fade-in duration-300">
-            <div className="fixed inset-0 bg-[#1a365d]/40 backdrop-blur-sm" onClick={onClose} />
+            <div className="fixed inset-0 bg-[#0b2a5b]/40 backdrop-blur-sm" onClick={onClose} />
             <div className={cn("relative bg-white w-full rounded-[2.5rem] shadow-2xl p-10 animate-in zoom-in-95 duration-300", onSecondaryConfirm ? "max-w-2xl" : "max-w-lg")}>
                 <button
                     onClick={onClose}
@@ -68,7 +68,7 @@ export default function PromptModal({
                         </div>
 
                         <div className="space-y-2">
-                            <h3 className="text-2xl font-black text-[#1a365d] font-outfit tracking-tight">{title}</h3>
+                            <h3 className="text-2xl font-medium text-[#0b2a5b] font-display tracking-tight">{title}</h3>
                             <p className="text-slate-500 font-medium leading-relaxed">{description}</p>
                         </div>
                     </div>
@@ -88,7 +88,7 @@ export default function PromptModal({
                         <button
                             type="submit"
                             disabled={isLoading || (required && !value.trim())}
-                            className="flex-[2] py-4 rounded-2xl bg-[#1a365d] text-white font-bold hover:bg-blue-800 transition-all shadow-lg shadow-blue-900/20 active:scale-95 disabled:opacity-50"
+                            className="flex-[2] py-4 rounded-2xl bg-[#0b2a5b] text-white font-bold hover:bg-blue-800 transition-all shadow-lg shadow-blue-900/20 active:scale-95 disabled:opacity-50"
                         >
                             {isLoading ? 'Processing...' : confirmText}
                         </button>

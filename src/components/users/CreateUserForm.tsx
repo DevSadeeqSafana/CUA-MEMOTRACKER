@@ -193,8 +193,8 @@ export default function CreateUserForm({ onClose }: CreateUserFormProps) {
                 <div className="w-20 h-20 rounded-3xl bg-emerald-100 text-emerald-600 flex items-center justify-center animate-in zoom-in duration-500">
                     <CheckCircle2 size={40} />
                 </div>
-                <h3 className="text-2xl font-black text-slate-900 font-outfit uppercase tracking-tight">Provisioning Successful</h3>
-                <p className="text-slate-500 font-medium">Institutional account for <span className="text-[#1a365d] font-bold">{formData.username}</span> has been activated.</p>
+                <h3 className="text-2xl font-medium text-slate-900 font-display tracking-tight">Provisioning Successful</h3>
+                <p className="text-slate-500 font-medium">Institutional account for <span className="text-[#0b2a5b] font-bold">{formData.username}</span> has been activated.</p>
             </div>
         );
     }
@@ -203,11 +203,11 @@ export default function CreateUserForm({ onClose }: CreateUserFormProps) {
         <div className="p-8 space-y-8 max-h-[90vh] overflow-y-auto font-sans bg-white">
             <div className="flex items-center justify-between border-b border-slate-50 pb-6">
                 <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#1a365d] flex items-center justify-center border border-blue-100 shadow-sm">
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#0b2a5b] flex items-center justify-center border border-blue-100 shadow-sm">
                         <UserPlus size={20} />
                     </div>
                     <div>
-                        <h2 className="text-xl font-black text-[#1a365d] font-outfit uppercase tracking-tight">Account Provisioning</h2>
+                        <h2 className="text-xl font-medium text-[#0b2a5b] font-display tracking-tight">Account Provisioning</h2>
                         <p className="text-[9px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1 italic">Security & Hierarchy Configuration</p>
                     </div>
                 </div>                <button onClick={onClose} className="p-2 hover:bg-slate-50 rounded-xl transition-all text-slate-300 hover:text-slate-600">
@@ -311,7 +311,7 @@ export default function CreateUserForm({ onClose }: CreateUserFormProps) {
                             )}>
                                 {isCheckingDuplicate ? 'Verifying...' : duplicateWarning ? 'Duplicate Detected' : 'Authenticated Selection'}
                             </p>
-                            <h4 className="text-lg font-black text-[#1a365d] uppercase tracking-tight">{selectedStaff.FirstName} {selectedStaff.Surname}</h4>
+                            <h4 className="text-lg font-black text-[#0b2a5b] uppercase tracking-tight">{selectedStaff.FirstName} {selectedStaff.Surname}</h4>
                         </div>
                     </div>
                     <button
@@ -335,7 +335,7 @@ export default function CreateUserForm({ onClose }: CreateUserFormProps) {
                                 className={cn(
                                     "flex items-center gap-3 px-4 py-3 border rounded-xl text-[9px] font-black uppercase tracking-widest transition-all text-left",
                                     formData.roles.includes(role)
-                                        ? "bg-[#1a365d] border-[#1a365d] text-white shadow-xl shadow-blue-900/20"
+                                        ? "bg-[#0b2a5b] border-[#0b2a5b] text-white shadow-xl shadow-blue-900/20"
                                         : "bg-white border-slate-200 text-slate-400 hover:border-blue-300"
                                 )}
                             >
@@ -448,7 +448,7 @@ export default function CreateUserForm({ onClose }: CreateUserFormProps) {
                     <button
                         type="submit"
                         disabled={isLoading || !selectedStaff || !!duplicateWarning || isCheckingDuplicate}
-                        className="flex-2 px-10 py-4 bg-[#1a365d] text-white rounded-xl font-black text-[9px] uppercase tracking-[0.2em] hover:bg-[#2c5282] transition-all shadow-2xl shadow-blue-900/40 disabled:opacity-30 flex items-center justify-center gap-3"
+                        className="flex-2 px-10 py-4 bg-[#0b2a5b] text-white rounded-xl font-black text-[9px] uppercase tracking-[0.2em] hover:bg-[#1a5aa6] transition-all shadow-2xl shadow-blue-900/40 disabled:opacity-30 flex items-center justify-center gap-3"
                     >
                         {isLoading ? <Loader2 className="animate-spin" size={18} /> : <UserPlus size={18} />}
                         {duplicateWarning ? 'Exists' : 'Confirm'}

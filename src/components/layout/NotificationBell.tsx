@@ -23,6 +23,13 @@ export default function NotificationBell() {
         return () => clearInterval(interval);
     }, []);
 
+    useEffect(() => {
+        if (!isOpen) return;
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsOpen(false); };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [isOpen]);
+
     const handleMarkAsRead = async (id: number) => {
         const result = await markNotificationAsRead(id);
         if (result.success) {
@@ -35,11 +42,16 @@ export default function NotificationBell() {
         <div className="relative">
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="relative p-3 rounded-xl hover:bg-slate-100 transition-all text-slate-400 hover:text-[#1a365d]"
+                aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+                aria-expanded={isOpen}
+                className={cn(
+                    "relative w-11 h-11 flex items-center justify-center rounded-xl border transition-all",
+                    isOpen ? "bg-[#0b2a5b] border-[#0b2a5b] text-white" : "bg-white border-slate-200 text-slate-500 hover:text-[#0b2a5b] hover:border-[#1a5aa6]/40 shadow-sm"
+                )}
             >
-                <Bell size={22} />
+                <Bell size={19} />
                 {unreadCount > 0 && (
-                    <span className="absolute top-3 right-3 w-5 h-5 bg-red-500 text-white text-[10px] font-black rounded-full border-2 border-white flex items-center justify-center animate-in zoom-in duration-300">
+                    <span className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 bg-red-500 text-white text-[10px] font-black rounded-full border-2 border-white flex items-center justify-center animate-in zoom-in duration-300">
                         {unreadCount > 9 ? '9+' : unreadCount}
                     </span>
                 )}
@@ -48,11 +60,11 @@ export default function NotificationBell() {
             {isOpen && (
                 <>
                     <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)}></div>
-                    <div className="absolute right-0 mt-4 w-96 bg-white border border-slate-200 rounded-[2rem] shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-5 duration-300">
-                        <div className="p-6 border-b border-slate-50 flex items-center justify-between">
-                            <h3 className="font-black text-[#1a365d] uppercase tracking-wider text-sm flex items-center gap-2">
-                                <Bell size={16} className="text-blue-500" />
+                    <div className="fixed sm:absolute left-4 right-4 sm:left-auto sm:right-0 top-20 sm:top-auto sm:mt-3 sm:w-96 bg-white border border-slate-200 rounded-2xl shadow-2xl shadow-[#0b2a5b]/15 z-50 overflow-hidden animate-in fade-in slide-in-from-top-5 duration-300">
+                        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                            <h3 className="font-display text-lg text-[#0b2a5b] flex items-center gap-2">
                                 Notifications
+                                {unreadCount > 0 && <span className="font-sans text-[10px] font-bold text-[#1a5aa6] bg-[#eef3fa] px-2 py-0.5 rounded-full">{unreadCount} new</span>}
                             </h3>
                             <button
                                 onClick={fetchNotifications}
@@ -68,7 +80,7 @@ export default function NotificationBell() {
                                     <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mx-auto text-slate-200">
                                         <Inbox size={24} />
                                     </div>
-                                    <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">Digital Archive Empty</p>
+                                    <p className="text-slate-400 font-medium text-sm">You&apos;re all caught up</p>
                                 </div>
                             ) : (
                                 <div className="divide-y divide-slate-50">
@@ -102,7 +114,7 @@ export default function NotificationBell() {
                                                 {!notif.is_read && (
                                                     <button
                                                         onClick={() => handleMarkAsRead(notif.id)}
-                                                        className="p-1 text-blue-500 hover:bg-white rounded-lg border border-transparent hover:border-blue-100 transition-all opacity-0 group-hover:opacity-100"
+                                                        className="p-1 text-blue-500 hover:bg-white rounded-lg border border-transparent hover:border-blue-100 transition-all sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
                                                         title="Mark as read"
                                                     >
                                                         <Check size={14} />
@@ -112,10 +124,13 @@ export default function NotificationBell() {
                                             {notif.memo_uuid && (
                                                 <Link
                                                     href={`/dashboard/memos/${notif.memo_uuid}`}
-                                                    onClick={() => setIsOpen(false)}
+                                                    onClick={() => {
+                                                        setIsOpen(false);
+                                                        if (!notif.is_read) handleMarkAsRead(notif.id);
+                                                    }}
                                                     className="inline-block mt-3 text-[9px] font-black text-blue-600 bg-white border border-blue-100 px-3 py-1 rounded-lg uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all"
                                                 >
-                                                    View Memo Archive
+                                                    Open memo
                                                 </Link>
                                             )}
                                         </div>
@@ -126,11 +141,11 @@ export default function NotificationBell() {
 
                         <div className="p-4 bg-slate-50 border-t border-slate-100 text-center">
                             <Link
-                                href="/dashboard/tasks"
+                                href="/dashboard/tasks?folder=inbox"
                                 onClick={() => setIsOpen(false)}
-                                className="text-[10px] font-black text-slate-400 hover:text-[#1a365d] uppercase tracking-[0.2em] transition-all"
+                                className="text-[10px] font-black text-slate-400 hover:text-[#0b2a5b] uppercase tracking-[0.2em] transition-all"
                             >
-                                Management Command Center
+                                Go to Inbox
                             </Link>
                         </div>
                     </div>

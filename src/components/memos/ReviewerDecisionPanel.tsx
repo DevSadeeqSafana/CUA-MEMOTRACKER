@@ -105,7 +105,7 @@ export default function ReviewerDecisionPanel({
                     <CheckCircle2 size={32} />
                 </div>
                 <div className="space-y-1">
-                    <h2 className="text-xl font-black text-white font-outfit uppercase tracking-tight">Decision Recorded</h2>
+                    <h2 className="text-xl font-medium text-white font-display tracking-tight">Decision Recorded</h2>
                     <p className="text-emerald-50/80 text-[11px] font-medium">The institutional workflow for this request has been successfully updated.</p>
                 </div>
             </div>
@@ -113,7 +113,7 @@ export default function ReviewerDecisionPanel({
     }
 
     return (
-        <div className="bg-[#1a365d] rounded-2xl shadow-xl overflow-hidden relative group">
+        <div className="bg-[#0b2a5b] rounded-2xl shadow-xl overflow-hidden relative group">
             <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2 group-hover:bg-white/10 transition-colors duration-700"></div>
 
             <div className="p-8 relative z-10 space-y-8">
@@ -123,7 +123,7 @@ export default function ReviewerDecisionPanel({
                             <ShieldCheck size={24} />
                         </div>
                         <div className="space-y-1">
-                            <h3 className="text-xl font-black text-white font-outfit uppercase tracking-tight">Final Decision Desk</h3>
+                            <h3 className="text-xl font-medium text-white font-display tracking-tight">Final Decision Desk</h3>
                             <p className="text-blue-100/60 text-[11px] font-medium flex items-center gap-2">
                                 <FileSignature size={12} />
                                 Formal authorization required for institutional sending.

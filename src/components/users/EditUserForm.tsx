@@ -110,7 +110,7 @@ export default function EditUserForm({ user, managers, onClose }: EditUserFormPr
                 <div className="w-16 h-16 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
                     <CheckCircle2 size={32} />
                 </div>
-                <h3 className="text-xl font-black text-slate-900 font-outfit">Identity Updated</h3>
+                <h3 className="text-xl font-medium text-slate-900 font-display">Identity Updated</h3>
                 <p className="text-slate-500 font-medium">Internal records for {formData.username} have been synchronized.</p>
             </div>
         );
@@ -124,7 +124,7 @@ export default function EditUserForm({ user, managers, onClose }: EditUserFormPr
                         <UserCheck size={20} />
                     </div>
                     <div>
-                        <h2 className="text-xl font-black text-[#1a365d] font-outfit leading-none">Modify Account</h2>
+                        <h2 className="text-xl font-medium text-[#0b2a5b] font-display leading-none">Modify Account</h2>
                         <p className="text-[10px] text-slate-400 font-medium mt-1">Updating credentials for {user.username}.</p>
                     </div>
                 </div>
@@ -169,7 +169,7 @@ export default function EditUserForm({ user, managers, onClose }: EditUserFormPr
 
                 <div className="p-4 bg-slate-50 rounded-[1.5rem] border border-slate-100 flex items-center justify-between">
                     <div>
-                        <p className="text-xs font-black text-[#1a365d] font-outfit">Account Status</p>
+                        <p className="text-xs font-black text-[#0b2a5b]">Account Status</p>
                         <p className="text-[10px] text-slate-400 font-medium">Determine if this user can access the institutional portal.</p>
                     </div>
                     <button
@@ -200,7 +200,7 @@ export default function EditUserForm({ user, managers, onClose }: EditUserFormPr
                                 className={cn(
                                     "flex items-center gap-2 px-3 py-2 border rounded-xl text-[9px] font-black uppercase tracking-widest transition-all",
                                     formData.roles.includes(role)
-                                        ? "bg-[#1a365d] border-[#1a365d] text-white shadow-lg"
+                                        ? "bg-[#0b2a5b] border-[#0b2a5b] text-white shadow-lg"
                                         : "bg-white border-slate-200 text-slate-500 hover:border-blue-300"
                                 )}
                             >
@@ -298,7 +298,7 @@ export default function EditUserForm({ user, managers, onClose }: EditUserFormPr
                     <button
                         type="submit"
                         disabled={isLoading}
-                        className="flex-2 px-10 py-3 bg-[#1a365d] text-white rounded-xl font-bold hover:bg-[#2c5282] transition-all shadow-xl shadow-blue-900/20 disabled:opacity-50 flex items-center justify-center gap-3 text-xs"
+                        className="flex-2 px-10 py-3 bg-[#0b2a5b] text-white rounded-xl font-bold hover:bg-[#1a5aa6] transition-all shadow-xl shadow-blue-900/20 disabled:opacity-50 flex items-center justify-center gap-3 text-xs"
                     >
                         {isLoading ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
                         Save Changes

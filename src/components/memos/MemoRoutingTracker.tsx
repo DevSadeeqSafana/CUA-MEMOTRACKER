@@ -127,7 +127,7 @@ export default function MemoRoutingTracker({ memo, approvals, recipients, curren
 
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
                 <div className="space-y-1">
-                    <h3 className="text-xl font-black text-[#1a365d] font-outfit uppercase tracking-tight flex items-center gap-3">
+                    <h3 className="text-xl font-medium text-[#0b2a5b] font-display tracking-tight flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-900/20">
                             <Send size={16} />
                         </div>

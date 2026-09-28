@@ -114,11 +114,11 @@ export default function LineManagerRoutingAdjustment({
                 {/* Header */}
                 <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-[#1a365d] text-white flex items-center justify-center shadow-lg shadow-blue-900/20">
+                        <div className="w-10 h-10 rounded-xl bg-[#0b2a5b] text-white flex items-center justify-center shadow-lg shadow-blue-900/20">
                             <Settings2 size={20} />
                         </div>
                         <div>
-                            <h2 className="text-lg font-black text-[#1a365d] font-outfit uppercase">Adjust Routing</h2>
+                            <h2 className="text-lg font-medium text-[#0b2a5b] font-display">Adjust Routing</h2>
                             <p className="text-[11px] text-slate-400 font-medium">Modify destination or add intermediate approvers.</p>
                         </div>
                     </div>
@@ -137,7 +137,7 @@ export default function LineManagerRoutingAdjustment({
                         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
                             <div className="flex items-center gap-3">
                                 <Users className="text-blue-500" size={20} />
-                                <h3 className="text-sm font-black text-[#1a365d] uppercase tracking-wider">Final Recipients</h3>
+                                <h3 className="text-sm font-black text-[#0b2a5b] uppercase tracking-wider">Final Recipients</h3>
                             </div>
                             <span className="text-[10px] font-black bg-blue-50 text-blue-600 px-3 py-1 rounded-full uppercase">
                                 {selectedRecipients.length} Selected
@@ -193,7 +193,7 @@ export default function LineManagerRoutingAdjustment({
                         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
                             <div className="flex items-center gap-3">
                                 <UserPlus className="text-amber-500" size={20} />
-                                <h3 className="text-sm font-black text-[#1a365d] uppercase tracking-wider">Additional Approvers</h3>
+                                <h3 className="text-sm font-black text-[#0b2a5b] uppercase tracking-wider">Additional Approvers</h3>
                             </div>
                             <span className="text-[10px] font-black bg-amber-50 text-amber-600 px-3 py-1 rounded-full uppercase">
                                 Sequential Flow
@@ -292,7 +292,7 @@ export default function LineManagerRoutingAdjustment({
                         <button
                             onClick={handleSaveChanges}
                             disabled={isLoading}
-                            className="flex items-center gap-3 px-8 py-3 bg-[#1a365d] text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-blue-900/20 hover:bg-[#2c5282] transition-all disabled:opacity-50"
+                            className="flex items-center gap-3 px-8 py-3 bg-[#0b2a5b] text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-blue-900/20 hover:bg-[#1a5aa6] transition-all disabled:opacity-50"
                         >
                             {isLoading ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
                             Save Routing Changes

@@ -51,7 +51,7 @@ export default function SendToAccountantButton({ memoId, memoTitle }: SendToAcco
             <button
                 onClick={() => setShowConfirm(true)}
                 disabled={isLoading}
-                className="flex items-center gap-2 px-5 py-2.5 bg-amber-400 text-[#1a365d] hover:bg-amber-300 rounded-xl shadow-lg shadow-amber-900/20 transition-all font-bold text-xs uppercase tracking-widest disabled:opacity-50"
+                className="flex items-center gap-2 px-5 py-2.5 bg-amber-400 text-[#0b2a5b] hover:bg-amber-300 rounded-xl shadow-lg shadow-amber-900/20 transition-all font-bold text-xs uppercase tracking-widest disabled:opacity-50"
             >
                 {isLoading ? <Loader2 className="animate-spin" size={14} /> : <Landmark size={14} />}
                 Send to Accountant

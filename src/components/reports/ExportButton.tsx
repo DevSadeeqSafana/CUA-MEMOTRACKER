@@ -38,7 +38,7 @@ export default function ExportButton({ data }: { data: any[] }) {
     return (
         <button
             onClick={handleExport}
-            className="flex items-center gap-2 bg-[#1a365d] text-white px-6 py-3 rounded-2xl text-sm font-bold shadow-xl shadow-blue-900/10 hover:bg-blue-800 transition-all font-outfit uppercase tracking-wider"
+            className="flex items-center gap-2 bg-[#0b2a5b] text-white px-6 py-3 rounded-2xl text-sm font-semibold shadow-xl shadow-blue-900/10 hover:bg-blue-800 transition-all tracking-tight"
         >
             <Download size={18} />
             Export Data

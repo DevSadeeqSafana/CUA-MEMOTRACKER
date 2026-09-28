@@ -30,7 +30,7 @@ export default async function MyMemosPage() {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h2 className="text-xl font-black text-[#1a365d] font-outfit uppercase tracking-tight">My Memos</h2>
+                    <h2 className="text-xl font-medium text-[#0b2a5b] font-display tracking-tight">My Memos</h2>
                     <p className="text-[10px] text-slate-400 font-medium font-sans">Manage and track your created memos.</p>
                 </div>
             </div>
@@ -103,8 +103,8 @@ export default async function MyMemosPage() {
                                         )}
                                     </div>
                                     <h3 className={cn(
-                                        'font-black font-outfit text-base truncate transition-colors uppercase tracking-tight',
-                                        needsAttention ? 'text-amber-700 group-hover:text-amber-800' : 'text-[#1a365d] group-hover:text-blue-600'
+                                        'font-medium font-display text-base truncate transition-colors tracking-tight',
+                                        needsAttention ? 'text-amber-700 group-hover:text-amber-800' : 'text-[#0b2a5b] group-hover:text-blue-600'
                                     )}>
                                         {memo.title}
                                     </h3>

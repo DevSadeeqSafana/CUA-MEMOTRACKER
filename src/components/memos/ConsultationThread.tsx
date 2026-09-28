@@ -133,7 +133,7 @@ function ConsultationModal({
                 onClick={e => e.stopPropagation()}
             >
                 <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-black text-[#1a365d] uppercase tracking-tight">{title}</h3>
+                    <h3 className="text-sm font-black text-[#0b2a5b] uppercase tracking-tight">{title}</h3>
                     <button onClick={onClose} className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors">
                         <X size={14} className="text-slate-500" />
                     </button>
@@ -201,7 +201,7 @@ function ConsultationModal({
                     <button
                         onClick={submit}
                         disabled={!selectedUser || !message.trim() || isPending}
-                        className="flex-1 py-2 text-xs font-black text-white bg-[#1a365d] rounded-xl hover:bg-[#2d4a7a] disabled:opacity-40 transition-colors flex items-center justify-center gap-2"
+                        className="flex-1 py-2 text-xs font-black text-white bg-[#0b2a5b] rounded-xl hover:bg-[#2d4a7a] disabled:opacity-40 transition-colors flex items-center justify-center gap-2"
                     >
                         {isPending ? <Loader2 size={13} className="animate-spin" /> : <SendHorizonal size={13} />}
                         {isPending ? 'Sending…' : 'Send'}
@@ -384,7 +384,7 @@ export default function ConsultationThread({
             {/* Header */}
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div>
-                    <h3 className="text-lg font-black text-[#1a365d] font-outfit uppercase tracking-tight">
+                    <h3 className="text-lg font-medium text-[#0b2a5b] font-display tracking-tight">
                         Consultation Thread
                     </h3>
                     <p className="text-[10px] text-slate-400 font-medium mt-0.5">
@@ -394,7 +394,7 @@ export default function ConsultationThread({
                 {canForward && (
                     <button
                         onClick={() => setShowNewForward(true)}
-                        className="flex items-center gap-2 text-xs font-black text-white bg-[#1a365d] hover:bg-[#2d4a7a] px-3 py-2 rounded-xl transition-colors uppercase tracking-wide"
+                        className="flex items-center gap-2 text-xs font-black text-white bg-[#0b2a5b] hover:bg-[#2d4a7a] px-3 py-2 rounded-xl transition-colors uppercase tracking-wide"
                     >
                         <Forward size={13} />
                         Forward

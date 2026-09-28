@@ -67,7 +67,7 @@ export function getEmailTemplate(options: {
     const actionButton = actionUrl && actionLabel
         ? `
         <div style="margin: 32px 0 24px; text-align: center;">
-            <a href="${actionUrl}" target="_blank" style="background-color: #1a365d; color: #ffffff; text-decoration: none; padding: 12px 30px; font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 1.5px; border-radius: 8px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
+            <a href="${actionUrl}" target="_blank" style="background-color: #0b2a5b; color: #ffffff; text-decoration: none; padding: 12px 30px; font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 1.5px; border-radius: 8px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
                 ${actionLabel}
             </a>
         </div>
@@ -102,7 +102,7 @@ export function getEmailTemplate(options: {
                 <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); overflow: hidden;">
                     <!-- Branded Header -->
                     <tr>
-                        <td style="background-color: #1a365d; padding: 32px 40px; text-align: center;">
+                        <td style="background-color: #0b2a5b; padding: 32px 40px; text-align: center;">
                             <h1 style="margin: 0; color: #ffffff; font-size: 20px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;">
                                 CUA Memo System
                             </h1>

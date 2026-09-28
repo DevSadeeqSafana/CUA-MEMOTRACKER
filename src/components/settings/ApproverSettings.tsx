@@ -137,7 +137,7 @@ export default function ApproverSettings() {
                                 <button
                                     onClick={() => handleAdd(user)}
                                     disabled={busyId !== null}
-                                    className="flex items-center gap-2 px-4 py-2 bg-[#1a365d] text-white rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-blue-800 transition-all disabled:opacity-50 shrink-0"
+                                    className="flex items-center gap-2 px-4 py-2 bg-[#0b2a5b] text-white rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-blue-800 transition-all disabled:opacity-50 shrink-0"
                                 >
                                     {busyId === user.id ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
                                     Add
@@ -150,7 +150,7 @@ export default function ApproverSettings() {
 
             {/* Current approvers */}
             <div className="space-y-3">
-                <h3 className="text-[10px] font-black text-[#1a365d] uppercase tracking-[0.2em] pl-1">
+                <h3 className="text-[10px] font-black text-[#0b2a5b] uppercase tracking-[0.2em] pl-1">
                     Current Approvers {!loading && !loadError && `(${members.length})`}
                 </h3>
                 {loading ? (

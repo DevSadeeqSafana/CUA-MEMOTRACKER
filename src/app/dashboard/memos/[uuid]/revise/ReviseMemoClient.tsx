@@ -88,7 +88,7 @@ export default function ReviseMemoClient({
         <div className="space-y-6">
             <Link
                 href={`/dashboard/memos/${memoUuid}`}
-                className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 hover:text-[#1a365d] transition-all group px-4 py-2 bg-white border border-slate-200 rounded-2xl shadow-sm"
+                className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 hover:text-[#0b2a5b] transition-all group px-4 py-2 bg-white border border-slate-200 rounded-2xl shadow-sm"
             >
                 <ArrowLeft size={13} className="group-hover:-translate-x-1 transition-transform" />
                 Back to Memo
@@ -131,7 +131,7 @@ export default function ReviseMemoClient({
             </div>
 
             <div className="px-1">
-                <h1 className="text-xl font-black text-[#1a365d] font-outfit uppercase tracking-tight">Edit Memo</h1>
+                <h1 className="text-xl font-medium text-[#0b2a5b] font-display tracking-tight">Edit Memo</h1>
                 <p className="text-[11px] text-slate-400 font-medium mt-1">
                     The memo keeps its current place in the approval flow; those who requested input will be notified of the update.
                 </p>
@@ -238,7 +238,7 @@ export default function ReviseMemoClient({
                     <button
                         onClick={handleSave}
                         disabled={isSaving}
-                        className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#1a365d] text-white text-[10px] font-black uppercase tracking-widest hover:bg-blue-800 transition-all disabled:opacity-50"
+                        className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#0b2a5b] text-white text-[10px] font-black uppercase tracking-widest hover:bg-blue-800 transition-all disabled:opacity-50"
                     >
                         {isSaving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
                         Save Changes

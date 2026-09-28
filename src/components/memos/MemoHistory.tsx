@@ -235,7 +235,7 @@ export default function MemoHistory({ memo, approvals, recipients, routingLogs =
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
                 <div>
-                    <h3 className="text-lg font-black text-[#1a365d] font-outfit uppercase tracking-tight">Audit Trail</h3>
+                    <h3 className="text-lg font-medium text-[#0b2a5b] font-display tracking-tight">Audit Trail</h3>
                     <p className="text-[10px] text-slate-400 font-medium mt-0.5">Reference {memo.reference_number}</p>
                 </div>
             </div>
@@ -263,7 +263,7 @@ export default function MemoHistory({ memo, approvals, recipients, routingLogs =
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
                                 <h4 className={cn(
                                     "font-black text-xs uppercase tracking-wider",
-                                    event.status === 'completed' ? "text-[#1a365d]" :
+                                    event.status === 'completed' ? "text-[#0b2a5b]" :
                                         event.status === 'failed' ? "text-red-700" :
                                             "text-amber-700"
                                 )}>
