@@ -32,6 +32,15 @@ import { deleteDraftMemo } from '@/lib/actions';
 import toast from 'react-hot-toast';
 import ConfirmationModal from '@/components/ui/ConfirmationModal';
 
+const FOLDER_TITLES: Record<string, string> = {
+    inbox: 'Inbox',
+    important: 'Important',
+    actions: 'Action Queue',
+    decided: 'My Decisions',
+    sent: 'Sent Memos',
+    drafts: 'Drafts',
+};
+
 interface MemoInboxContainerProps {
     memos: any[];
     initialFolder?: string;
@@ -93,6 +102,8 @@ export default function MemoInboxContainer({ memos, initialFolder = 'inbox', isA
             if (folder === 'inbox') {
                 if (memo.folder !== 'inbox' && memo.folder !== 'actions') return false;
             } else if (folder === 'important') {
+                // Decisions are history, not live mail; keep them out of Important
+                if (memo.folder === 'decided') return false;
                 const isStarred = memo.priority === 'High' || starredIds.has(memo.id);
                 if (!isStarred) return false;
             } else if (folder === 'sent') {
@@ -101,6 +112,8 @@ export default function MemoInboxContainer({ memos, initialFolder = 'inbox', isA
                 if (memo.folder !== 'drafts') return false;
             } else if (folder === 'actions') {
                 if (memo.folder !== 'actions') return false;
+            } else if (folder === 'decided') {
+                if (memo.folder !== 'decided') return false;
             }
 
             // 2. Classification Tab filter
@@ -181,13 +194,16 @@ export default function MemoInboxContainer({ memos, initialFolder = 'inbox', isA
                             {folder === 'actions' && <AlertCircle size={18} />}
                             {folder === 'sent' && <Send size={18} />}
                             {folder === 'drafts' && <FileText size={18} />}
+                            {folder === 'decided' && <CheckCircle2 size={18} />}
                         </div>
                         <div>
                             <h1 className="text-xl md:text-3xl font-medium text-[#0b2a5b] tracking-tight font-display">
-                                {folder === 'inbox' ? 'Inbox' : folder === 'actions' ? 'Action Queue' : folder === 'sent' ? 'Sent Memos' : folder}
+                                {FOLDER_TITLES[folder] ?? folder}
                             </h1>
                             <p className="text-xs text-slate-500 font-medium">
-                                Showing {filteredMemos.length} item{filteredMemos.length !== 1 ? 's' : ''} in {folder}
+                                {folder === 'decided'
+                                    ? `${filteredMemos.length} memo${filteredMemos.length !== 1 ? 's' : ''} you have approved or rejected`
+                                    : `Showing ${filteredMemos.length} item${filteredMemos.length !== 1 ? 's' : ''} in ${FOLDER_TITLES[folder] ?? folder}`}
                             </p>
                         </div>
                     </div>
@@ -338,7 +354,7 @@ export default function MemoInboxContainer({ memos, initialFolder = 'inbox', isA
                             
                             return (
                                 <div
-                                    key={memo.id}
+                                    key={`${memo.folder}-${memo.id}-${memo.step_order ?? ''}`}
                                     onClick={() => router.push(folder === 'drafts' ? `/dashboard/memos/${memo.uuid}/edit` : `/dashboard/memos/${memo.uuid}`)}
                                     className={cn(
                                         "flex items-center gap-4 px-6 py-4 hover:bg-slate-50 transition-all cursor-pointer relative group",
@@ -421,6 +437,20 @@ export default function MemoInboxContainer({ memos, initialFolder = 'inbox', isA
                                             <span className="bg-purple-600 text-white text-[8px] font-black uppercase tracking-[0.2em] px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-sm shrink-0">
                                                 <MessageSquare size={9} />
                                                 Input Requested
+                                            </span>
+                                        )}
+                                        {/* My decision (Decisions folder) */}
+                                        {memo.my_decision && (
+                                            <span
+                                                title={memo.decided_at ? `Decided ${formatDate(memo.decided_at)}` : undefined}
+                                                className={cn(
+                                                    "text-[8px] font-black uppercase tracking-[0.2em] px-2 py-0.5 rounded-lg flex items-center gap-1 border shrink-0",
+                                                    memo.my_decision === 'Approved' ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-red-50 text-red-700 border-red-200"
+                                                )}
+                                            >
+                                                {memo.my_decision === 'Approved' ? <Check size={9} /> : <AlertCircle size={9} />}
+                                                {memo.my_decision}
+                                                {memo.decided_at && <span className="font-bold normal-case tracking-normal opacity-70">· {formatDate(memo.decided_at)}</span>}
                                             </span>
                                         )}
                                         {/* Priority High Star */}

@@ -605,7 +605,7 @@ export async function approveMemo(memoId: number, approvalId: number, comments: 
 
         revalidatePath(`/dashboard/memos/${memoId}`);
         revalidatePath('/dashboard');
-        revalidatePath('/dashboard/approvals');
+        revalidatePath('/dashboard/tasks');
         return { success: true };
     } catch (error: any) {
         console.error('Approval Error:', error);
@@ -2031,7 +2031,7 @@ export async function updateRejectedMemo(memoId: number, data: FormData, submitN
 
         revalidatePath(`/dashboard/memos/${uuid}`);
         revalidatePath(`/dashboard/memos/${uuid}/edit`);
-        revalidatePath('/dashboard/memos/my-memos');
+        revalidatePath('/dashboard/tasks');
         revalidatePath('/dashboard');
         return { success: true, memoUuid: uuid };
     } catch (e: any) {

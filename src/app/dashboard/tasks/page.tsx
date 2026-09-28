@@ -89,6 +89,22 @@ export default async function MemoCenterPage({
         ORDER BY m.created_at DESC
     `, [userId]) as any[];
 
+    // 5. Fetch approval decisions this user has already made (the "My Decisions" folder)
+    const decided = await query(`
+        SELECT m.id, m.uuid, m.title, m.reference_number, m.content, m.priority, m.memo_type, m.category, m.status, m.created_at, m.department,
+               COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as creator_name,
+               a.status as my_decision, a.processed_at as decided_at, a.step_order,
+               (SELECT COUNT(*) FROM memo_budget_info bi WHERE bi.memo_id = m.id) > 0 as is_budget_memo,
+               (SELECT COUNT(*) FROM attachments att WHERE att.memo_id = m.id) as attachment_count
+        FROM memos m
+        JOIN memo_approvals a ON m.id = a.memo_id
+        JOIN memo_system_users u ON m.created_by = u.id
+        LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+        WHERE a.approver_id = ? AND a.status IN ('Approved', 'Rejected')
+        ORDER BY a.processed_at DESC
+        LIMIT 100
+    `, [userId]) as any[];
+
     // --- Unify Memos List ---
     const unifiedMemos: any[] = [];
     const memoIdsSeen = new Set<string>();
@@ -155,8 +171,24 @@ export default async function MemoCenterPage({
         }
     });
 
-    // Sort combined list chronologically (Newest first)
-    unifiedMemos.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    // Add Decisions (one row per decision; a memo can come back to the same approver at another step)
+    decided.forEach(m => {
+        const key = `decided-${m.id}-${m.step_order}`;
+        if (!memoIdsSeen.has(key)) {
+            memoIdsSeen.add(key);
+            unifiedMemos.push({
+                ...m,
+                folder: 'decided',
+                is_unread: false,
+                is_starred: m.priority === 'High',
+                action_type: null
+            });
+        }
+    });
+
+    // Sort combined list chronologically (Newest first); decisions sort by when they were made
+    const sortDate = (m: { decided_at?: string | Date; created_at: string | Date }) => new Date(m.decided_at || m.created_at).getTime();
+    unifiedMemos.sort((a, b) => sortDate(b) - sortDate(a));
 
     return (
         <div className="space-y-6 animate-in fade-in duration-700">

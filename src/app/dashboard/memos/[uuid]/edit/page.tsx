@@ -25,7 +25,7 @@ export default async function EditMemoPage({
         [uuid]
     ) as any[];
 
-    if (memos.length === 0) redirect('/dashboard/memos/my-memos');
+    if (memos.length === 0) redirect('/dashboard/tasks?folder=sent');
     const memo = memos[0];
 
     // Gate 1: must be creator

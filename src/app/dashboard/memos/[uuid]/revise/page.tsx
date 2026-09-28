@@ -20,7 +20,7 @@ export default async function ReviseMemoPage({
         `SELECT id, uuid, title, content, status, created_by FROM memos WHERE uuid = ? LIMIT 1`,
         [uuid]
     ) as any[];
-    if (memos.length === 0) redirect('/dashboard/memos/my-memos');
+    if (memos.length === 0) redirect('/dashboard/tasks?folder=sent');
     const memo = memos[0];
 
     // Gate 1: must be creator. Gate 2: not a draft (rejected drafts use /edit).

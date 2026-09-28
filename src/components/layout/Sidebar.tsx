@@ -11,14 +11,14 @@ import {
     CheckSquare,
     BarChart2,
     Settings,
-    LogOut,
     Menu,
     X,
     Star,
     AlertCircle,
     Send,
     Landmark,
-    ArrowRight
+    ArrowRight,
+    CheckCircle2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getSidebarCounts } from '@/lib/actions';
@@ -34,7 +34,7 @@ function SealBadge({ size, className }: { size: number, className?: string }) {
     );
 }
 
-export default function Sidebar({ user, userRoles, handleSignOut }: { user: any, userRoles: string[], handleSignOut: () => void }) {
+export default function Sidebar({ userRoles }: { userRoles: string[] }) {
     const [isOpen, setIsOpen] = useState(false);
     const pathname = usePathname();
     const searchParams = useSearchParams();
@@ -83,6 +83,7 @@ export default function Sidebar({ user, userRoles, handleSignOut }: { user: any,
         { href: '/dashboard/accountant', label: 'Finance Queue', icon: Landmark, roles: ['Accountant', 'Administrator'], badgeKey: 'accountant_queue' as const },
         { href: '/dashboard/tasks?folder=important', label: 'Important', icon: Star, roles: [], badgeKey: 'important' as const },
         { href: '/dashboard/tasks?folder=actions', label: 'Action Queue', icon: AlertCircle, roles: [], badgeKey: 'actions' as const },
+        { href: '/dashboard/tasks?folder=decided', label: 'My Decisions', icon: CheckCircle2, roles: [] },
         { href: '/dashboard/tasks?folder=sent', label: 'Sent Memos', icon: Send, roles: [], badgeKey: 'sent' as const },
         { href: '/dashboard/tasks?folder=drafts', label: 'Drafts', icon: FileText, roles: [], badgeKey: 'drafts' as const },
     ];
@@ -233,30 +234,6 @@ export default function Sidebar({ user, userRoles, handleSignOut }: { user: any,
                         <span className={cn("text-sm", pathname === '/dashboard/settings' ? "font-bold" : "font-medium")}>Account Settings</span>
                     </Link>
                 </nav>
-
-                <div className="relative p-6 border-t border-white/10 bg-black/15 shrink-0">
-                    <div className="flex items-center gap-4 px-2 py-4">
-                        <div className="w-12 h-12 shrink-0 rounded-full bg-white/10 flex items-center justify-center text-white ring-2 ring-[#e3ac3a]/80 font-display text-xl">
-                            {user?.name?.[0].toUpperCase() || 'U'}
-                        </div>
-                        <div className="flex-grow overflow-hidden">
-                            <p className="text-sm font-bold truncate leading-none mb-1.5">{user?.name}</p>
-                            <div className="flex flex-wrap gap-1">
-                                {userRoles.map((role: string) => (
-                                    <span key={role} className="px-2 py-0.5 bg-[#a9d4f5]/10 border border-[#a9d4f5]/25 rounded-full text-[7px] font-black uppercase tracking-widest text-[#a9d4f5]">
-                                        {role}
-                                    </span>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                    <form action={handleSignOut}>
-                        <button className="flex items-center gap-3 w-full px-4 py-3 mt-2 rounded-xl text-red-300 hover:bg-red-500/20 hover:text-red-200 transition-all font-bold text-sm border border-transparent hover:border-red-500/30">
-                            <LogOut size={18} />
-                            Log Out
-                        </button>
-                    </form>
-                </div>
             </aside>
         </>
     );
