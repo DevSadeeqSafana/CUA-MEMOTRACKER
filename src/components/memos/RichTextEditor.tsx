@@ -6,6 +6,7 @@ import Link from '@tiptap/extension-link';
 import Underline from '@tiptap/extension-underline';
 import TextAlign from '@tiptap/extension-text-align';
 import Placeholder from '@tiptap/extension-placeholder';
+import { MemoReference } from '@/components/memos/MemoReference';
 import {
     Bold,
     Italic,
@@ -58,7 +59,7 @@ const MenuButton = ({
 export default function RichTextEditor({
     content,
     onChange,
-    placeholder = "Start writing your memo...",
+    placeholder = "Start writing your memo… Type @ to reference another memo.",
     className
 }: RichTextEditorProps) {
     const editor = useEditor({
@@ -80,6 +81,8 @@ export default function RichTextEditor({
             Placeholder.configure({
                 placeholder,
             }),
+            // "@" + memo title inserts a reference to another memo
+            MemoReference,
         ],
         content,
         onUpdate: ({ editor }) => {

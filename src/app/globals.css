@@ -108,3 +108,21 @@ body {
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+/* "@" memo references inside memo content (editor and memo view) */
+a.memo-ref {
+  display: inline;
+  padding: 0.05em 0.4em;
+  border-radius: 0.375rem;
+  background: #eef3fa;
+  border: 1px solid rgb(26 90 166 / 0.18);
+  color: #1a5aa6;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: normal;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+a.memo-ref:hover {
+  background: #dde9f6;
+  color: #0b2a5b;
+}

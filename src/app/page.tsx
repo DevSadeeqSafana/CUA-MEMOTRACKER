@@ -44,6 +44,14 @@ export default function LoginPage() {
     }
   };
 
+  // Clicks on Google's (invisible) button stay inside its iframe and never reach this page.
+  // So a click that lands here means Google didn't render its button, most often because this
+  // site's address isn't an Authorized JavaScript origin for the OAuth client ID.
+  const handleButtonFallbackClick = () => {
+    toast.error('Google Sign-In could not load on this address. Please contact the ICT department.');
+    console.error(`Google Sign-In button not rendered. Check that ${window.location.origin} is an Authorized JavaScript origin for NEXT_PUBLIC_GOOGLE_CLIENT_ID.`);
+  };
+
   const handleGoogleError = () => {
     toast.error('Google Sign-In was cancelled or failed.');
   };
@@ -161,7 +169,9 @@ export default function LoginPage() {
                 Its real button is overlaid invisibly (scaled to cover) on top of our styled one,
                 so clicks and keyboard focus land on Google's iframe.
               */}
-              <div className="group relative mt-6 lg:mt-10 h-16 lg:h-[72px] rounded-xl border border-slate-200 max-lg:border-white/0 bg-white shadow-sm max-lg:shadow-lg max-lg:shadow-black/20 transition-all hover:border-[#1a5aa6]/40 hover:shadow-md focus-within:ring-2 focus-within:ring-[#1a5aa6]/40 max-lg:focus-within:ring-white/60">
+              <div
+                onClick={handleButtonFallbackClick}
+                className="group relative mt-6 lg:mt-10 h-16 lg:h-[72px] rounded-xl border border-slate-200 max-lg:border-white/0 bg-white shadow-sm max-lg:shadow-lg max-lg:shadow-black/20 transition-all hover:border-[#1a5aa6]/40 hover:shadow-md focus-within:ring-2 focus-within:ring-[#1a5aa6]/40 max-lg:focus-within:ring-white/60">
                 <div className="flex h-full items-center gap-4 lg:gap-5 px-5 lg:px-6" aria-hidden="true">
                   <GoogleMark />
                   <span className="flex-1 text-base lg:text-[17px] font-semibold text-[#0b2a5b]">Continue with Google</span>

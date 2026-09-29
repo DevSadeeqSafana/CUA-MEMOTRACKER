@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import BackButton from '@/components/ui/BackButton';
+import DownloadPdfButton from '@/components/memos/DownloadPdfButton';
 import { cn, formatDate } from '@/lib/utils';
 import ApprovalButtons from '@/components/memos/ApprovalButtons';
 import AcknowledgeButton from '@/components/memos/AcknowledgeButton';
@@ -196,27 +197,31 @@ export default async function MemoDetailsPage({
             <div className="flex items-center justify-between gap-2 flex-wrap">
                 <BackButton fallback="/dashboard/tasks?folder=inbox" />
 
-                {/* Edit & Resubmit button — only for creator of rejected memos */}
-                {canEdit && (
-                    <Link
-                        href={`/dashboard/memos/${memo.uuid}/edit`}
-                        className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-amber-500/30 animate-pulse-subtle"
-                    >
-                        <Pencil size={13} />
-                        Edit &amp; Resubmit
-                    </Link>
-                )}
+                <div className="flex items-center gap-2 flex-wrap ml-auto">
+                    <DownloadPdfButton memoUuid={memo.uuid} />
 
-                {/* Edit Memo button — for the creator once input has been requested */}
-                {canRevise && (
-                    <Link
-                        href={`/dashboard/memos/${memo.uuid}/revise`}
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-500/30"
-                    >
-                        <Pencil size={13} />
-                        Edit Memo
-                    </Link>
-                )}
+                    {/* Edit & Resubmit button — only for creator of rejected memos */}
+                    {canEdit && (
+                        <Link
+                            href={`/dashboard/memos/${memo.uuid}/edit`}
+                            className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-amber-500/30 animate-pulse-subtle"
+                        >
+                            <Pencil size={13} />
+                            Edit &amp; Resubmit
+                        </Link>
+                    )}
+
+                    {/* Edit Memo button — for the creator once input has been requested */}
+                    {canRevise && (
+                        <Link
+                            href={`/dashboard/memos/${memo.uuid}/revise`}
+                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-500/30"
+                        >
+                            <Pencil size={13} />
+                            Edit Memo
+                        </Link>
+                    )}
+                </div>
             </div>
             {/* Gmail-Style Page Header (Subject) */}
             <div className="flex flex-col gap-2">

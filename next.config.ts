@@ -7,6 +7,9 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: __dirname,
   },
+  // react-pdf (memo PDF export) ships its own font/layout engines; load it from
+  // node_modules at runtime instead of bundling it.
+  serverExternalPackages: ["@react-pdf/renderer"],
   async headers() {
     return [
       {

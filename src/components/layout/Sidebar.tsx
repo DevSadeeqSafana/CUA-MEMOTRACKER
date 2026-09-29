@@ -10,7 +10,6 @@ import {
     Inbox,
     CheckSquare,
     BarChart2,
-    Settings,
     Menu,
     X,
     Star,
@@ -18,7 +17,8 @@ import {
     Send,
     Landmark,
     ArrowRight,
-    CheckCircle2
+    CheckCircle2,
+    Users
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getSidebarCounts } from '@/lib/actions';
@@ -86,10 +86,7 @@ export default function Sidebar({ userRoles }: { userRoles: string[] }) {
         { href: '/dashboard/tasks?folder=decided', label: 'My Decisions', icon: CheckCircle2, roles: [] },
         { href: '/dashboard/tasks?folder=sent', label: 'Sent Memos', icon: Send, roles: [], badgeKey: 'sent' as const },
         { href: '/dashboard/tasks?folder=drafts', label: 'Drafts', icon: FileText, roles: [], badgeKey: 'drafts' as const },
-    ];
-
-    const adminLinks = [
-        { href: '/dashboard/users', label: 'User Directory', icon: PlusCircle, roles: ['Administrator'], special: 'emerald' },
+        { href: '/dashboard/users', label: 'User Directory', icon: Users, roles: ['Administrator'] },
         { href: '/dashboard/reports', label: 'Analytics & Reports', icon: BarChart2, roles: ['Administrator'] },
     ];
 
@@ -198,41 +195,6 @@ export default function Sidebar({ userRoles }: { userRoles: string[] }) {
                             </Link>
                         );
                     })}
-
-                    <div className="pt-8" />
-
-                    {adminLinks.some(l => canSeeLink(l.roles)) && (
-                        <>
-                            <p className="text-[9px] font-medium text-[#a9d4f5]/70 uppercase tracking-[0.25em] px-3 mb-3">Administration</p>
-                            {adminLinks.filter(l => canSeeLink(l.roles)).map(link => {
-                                const Icon = link.icon;
-                                const isActive = pathname === link.href;
-
-                                return (
-                                    <Link key={link.href} href={link.href} aria-current={isActive ? 'page' : undefined} className={cn(
-                                        "flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all group",
-                                        isActive ? "bg-white/[0.12] text-white border border-white/15" : "border border-transparent hover:bg-white/[0.07] text-white/80 hover:text-white"
-                                    )}>
-                                        <Icon size={18} className={cn(
-                                            "transition-all shrink-0",
-                                            isActive ? "opacity-100" : "opacity-70 group-hover:opacity-100",
-                                            link.special === 'emerald' ? 'text-emerald-400' : ''
-                                        )} />
-                                        <span className={cn("text-sm", isActive ? "font-bold" : "font-medium")}>{link.label}</span>
-                                    </Link>
-                                );
-                            })}
-                        </>
-                    )}
-
-                    <div className="pt-4" />
-                    <Link href="/dashboard/settings" aria-current={pathname === '/dashboard/settings' ? 'page' : undefined} className={cn(
-                        "flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all group",
-                        pathname === '/dashboard/settings' ? "bg-white/[0.12] text-white border border-white/15" : "border border-transparent hover:bg-white/[0.07] text-white/80 hover:text-white"
-                    )}>
-                        <Settings size={18} className={cn("shrink-0", pathname === '/dashboard/settings' ? "opacity-100" : "opacity-70 group-hover:opacity-100")} />
-                        <span className={cn("text-sm", pathname === '/dashboard/settings' ? "font-bold" : "font-medium")}>Account Settings</span>
-                    </Link>
                 </nav>
             </aside>
         </>
