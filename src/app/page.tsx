@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowRight, CircleHelp, Lock, MessageSquareText, ShieldCheck, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Image from 'next/image';
-import { GoogleLogin, CredentialResponse } from '@react-oauth/google';
+import { GoogleLogin, CredentialResponse, useGoogleOAuth } from '@react-oauth/google';
 
 function GoogleMark() {
   return (
@@ -20,6 +20,7 @@ function GoogleMark() {
 
 export default function LoginPage() {
   const router = useRouter();
+  const { scriptLoadedSuccessfully } = useGoogleOAuth();
 
   const handleGoogleSuccess = async (credentialResponse: CredentialResponse) => {
     if (!credentialResponse.credential) {
@@ -45,11 +46,17 @@ export default function LoginPage() {
   };
 
   // Clicks on Google's (invisible) button stay inside its iframe and never reach this page.
-  // So a click that lands here means Google didn't render its button, most often because this
-  // site's address isn't an Authorized JavaScript origin for the OAuth client ID.
+  // So a click that lands here means Google didn't render its button: either its script hasn't
+  // loaded (slow network, or blocked by an ad blocker / privacy extension / firewall), or it
+  // loaded but refused to render, usually because this origin isn't authorized for the client ID.
   const handleButtonFallbackClick = () => {
+    if (!scriptLoadedSuccessfully) {
+      toast.error('Google Sign-In has not loaded. Check your connection, disable ad blockers for this site, then refresh.');
+      console.warn('Google Sign-In script (accounts.google.com/gsi/client) has not loaded - still loading, or blocked by an extension or network.');
+      return;
+    }
     toast.error('Google Sign-In could not load on this address. Please contact the ICT department.');
-    console.error(`Google Sign-In button not rendered. Check that ${window.location.origin} is an Authorized JavaScript origin for NEXT_PUBLIC_GOOGLE_CLIENT_ID.`);
+    console.warn(`Google Sign-In button not rendered. Check that ${window.location.origin} is an Authorized JavaScript origin for NEXT_PUBLIC_GOOGLE_CLIENT_ID, and look for [GSI_LOGGER] messages above.`);
   };
 
   const handleGoogleError = () => {
