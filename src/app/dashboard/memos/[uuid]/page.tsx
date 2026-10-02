@@ -589,7 +589,7 @@ export default async function MemoDetailsPage({
                         {/* Rich Content Statement Body */}
                         <div className="py-2">
                             <div
-                                className="prose prose-slate prose-lg max-w-none text-slate-800 leading-relaxed font-sans"
+                                className="memo-content text-lg text-slate-800 font-sans"
                                 dangerouslySetInnerHTML={{ __html: memo.content }}
                             />
                         </div>

@@ -126,3 +126,38 @@ a.memo-ref:hover {
   background: #dde9f6;
   color: #0b2a5b;
 }
+
+/* Rich-text memo body (TipTap HTML), shared by the editor and the memo view.
+   Tailwind's preflight strips list/heading styles and the typography plugin isn't installed. */
+.memo-content {
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.memo-content > * + * { margin-top: 0.75em; }
+.memo-content h1 { font-size: 1.6em; font-weight: 700; line-height: 1.25; margin-top: 1.1em; color: #0b2a5b; }
+.memo-content h2 { font-size: 1.3em; font-weight: 700; line-height: 1.3; margin-top: 1em; color: #0b2a5b; }
+.memo-content h3 { font-size: 1.1em; font-weight: 600; line-height: 1.35; margin-top: 0.9em; color: #0b2a5b; }
+.memo-content > :first-child { margin-top: 0; }
+.memo-content ul { list-style: disc; padding-left: 1.5em; }
+.memo-content ol { list-style: decimal; padding-left: 1.5em; }
+.memo-content li > p { margin: 0; }
+.memo-content li + li { margin-top: 0.25em; }
+.memo-content a:not(.memo-ref) { color: #1a5aa6; text-decoration: underline; text-underline-offset: 2px; }
+.memo-content blockquote { border-left: 3px solid #e3ac3a; padding-left: 1em; color: #4f6a8f; font-style: italic; }
+.memo-content code { background: #f1f5f9; border-radius: 0.3em; padding: 0.1em 0.35em; font-size: 0.9em; font-family: ui-monospace, monospace; }
+.memo-content pre { background: #0f172a; color: #e2e8f0; border-radius: 0.5rem; padding: 0.85em 1em; overflow-x: auto; }
+.memo-content pre code { background: none; padding: 0; color: inherit; }
+.memo-content hr { border: none; border-top: 1px solid #dbe3ee; margin: 1.5em 0; }
+.memo-content mark { border-radius: 0.2em; padding: 0 0.1em; background-color: #fef08a; color: inherit; }
+.memo-content ul[data-type="taskList"] { list-style: none; padding-left: 0.25em; }
+.memo-content ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 0.5em; }
+.memo-content ul[data-type="taskList"] li > label { margin-top: 0.3em; user-select: none; }
+.memo-content ul[data-type="taskList"] li > div { flex: 1; }
+.memo-content ul[data-type="taskList"] input[type="checkbox"] { accent-color: #1a5aa6; width: 0.95em; height: 0.95em; }
+.memo-content .tableWrapper { overflow-x: auto; }
+.memo-content table { border-collapse: collapse; width: 100%; table-layout: fixed; margin: 0; }
+.memo-content th,
+.memo-content td { position: relative; border: 1px solid #dbe3ee; padding: 0.45em 0.7em; vertical-align: top; min-width: 3em; }
+.memo-content th { background: #f4f7fb; font-weight: 600; text-align: left; color: #0b2a5b; }
+.memo-content th > p,
+.memo-content td > p { margin: 0; }

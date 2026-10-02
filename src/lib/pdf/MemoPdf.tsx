@@ -130,6 +130,16 @@ const htmlStyles = {
     li: { marginBottom: 2 },
     blockquote: { borderLeftWidth: 2, borderLeftColor: GOLD, paddingLeft: 10, color: MUTED, fontStyle: 'italic' as const, marginBottom: 8 },
     hr: { borderBottomWidth: 1, borderBottomColor: RULE, marginVertical: 10 },
+    u: { textDecoration: 'underline' as const },
+    s: { textDecoration: 'line-through' as const },
+    mark: { backgroundColor: '#fef08a' },
+    code: { fontFamily: 'Courier', fontSize: 9.5, backgroundColor: '#f1f5f9' },
+    pre: { fontFamily: 'Courier', fontSize: 9, backgroundColor: '#f1f5f9', padding: 8, marginBottom: 8 },
+    sub: { fontSize: 7 },
+    sup: { fontSize: 7 },
+    table: { borderWidth: 1, borderColor: RULE, marginBottom: 8 },
+    th: { backgroundColor: '#f4f7fb', fontWeight: 700, color: NAVY, padding: 5, borderWidth: 0.5, borderColor: RULE },
+    td: { padding: 5, borderWidth: 0.5, borderColor: RULE },
     // "@" references to other memos
     '.memo-ref': { color: BLUE, fontWeight: 600 },
 };
