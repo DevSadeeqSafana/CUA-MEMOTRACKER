@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowRight, CircleHelp, Lock, MessageSquareText, ShieldCheck, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Image from 'next/image';
-import { GoogleLogin, CredentialResponse, useGoogleOAuth } from '@react-oauth/google';
+import { useGoogleLogin, useGoogleOAuth } from '@react-oauth/google';
 
 function GoogleMark() {
   return (
@@ -22,15 +22,10 @@ export default function LoginPage() {
   const router = useRouter();
   const { scriptLoadedSuccessfully } = useGoogleOAuth();
 
-  const handleGoogleSuccess = async (credentialResponse: CredentialResponse) => {
-    if (!credentialResponse.credential) {
-      toast.error('Failed to retrieve credentials from Google.');
-      return;
-    }
-
+  const handleGoogleSuccess = async (accessToken: string) => {
     try {
       const result = await signIn('credentials', {
-        googleToken: credentialResponse.credential,
+        googleAccessToken: accessToken,
         redirect: false,
       });
 
@@ -45,22 +40,28 @@ export default function LoginPage() {
     }
   };
 
-  // Clicks on Google's (invisible) button stay inside its iframe and never reach this page.
-  // So a click that lands here means Google didn't render its button: either its script hasn't
-  // loaded (slow network, or blocked by an ad blocker / privacy extension / firewall), or it
-  // loaded but refused to render, usually because this origin isn't authorized for the client ID.
-  const handleButtonFallbackClick = () => {
+  // Opens Google's account chooser in a popup from our own button. (Overlaying Google's
+  // rendered button invisibly broke on desktop Chrome, which ignores clicks on hidden
+  // sign-in iframes as a clickjacking defence.)
+  const googleLogin = useGoogleLogin({
+    onSuccess: (tokenResponse) => handleGoogleSuccess(tokenResponse.access_token),
+    onError: () => toast.error('Google Sign-In was cancelled or failed.'),
+    onNonOAuthError: (error) => {
+      if (error.type === 'popup_failed_to_open') {
+        toast.error('Your browser blocked the Google Sign-In popup. Allow popups for this site, then try again.');
+      } else if (error.type !== 'popup_closed') {
+        toast.error('Google Sign-In was cancelled or failed.');
+      }
+    },
+  });
+
+  const handleSignInClick = () => {
     if (!scriptLoadedSuccessfully) {
       toast.error('Google Sign-In has not loaded. Check your connection, disable ad blockers for this site, then refresh.');
       console.warn('Google Sign-In script (accounts.google.com/gsi/client) has not loaded - still loading, or blocked by an extension or network.');
       return;
     }
-    toast.error('Google Sign-In could not load on this address. Please contact the ICT department.');
-    console.warn(`Google Sign-In button not rendered. Check that ${window.location.origin} is an Authorized JavaScript origin for NEXT_PUBLIC_GOOGLE_CLIENT_ID, and look for [GSI_LOGGER] messages above.`);
-  };
-
-  const handleGoogleError = () => {
-    toast.error('Google Sign-In was cancelled or failed.');
+    googleLogin();
   };
 
   return (
@@ -171,31 +172,16 @@ export default function LoginPage() {
                 Get access to the memo system with your institutional Google account.
               </p>
 
-              {/*
-                The auth backend verifies a Google ID token, which only <GoogleLogin> issues.
-                Its real button is overlaid invisibly (scaled to cover) on top of our styled one,
-                so clicks and keyboard focus land on Google's iframe.
-              */}
-              <div
-                onClick={handleButtonFallbackClick}
-                className="group relative mt-6 lg:mt-10 h-16 lg:h-[72px] rounded-xl border border-slate-200 max-lg:border-white/0 bg-white shadow-sm max-lg:shadow-lg max-lg:shadow-black/20 transition-all hover:border-[#1a5aa6]/40 hover:shadow-md focus-within:ring-2 focus-within:ring-[#1a5aa6]/40 max-lg:focus-within:ring-white/60">
-                <div className="flex h-full items-center gap-4 lg:gap-5 px-5 lg:px-6" aria-hidden="true">
+              <button
+                type="button"
+                onClick={handleSignInClick}
+                className="group mt-6 lg:mt-10 h-16 lg:h-[72px] w-full rounded-xl border border-slate-200 max-lg:border-white/0 bg-white shadow-sm max-lg:shadow-lg max-lg:shadow-black/20 transition-all hover:border-[#1a5aa6]/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5aa6]/40 max-lg:focus-visible:ring-white/60">
+                <span className="flex h-full items-center gap-4 lg:gap-5 px-5 lg:px-6 text-left">
                   <GoogleMark />
                   <span className="flex-1 text-base lg:text-[17px] font-semibold text-[#0b2a5b]">Continue with Google</span>
                   <ArrowRight size={22} className="text-[#0b2a5b] transition-transform group-hover:translate-x-1" />
-                </div>
-                <div className="absolute inset-0 overflow-hidden rounded-xl opacity-0">
-                  <div className="flex h-full w-full items-center justify-center scale-[2.5]">
-                    <GoogleLogin
-                      onSuccess={handleGoogleSuccess}
-                      onError={handleGoogleError}
-                      size="large"
-                      width="400"
-                      text="continue_with"
-                    />
-                  </div>
-                </div>
-              </div>
+                </span>
+              </button>
 
               {/* Mobile: translucent tile with a divider; desktop: row under a rule */}
               <div className="mt-4 lg:mt-9 flex items-center gap-4 lg:gap-5 max-lg:rounded-xl max-lg:border max-lg:border-white/15 max-lg:bg-white/5 max-lg:px-5 max-lg:py-4 lg:border-t lg:border-slate-200 lg:pt-7">

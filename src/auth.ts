@@ -29,15 +29,36 @@ async function getUser(email: string): Promise<UserRecord | undefined> {
     }
 }
 
-function parseGoogleJwt(token: string) {
+type GoogleProfile = { email: string; hd?: string; name?: string };
+
+// Google checks the access token for us: tokeninfo rejects forged or expired
+// tokens, and the audience check rejects tokens issued to other apps.
+async function verifyGoogleAccessToken(accessToken: string): Promise<GoogleProfile | null> {
     try {
-        const parts = token.split('.');
-        if (parts.length !== 3) return null;
-        const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-        const jsonPayload = Buffer.from(base64, 'base64').toString('utf-8');
-        return JSON.parse(jsonPayload);
+        const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+        if (!clientId) {
+            console.error('Google SSO: NEXT_PUBLIC_GOOGLE_CLIENT_ID is not set');
+            return null;
+        }
+
+        const tokenInfoRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(accessToken)}`);
+        if (!tokenInfoRes.ok) return null;
+        const tokenInfo = await tokenInfoRes.json();
+        if (tokenInfo.aud !== clientId) {
+            console.error('Google SSO: access token was issued to a different client');
+            return null;
+        }
+
+        const userInfoRes = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
+            headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!userInfoRes.ok) return null;
+        const userInfo = await userInfoRes.json();
+        if (!userInfo.email || userInfo.email_verified !== true) return null;
+
+        return { email: userInfo.email, hd: userInfo.hd, name: userInfo.name };
     } catch (e) {
-        console.error('Failed to parse Google JWT:', e);
+        console.error('Failed to verify Google access token:', e);
         return null;
     }
 }
@@ -48,10 +69,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         Credentials({
             async authorize(credentials) {
                 // 1. Google SSO Authorization Flow
-                if (credentials?.googleToken && typeof credentials.googleToken === 'string') {
-                    const payload = parseGoogleJwt(credentials.googleToken);
-                    if (!payload || !payload.email) {
-                        console.error('Google SSO: Invalid ID token payload');
+                if (credentials?.googleAccessToken && typeof credentials.googleAccessToken === 'string') {
+                    const payload = await verifyGoogleAccessToken(credentials.googleAccessToken);
+                    if (!payload) {
+                        console.error('Google SSO: Invalid or unverified Google access token');
                         return null;
                     }
 
@@ -61,11 +82,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
                     if (userDomain !== allowedDomain && emailDomain !== allowedDomain) {
                         console.error(`Google SSO Rejected: Email ${payload.email} is not from allowed domain ${allowedDomain}`);
-                        return null;
-                    }
-
-                    if (payload.exp && payload.exp * 1000 < Date.now()) {
-                        console.error('Google SSO: ID Token has expired');
                         return null;
                     }
 
