@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { MessageSquare, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import CommentEditor from '@/components/memos/CommentEditor';
+import { isCommentEmpty } from '@/lib/rich-text';
 
 interface PromptModalProps {
     isOpen: boolean;
@@ -44,9 +46,11 @@ export default function PromptModal({
 
     if (!mounted || !isOpen) return null;
 
+    const isEmpty = isCommentEmpty(value);
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (required && !value.trim()) return;
+        if (required && isEmpty) return;
         onConfirm(value);
     };
 
@@ -75,19 +79,18 @@ export default function PromptModal({
 
                     <div className="space-y-3">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Your Response {required && '*'}</label>
-                        <textarea
+                        <CommentEditor
                             autoFocus
                             value={value}
-                            onChange={(e) => setValue(e.target.value)}
+                            onChange={setValue}
                             placeholder={placeholder}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-[2rem] p-6 text-slate-900 placeholder:text-slate-300 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all min-h-[120px] font-medium"
                         />
                     </div>
 
                     <div className="flex flex-col sm:flex-row gap-4 w-full">
                         <button
                             type="submit"
-                            disabled={isLoading || (required && !value.trim())}
+                            disabled={isLoading || (required && isEmpty)}
                             className="flex-[2] py-4 rounded-2xl bg-[#0b2a5b] text-white font-bold hover:bg-blue-800 transition-all shadow-lg shadow-blue-900/20 active:scale-95 disabled:opacity-50"
                         >
                             {isLoading ? 'Processing...' : confirmText}
@@ -96,10 +99,10 @@ export default function PromptModal({
                             <button
                                 type="button"
                                 onClick={() => {
-                                    if (required && !value.trim()) return;
+                                    if (required && isEmpty) return;
                                     onSecondaryConfirm(value);
                                 }}
-                                disabled={isLoading || (required && !value.trim())}
+                                disabled={isLoading || (required && isEmpty)}
                                 className="flex-[2] py-4 rounded-2xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-900/20 active:scale-95 disabled:opacity-50"
                             >
                                 {isLoading ? 'Processing...' : secondaryConfirmText}

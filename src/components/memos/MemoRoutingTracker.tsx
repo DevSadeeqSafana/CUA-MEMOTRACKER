@@ -13,6 +13,7 @@ import {
     ShieldCheck
 } from 'lucide-react';
 import { cn, formatDate } from '@/lib/utils';
+import CommentContent from '@/components/memos/CommentContent';
 
 interface MemoRoutingTrackerProps {
     memo: any;
@@ -246,7 +247,7 @@ export default function MemoRoutingTracker({ memo, approvals, recipients, curren
                                     <ShieldCheck size={12} className="mt-0.5 shrink-0 opacity-40" />
                                     <div className="text-left">
                                         <span className="opacity-40 mr-1 uppercase text-[8px] font-black tracking-widest">Decision Note:</span>
-                                        <span className="italic">"{step.note}"</span>
+                                        <CommentContent value={step.note} className="italic inline-block align-top" />
                                     </div>
                                 </div>
                             )}

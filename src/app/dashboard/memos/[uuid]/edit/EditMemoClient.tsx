@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { AlertTriangle, ArrowLeft, Clock, User } from 'lucide-react';
 import Link from 'next/link';
+import CommentContent from '@/components/memos/CommentContent';
 import { cn } from '@/lib/utils';
 
 interface RejectionRecord {
@@ -144,9 +145,10 @@ export default function EditMemoClient({
                                         : ''}
                                 </div>
                             </div>
-                            <p className="text-sm text-red-800 font-medium leading-relaxed bg-red-100/50 rounded-xl px-4 py-3 border border-red-100">
-                                "{r.comments}"
-                            </p>
+                            <CommentContent
+                                value={r.comments}
+                                className="text-sm text-red-800 font-medium leading-relaxed bg-red-100/50 rounded-xl px-4 py-3 border border-red-100"
+                            />
                         </div>
                     ))}
                 </div>

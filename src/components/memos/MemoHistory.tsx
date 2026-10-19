@@ -13,6 +13,7 @@ import {
     Pencil
 } from 'lucide-react';
 import { cn, formatDate } from '@/lib/utils';
+import { commentToPlainText } from '@/lib/rich-text';
 
 interface TimelineEvent {
     id: string | number;
@@ -115,7 +116,7 @@ export default function MemoHistory({ memo, approvals, recipients, routingLogs =
             title: `Level ${app.step_order}: ${app.status === 'Pending' ? 'Review Required' : 'Review Decision'}`,
             description: app.status === 'Pending'
                 ? `Awaiting signature from ${app.approver_name}`
-                : `${app.status} by ${app.approver_name}${app.comments ? `: ${app.comments}` : ''}`,
+                : `${app.status} by ${app.approver_name}${app.comments ? `: ${commentToPlainText(app.comments)}` : ''}`,
             timestamp: app.processed_at || memo.created_at,
             status: app.status === 'Approved' ? 'completed' : app.status === 'Rejected' ? 'failed' : 'pending',
             user: app.approver_name

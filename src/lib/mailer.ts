@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { query } from './db';
+import { commentToPlainText, sanitizeCommentHtml } from './rich-text';
 
 // Create the Nodemailer SMTP transporter using env variables.
 const transporter = nodemailer.createTransport({
@@ -59,8 +60,10 @@ export function getEmailTemplate(options: {
     actionUrl?: string;
     actionLabel?: string;
     quoteText?: string;
+    // Pre-sanitised rich text; takes precedence over quoteText
+    quoteHtml?: string;
 }) {
-    const { recipientName, title, previewText, paragraphs, actionUrl, actionLabel, quoteText } = options;
+    const { recipientName, title, previewText, paragraphs, actionUrl, actionLabel, quoteText, quoteHtml } = options;
 
     const formattedParagraphs = paragraphs.map(p => `<p style="margin: 0 0 16px; font-size: 15px; line-height: 24px; color: #334155;">${p}</p>`).join('');
 
@@ -74,7 +77,13 @@ export function getEmailTemplate(options: {
         `
         : '';
 
-    const quoteBlock = quoteText
+    const quoteBlock = quoteHtml
+        ? `
+        <div style="margin: 24px 0; padding: 16px 20px; border-left: 4px solid #ef4444; background-color: #fef2f2; border-radius: 0 8px 8px 0; font-size: 14px; color: #991b1b; line-height: 22px;">
+            ${quoteHtml}
+        </div>
+        `
+        : quoteText
         ? `
         <div style="margin: 24px 0; padding: 16px 20px; border-left: 4px solid #ef4444; background-color: #fef2f2; border-radius: 0 8px 8px 0;">
             <p style="margin: 0; font-size: 14px; font-style: italic; color: #991b1b; line-height: 22px;">
@@ -258,7 +267,8 @@ export async function sendMemoNotificationEmail(
                 LIMIT 1
             `, [memoId]) as any[];
 
-            const comments = extraData?.comments || (rejectionRows.length > 0 ? rejectionRows[0].comments : 'No comments');
+            const rawComments = extraData?.comments || (rejectionRows.length > 0 ? rejectionRows[0].comments : '') || 'No comments';
+            const comments = commentToPlainText(rawComments);
             const rejectorName = rejectionRows.length > 0 ? rejectionRows[0].rejector_name : 'Review Committee';
 
             const subject = `[CUA Memo] Action Required: Memo Rejected - ${memoTitle}`;
@@ -275,7 +285,7 @@ export async function sendMemoNotificationEmail(
                 paragraphs,
                 actionUrl: `${memoUrl}/edit`,
                 actionLabel: 'Edit & Resubmit',
-                quoteText: comments
+                quoteHtml: sanitizeCommentHtml(rawComments)
             });
 
             const text = `${previewText}\nReason: "${comments}"\n\nEdit here: ${memoUrl}/edit`;

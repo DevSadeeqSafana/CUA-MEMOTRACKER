@@ -12,6 +12,8 @@ import {
 import { approveMemo, rejectMemo } from '@/lib/actions';
 import { cn } from '@/lib/utils';
 import PromptModal from '@/components/ui/PromptModal';
+import CommentEditor from '@/components/memos/CommentEditor';
+import { isCommentEmpty } from '@/lib/rich-text';
 import toast from 'react-hot-toast';
 
 interface ReviewerDecisionPanelProps {
@@ -77,7 +79,7 @@ export default function ReviewerDecisionPanel({
     };
 
     const handleReject = async () => {
-        if (!rejectionComments.trim()) {
+        if (isCommentEmpty(rejectionComments)) {
             toast.error('Please provide comments for the rejection.');
             return;
         }
@@ -181,10 +183,11 @@ export default function ReviewerDecisionPanel({
                     <div className="space-y-6 animate-in slide-in-from-bottom-5 duration-300">
                         <div className="space-y-3">
                             <label className="text-[10px] font-black text-blue-300 uppercase tracking-[0.2em] ml-1">Rejection Comments (Required)</label>
-                            <textarea
+                            <CommentEditor
+                                autoFocus
+                                variant="dark"
                                 value={rejectionComments}
-                                onChange={(e) => setRejectionComments(e.target.value)}
-                                className="w-full bg-white/5 border border-white/10 rounded-2xl p-6 text-white placeholder:text-white/20 focus:ring-4 focus:ring-red-500/20 focus:border-red-500/50 outline-none transition-all min-h-[120px]"
+                                onChange={setRejectionComments}
                                 placeholder="State clearly the reason for institutional disapproval..."
                             />
                         </div>
@@ -197,7 +200,7 @@ export default function ReviewerDecisionPanel({
                             </button>
                             <button
                                 onClick={handleReject}
-                                disabled={isLoading || !rejectionComments.trim()}
+                                disabled={isLoading || isCommentEmpty(rejectionComments)}
                                 className="flex-[2] py-4 px-6 bg-red-600 text-white rounded-2xl font-bold hover:bg-red-700 transition-all uppercase tracking-widest text-[11px] flex items-center justify-center gap-3 disabled:opacity-50"
                             >
                                 {isLoading ? <Loader2 size={16} className="animate-spin" /> : <XCircle size={16} />}

@@ -32,6 +32,7 @@ import LineManagerRoutingAdjustment from '@/components/memos/LineManagerRoutingA
 import ConsultationThread from '@/components/memos/ConsultationThread';
 import DocumentPreviewModal from '@/components/memos/DocumentPreviewModal';
 import { getRecipients, getManagers, getConsultations, isCurrentUserApproverGroupMember } from '@/lib/actions';
+import CommentContent from '@/components/memos/CommentContent';
 
 export default async function MemoDetailsPage({
     params,
@@ -318,8 +319,9 @@ export default async function MemoDetailsPage({
                                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-2 shrink-0" />
                                 <div>
                                     <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">{a.approver_name}</p>
-                                    <p className="text-sm text-amber-900 font-medium leading-relaxed mt-0.5">"{a.comments || 'No reason provided'}"
-                                    </p>
+                                    {a.comments
+                                        ? <CommentContent value={a.comments} className="text-sm text-amber-900 font-medium leading-relaxed mt-0.5" />
+                                        : <p className="text-sm text-amber-900 font-medium leading-relaxed mt-0.5">No reason provided</p>}
                                 </div>
                             </div>
                         ))}

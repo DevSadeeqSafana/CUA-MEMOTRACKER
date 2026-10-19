@@ -419,17 +419,21 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
 
                 {/* Subject line */}
-                <div className="px-6 py-4 border-b border-slate-100">
+                <div className="px-6 py-5 border-b border-slate-100 bg-gradient-to-r from-[#0b2a5b]/[0.04] to-transparent">
+                    <label htmlFor="memo-title" className="text-[9px] font-black text-[#1a5aa6] uppercase tracking-widest block mb-2">
+                        Subject
+                    </label>
                     <input
+                        id="memo-title"
                         {...register('title')}
                         className={cn(
-                            'w-full bg-transparent outline-none text-base font-black text-[#0b2a5b] placeholder:text-slate-300 tracking-tight',
-                            errors.title && 'placeholder:text-red-300'
+                            'w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-lg sm:text-xl font-black text-[#0b2a5b] tracking-tight shadow-sm outline-none transition-all placeholder:text-slate-300 placeholder:font-bold focus:border-[#1a5aa6] focus:ring-4 focus:ring-[#1a5aa6]/10',
+                            errors.title && 'border-red-300 placeholder:text-red-300 focus:border-red-400 focus:ring-red-100'
                         )}
-                        placeholder="Memo subject / title..."
+                        placeholder="Enter the memo subject..."
                     />
                     {errors.title && (
-                        <p className="text-[10px] text-red-500 font-bold flex items-center gap-1 mt-1">
+                        <p className="text-[10px] text-red-500 font-bold flex items-center gap-1 mt-1.5">
                             <AlertCircle size={10} /> {errors.title.message}
                         </p>
                     )}

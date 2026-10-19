@@ -139,12 +139,13 @@ export default function ReviseMemoClient({
 
             <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
                 {/* Title */}
-                <div className="px-6 py-4 border-b border-slate-100">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">Subject</label>
+                <div className="px-6 py-5 border-b border-slate-100 bg-gradient-to-r from-[#0b2a5b]/[0.04] to-transparent">
+                    <label htmlFor="memo-title" className="text-[9px] font-black text-[#1a5aa6] uppercase tracking-widest block mb-2">Subject</label>
                     <input
+                        id="memo-title"
                         value={title}
                         onChange={e => setTitle(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold focus:border-blue-400 outline-none transition-all"
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-lg sm:text-xl font-black text-[#0b2a5b] tracking-tight shadow-sm outline-none transition-all focus:border-[#1a5aa6] focus:ring-4 focus:ring-[#1a5aa6]/10"
                     />
                 </div>
 

@@ -4,6 +4,7 @@ import { auth } from '@/auth';
 import { query } from './db';
 import { sendMemoNotificationEmail } from './mailer';
 import { generateReferenceNumber } from './memo-utils';
+import { sanitizeCommentHtml, isCommentEmpty } from './rich-text';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { writeFile, mkdir } from 'fs/promises';
@@ -463,6 +464,7 @@ export async function createMemo(data: FormData, isDraft: boolean) {
 export async function approveMemo(memoId: number, approvalId: number, comments: string = '', sendToAccountant: boolean = false) {
     const session = await auth();
     if (!session?.user) throw new Error('Unauthorized');
+    comments = isCommentEmpty(comments) ? '' : sanitizeCommentHtml(comments);
 
     try {
         if (sendToAccountant) {
@@ -616,6 +618,7 @@ export async function approveMemo(memoId: number, approvalId: number, comments: 
 export async function rejectMemo(memoId: number, approvalId: number, comments?: string) {
     const session = await auth();
     if (!session?.user) throw new Error('Unauthorized');
+    comments = isCommentEmpty(comments) ? '' : sanitizeCommentHtml(comments);
 
     try {
         await query(
