@@ -24,7 +24,7 @@ function parseUploaded(raw: FormDataEntryValue | null): UploadedFile[] {
 
 // Applies attachment edits from a memo edit form: removes the attachments
 // listed in `removed_attachment_ids`, then stores any new ones.
-async function applyAttachmentChanges(memoId: number, uuid: string, data: FormData) {
+async function applyAttachmentChanges(memoId: number, uuid: string, data: FormData, userId?: number) {
     let removedIds: number[] = [];
     try {
         const parsed = JSON.parse((data.get('removed_attachment_ids') as string) || '[]');
@@ -38,8 +38,8 @@ async function applyAttachmentChanges(memoId: number, uuid: string, data: FormDa
     const added: string[] = [];
     for (const uploaded of parseUploaded(data.get('uploaded_attachments'))) {
         await query(
-            'INSERT INTO attachments (memo_id, file_name, file_path, file_type, file_size) VALUES (?, ?, ?, ?, ?)',
-            [memoId, uploaded.name.substring(0, 255), uploaded.url.substring(0, 255), (uploaded.type || '').substring(0, 255), uploaded.size || 0]
+            'INSERT INTO attachments (memo_id, file_name, file_path, file_type, file_size, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)',
+            [memoId, uploaded.name.substring(0, 255), uploaded.url.substring(0, 255), (uploaded.type || '').substring(0, 255), uploaded.size || 0, userId || null]
         );
         added.push(uploaded.name);
     }
@@ -47,8 +47,8 @@ async function applyAttachmentChanges(memoId: number, uuid: string, data: FormDa
         if (!file || typeof file === 'string' || file.size === 0) continue;
         const filePath = await uploadFile(file, uuid);
         await query(
-            'INSERT INTO attachments (memo_id, file_name, file_path, file_type, file_size) VALUES (?, ?, ?, ?, ?)',
-            [memoId, file.name.substring(0, 255), filePath.substring(0, 255), file.type.substring(0, 255), file.size]
+            'INSERT INTO attachments (memo_id, file_name, file_path, file_type, file_size, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)',
+            [memoId, file.name.substring(0, 255), filePath.substring(0, 255), file.type.substring(0, 255), file.size, userId || null]
         );
         added.push(file.name);
     }
@@ -381,8 +381,8 @@ export async function createMemo(data: FormData, isDraft: boolean) {
         // 3. Handle Attachments (General)
         for (const uploaded of uploadedFiles) {
             await query(
-                'INSERT INTO attachments (memo_id, file_name, file_path, file_type, file_size) VALUES (?, ?, ?, ?, ?)',
-                [memoId, uploaded.name.substring(0, 255), uploaded.url.substring(0, 255), (uploaded.type || '').substring(0, 255), uploaded.size || 0]
+                'INSERT INTO attachments (memo_id, file_name, file_path, file_type, file_size, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)',
+                [memoId, uploaded.name.substring(0, 255), uploaded.url.substring(0, 255), (uploaded.type || '').substring(0, 255), uploaded.size || 0, userId]
             );
         }
         if (files.length > 0) {
@@ -392,13 +392,14 @@ export async function createMemo(data: FormData, isDraft: boolean) {
                 const filePath = await uploadFile(file, uuid);
 
                 await query(
-                    'INSERT INTO attachments (memo_id, file_name, file_path, file_type, file_size) VALUES (?, ?, ?, ?, ?)',
+                    'INSERT INTO attachments (memo_id, file_name, file_path, file_type, file_size, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)',
                     [
                         memoId, 
                         (file as File).name.substring(0, 255), 
                         filePath.substring(0, 255), 
                         (file as File).type.substring(0, 255), 
-                        (file as File).size
+                        (file as File).size,
+                        userId
                     ]
                 );
             }
@@ -1987,7 +1988,7 @@ export async function updateRejectedMemo(memoId: number, data: FormData, submitN
         }
 
         // 6. Attachments (remove existing / add new)
-        await applyAttachmentChanges(memoId, uuid, data);
+        await applyAttachmentChanges(memoId, uuid, data, userId);
 
         // 7. Re-submit flow
         if (submitNow) {
@@ -2094,7 +2095,7 @@ export async function reviseMemoContent(memoId: number, data: FormData) {
         if (!content.replace(/<[^>]*>/g, '').trim()) return { success: false, error: 'Memo content cannot be empty.' };
 
         await query('UPDATE memos SET title = ?, content = ?, updated_at = NOW() WHERE id = ?', [title, content, memoId]);
-        const { removedCount, added } = await applyAttachmentChanges(memoId, memo.uuid, data);
+        const { removedCount, added } = await applyAttachmentChanges(memoId, memo.uuid, data, userId);
 
         await query(
             'INSERT INTO audit_logs (user_id, action, table_name, record_id, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)',
@@ -2125,6 +2126,164 @@ export async function reviseMemoContent(memoId: number, data: FormData) {
     } catch (e: any) {
         console.error('reviseMemoContent error:', e);
         return { success: false, error: e.message || 'Update failed' };
+    }
+}
+
+/**
+ * Enables attaching documents/files to any memo (including already routed, in-review, or distributed memos).
+ * Fully audited for record purposes in audit_logs, attachments table, and notifications.
+ */
+export async function addAttachmentToMemo(memoId: number, data: FormData) {
+    const session = await auth();
+    if (!session?.user?.id) return { success: false, error: 'Unauthorized. Please log in.' };
+    const userId = parseInt(session.user.id);
+
+    try {
+        const memos = await query(
+            'SELECT id, uuid, title, status, created_by FROM memos WHERE id = ? LIMIT 1',
+            [memoId]
+        ) as any[];
+        if (memos.length === 0) return { success: false, error: 'Memo not found.' };
+        const memo = memos[0];
+
+        const isCreator = memo.created_by === userId;
+        const recipients = await query('SELECT recipient_id FROM memo_recipients WHERE memo_id = ?', [memoId]) as any[];
+        const isRecipient = recipients.some((r: any) => r.recipient_id === userId);
+        const approvals = await query('SELECT approver_id FROM memo_approvals WHERE memo_id = ?', [memoId]) as any[];
+        const isApprover = approvals.some((a: any) => a.approver_id === userId);
+        const roles: string[] = (session?.user as any)?.role || [];
+        const isAdmin = roles.includes('Administrator');
+
+        // Creator (submitter), recipients, approvers, and administrators are authorized
+        if (!isCreator && !isRecipient && !isApprover && !isAdmin) {
+            return { success: false, error: 'You are not authorized to attach files to this memo.' };
+        }
+
+        const reason = ((data.get('reason') as string) || '').trim();
+        const uploadedFiles = parseUploaded(data.get('uploaded_attachments'));
+        const rawFiles = (data.getAll('attachments') as File[]).filter(
+            f => f && typeof f !== 'string' && f.size > 0
+        );
+
+        if (uploadedFiles.length === 0 && rawFiles.length === 0) {
+            return { success: false, error: 'Please select at least one file to attach.' };
+        }
+
+        // Fetch user's display name
+        const userRows = await query(`
+            SELECT u.id,
+                   COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as full_name
+            FROM memo_system_users u
+            LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+            WHERE u.id = ?
+        `, [userId]) as any[];
+        const userName = userRows[0]?.full_name || session.user?.name || 'User';
+
+        const addedFiles: Array<{ name: string; path: string; size: number; type: string }> = [];
+
+        // Direct upload files
+        for (const uploaded of uploadedFiles) {
+            await query(
+                'INSERT INTO attachments (memo_id, file_name, file_path, file_type, file_size, uploaded_by, reason) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [
+                    memoId,
+                    uploaded.name.substring(0, 255),
+                    uploaded.url.substring(0, 255),
+                    (uploaded.type || '').substring(0, 255),
+                    uploaded.size || 0,
+                    userId,
+                    reason || null
+                ]
+            );
+            addedFiles.push({
+                name: uploaded.name,
+                path: uploaded.url,
+                size: uploaded.size,
+                type: uploaded.type
+            });
+        }
+
+        // Multipart FormData files
+        for (const file of rawFiles) {
+            const filePath = await uploadFile(file, memo.uuid);
+            await query(
+                'INSERT INTO attachments (memo_id, file_name, file_path, file_type, file_size, uploaded_by, reason) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [
+                    memoId,
+                    file.name.substring(0, 255),
+                    filePath.substring(0, 255),
+                    file.type.substring(0, 255),
+                    file.size,
+                    userId,
+                    reason || null
+                ]
+            );
+            addedFiles.push({
+                name: file.name,
+                path: filePath,
+                size: file.size,
+                type: file.type
+            });
+        }
+
+        const userRole = isCreator ? 'Creator' : isRecipient ? 'Recipient' : isApprover ? 'Approver' : 'Administrator';
+
+        // Audit log entry for institutional record keeping
+        await query(
+            'INSERT INTO audit_logs (user_id, action, table_name, record_id, new_value) VALUES (?, ?, ?, ?, ?)',
+            [
+                userId,
+                'ADD_ATTACHMENT',
+                'memos',
+                memoId,
+                JSON.stringify({
+                    action: 'ADD_ATTACHMENT',
+                    attachedByName: userName,
+                    userRole,
+                    memoStatus: memo.status,
+                    reason: reason || null,
+                    addedAttachments: addedFiles
+                })
+            ]
+        );
+
+        // Stakeholder notifications
+        const notifyUserIds = new Set<number>();
+        if (isCreator) {
+            if (memo.status === 'Distributed') {
+                recipients.forEach((r: any) => notifyUserIds.add(r.recipient_id));
+            } else {
+                const pendingApprovals = await query(
+                    'SELECT approver_id FROM memo_approvals WHERE memo_id = ? AND status = "Pending"',
+                    [memoId]
+                ) as any[];
+                pendingApprovals.forEach((a: any) => notifyUserIds.add(a.approver_id));
+            }
+        } else {
+            notifyUserIds.add(memo.created_by);
+        }
+        notifyUserIds.delete(userId);
+
+        const fileNames = addedFiles.map(f => f.name).join(', ');
+        for (const targetId of notifyUserIds) {
+            await query(
+                'INSERT INTO notifications (user_id, memo_id, message) VALUES (?, ?, ?)',
+                [
+                    targetId,
+                    memoId,
+                    `${userName} (${userRole}) attached ${addedFiles.length} document(s) (${fileNames}) to memo "${memo.title}".`
+                ]
+            );
+        }
+
+        revalidatePath(`/dashboard/memos/${memo.uuid}`);
+        revalidatePath('/dashboard/tasks');
+        revalidatePath('/dashboard');
+
+        return { success: true, count: addedFiles.length, memoUuid: memo.uuid };
+    } catch (e: any) {
+        console.error('addAttachmentToMemo error:', e);
+        return { success: false, error: e.message || 'Failed to attach file.' };
     }
 }
 

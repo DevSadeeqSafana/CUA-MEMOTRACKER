@@ -31,6 +31,7 @@ import ReviewerDecisionPanel from '@/components/memos/ReviewerDecisionPanel';
 import LineManagerRoutingAdjustment from '@/components/memos/LineManagerRoutingAdjustment';
 import ConsultationThread from '@/components/memos/ConsultationThread';
 import DocumentPreviewModal from '@/components/memos/DocumentPreviewModal';
+import AddAttachmentButton from '@/components/memos/AddAttachmentButton';
 import { getRecipients, getManagers, getConsultations, isCurrentUserApproverGroupMember } from '@/lib/actions';
 import CommentContent from '@/components/memos/CommentContent';
 
@@ -70,9 +71,15 @@ export default async function MemoDetailsPage({
         [memo.id]
     ) as any[];
 
-    // Fetch attachments
+    // Fetch attachments with uploader details
     const attachments = await query(
-        `SELECT * FROM attachments WHERE memo_id = ?`,
+        `SELECT a.*, 
+                COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as uploader_name
+         FROM attachments a
+         LEFT JOIN memo_system_users u ON a.uploaded_by = u.id
+         LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+         WHERE a.memo_id = ?
+         ORDER BY a.uploaded_at ASC`,
         [memo.id]
     ) as any[];
 
@@ -104,8 +111,8 @@ export default async function MemoDetailsPage({
 
     const financeProcessingRecord = financeProcessing[0] || null;
 
-    // Finance and revision activity for the audit trail: approver-group sends
-    // to the Accountant, the Accountant's processing updates, content revisions
+    // Finance, revision, and post-routing attachment activity for the audit trail:
+    // approver-group sends to the Accountant, Accountant updates, content revisions, attachment uploads
     const activityLogs = await query(
         `SELECT al.id, al.action, al.timestamp,
                 CAST(al.new_value AS CHAR) as new_value,
@@ -113,7 +120,7 @@ export default async function MemoDetailsPage({
          FROM audit_logs al
          JOIN memo_system_users u ON al.user_id = u.id
          LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
-         WHERE (al.table_name = 'memos' AND al.record_id = ? AND al.action IN ('SEND_TO_ACCOUNTANT', 'REVISE_MEMO'))
+         WHERE (al.table_name = 'memos' AND al.record_id = ? AND al.action IN ('SEND_TO_ACCOUNTANT', 'REVISE_MEMO', 'ADD_ATTACHMENT'))
             OR (al.table_name = 'memo_approvals' AND al.action = 'APPROVE_MEMO_TO_ACCOUNTANT'
                 AND al.record_id IN (SELECT id FROM memo_approvals WHERE memo_id = ?))
             OR (al.table_name = 'memo_finance_processing' AND al.action = 'UPDATE_FINANCE_PROCESSING' AND al.record_id = ?)
@@ -188,6 +195,12 @@ export default async function MemoDetailsPage({
         : [];
     const canRevise = isCreator && memo.status !== 'Draft' && inputRequestsToCreator.length > 0;
 
+    // Attachment gate: when a user submitted a memo, even after it has reached the final recipient,
+    // they can attach documents (fully audited for record purposes). Authorized recipients/approvers can also attach.
+    const userRoles: string[] = (session?.user as any)?.role || [];
+    const isAdmin = userRoles.includes('Administrator');
+    const canAddAttachment = isCreator || isRecipient || isApprover || isAdmin;
+
     const toRecipients = allRecipients.filter((r: any) => r.recipient_type === 'To');
     const ccRecipients = allRecipients.filter((r: any) => r.recipient_type === 'CC');
     const bccRecipients = allRecipients.filter((r: any) => r.recipient_type === 'BCC');
@@ -200,6 +213,17 @@ export default async function MemoDetailsPage({
 
                 <div className="flex items-center gap-2 flex-wrap ml-auto">
                     <DownloadPdfButton memoUuid={memo.uuid} />
+
+                    {/* Attach File button — accessible to creator even after reaching final recipient, and stakeholders */}
+                    {canAddAttachment && (
+                        <AddAttachmentButton
+                            memoId={memo.id}
+                            memoUuid={memo.uuid}
+                            memoTitle={memo.title}
+                            memoStatus={memo.status}
+                            variant="navbar"
+                        />
+                    )}
 
                     {/* Edit & Resubmit button — only for creator of rejected memos */}
                     {canEdit && (
@@ -698,23 +722,56 @@ export default async function MemoDetailsPage({
                         )}
 
                         {/* Attachments Section inside Main Memo Card */}
-                        {attachments.length > 0 && (
-                            <div className="mt-8 pt-8 border-t border-slate-100 space-y-6">
-                                <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-3">
-                                    <Paperclip size={14} className="text-blue-500" />
-                                    Accompanying Documents
-                                </h4>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    {attachments.map((file: any) => (
-                                        <DocumentPreviewModal 
-                                            key={file.id}
-                                            fileUrl={file.file_path}
-                                            fileName={file.file_name}
-                                            fileType={file.file_type}
-                                            fileSize={file.file_size}
+                        {(attachments.length > 0 || canAddAttachment) && (
+                            <div className="mt-8 pt-8 border-t border-slate-100 space-y-4">
+                                <div className="flex items-center justify-between flex-wrap gap-2">
+                                    <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-2.5">
+                                        <Paperclip size={14} className="text-blue-500" />
+                                        Accompanying Documents {attachments.length > 0 && `(${attachments.length})`}
+                                    </h4>
+                                    {canAddAttachment && (
+                                        <AddAttachmentButton
+                                            memoId={memo.id}
+                                            memoUuid={memo.uuid}
+                                            memoTitle={memo.title}
+                                            memoStatus={memo.status}
+                                            variant="primary"
                                         />
-                                    ))}
+                                    )}
                                 </div>
+
+                                {attachments.length > 0 ? (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        {attachments.map((file: any) => (
+                                            <DocumentPreviewModal 
+                                                key={file.id}
+                                                fileUrl={file.file_path}
+                                                fileName={file.file_name}
+                                                fileType={file.file_type}
+                                                fileSize={file.file_size}
+                                                uploaderName={file.uploader_name}
+                                                uploadedAt={file.uploaded_at}
+                                                reason={file.reason}
+                                            />
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="bg-slate-50 border border-dashed border-slate-200 rounded-2xl p-6 text-center">
+                                        <p className="text-xs text-slate-500 font-medium">No documents attached yet.</p>
+                                        <p className="text-[11px] text-slate-400 mt-1">You can attach supporting documents, receipts, invoices, or delivery proofs to this memo.</p>
+                                        {canAddAttachment && (
+                                            <div className="mt-2">
+                                                <AddAttachmentButton
+                                                    memoId={memo.id}
+                                                    memoUuid={memo.uuid}
+                                                    memoTitle={memo.title}
+                                                    memoStatus={memo.status}
+                                                    variant="empty"
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>

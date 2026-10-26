@@ -84,7 +84,10 @@ CREATE TABLE IF NOT EXISTS attachments (
     file_type VARCHAR(255),
     file_size INT,
     uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (memo_id) REFERENCES memos(id) ON DELETE CASCADE
+    uploaded_by INT NULL,
+    reason VARCHAR(255),
+    FOREIGN KEY (memo_id) REFERENCES memos(id) ON DELETE CASCADE,
+    FOREIGN KEY (uploaded_by) REFERENCES memo_system_users(id) ON DELETE SET NULL
 );
 
 -- Notifications table

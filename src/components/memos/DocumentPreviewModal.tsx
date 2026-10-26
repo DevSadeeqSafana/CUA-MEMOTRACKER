@@ -4,14 +4,19 @@ import { useState } from 'react';
 import { X, FileText, Download, Maximize2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+import { formatDate } from '@/lib/utils';
+
 interface DocumentProps {
     fileUrl: string;
     fileName: string;
     fileType: string;
     fileSize: number;
+    uploaderName?: string | null;
+    uploadedAt?: string | null;
+    reason?: string | null;
 }
 
-export default function DocumentPreviewModal({ fileUrl, fileName, fileType, fileSize }: DocumentProps) {
+export default function DocumentPreviewModal({ fileUrl, fileName, fileType, fileSize, uploaderName, uploadedAt, reason }: DocumentProps) {
     const [isOpen, setIsOpen] = useState(false);
 
     // Determine how to preview the file based on its type
@@ -39,20 +44,37 @@ export default function DocumentPreviewModal({ fileUrl, fileName, fileType, file
             {/* The Document Card */}
             <div 
                 onClick={() => canPreview ? setIsOpen(true) : window.open(fileUrl, '_blank')}
-                className="flex items-center gap-4 p-4 rounded-2xl border border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-200 transition-colors group cursor-pointer relative"
+                className="flex items-start gap-4 p-4 rounded-2xl border border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-200 transition-colors group cursor-pointer relative"
             >
-                <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 group-hover:text-blue-500 transition-colors shadow-sm shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 group-hover:text-blue-500 transition-colors shadow-sm shrink-0 mt-0.5">
                     <FileText size={18} />
                 </div>
-                <div className="overflow-hidden flex-1">
+                <div className="overflow-hidden flex-1 min-w-0">
                     <p className="text-sm font-bold text-slate-700 truncate group-hover:text-blue-700 transition-colors" title={fileName}>
                         {fileName}
                     </p>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
-                        {(fileSize / 1024).toFixed(1)} KB • {fileType?.split('/').pop()?.toUpperCase() || 'FILE'}
-                    </p>
+                    <div className="flex items-center gap-2 flex-wrap mt-1">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                            {(fileSize / 1024).toFixed(1)} KB • {fileType?.split('/').pop()?.toUpperCase() || 'FILE'}
+                        </span>
+                        {uploadedAt && (
+                            <span className="text-[10px] text-slate-400">
+                                • {formatDate(uploadedAt)}
+                            </span>
+                        )}
+                        {uploaderName && (
+                            <span className="text-[9px] font-bold text-blue-600 bg-blue-100/60 border border-blue-200 px-1.5 py-0.5 rounded-md">
+                                {uploaderName}
+                            </span>
+                        )}
+                    </div>
+                    {reason && (
+                        <p className="text-[11px] text-slate-600 font-medium italic mt-1.5 truncate" title={reason}>
+                            Note: {reason}
+                        </p>
+                    )}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                     {canPreview && (
                         <button 
                             onClick={(e) => { e.stopPropagation(); setIsOpen(true); }}
@@ -94,9 +116,15 @@ export default function DocumentPreviewModal({ fileUrl, fileName, fileType, file
                                 </div>
                                 <div className="truncate">
                                     <h3 className="text-lg font-black text-slate-800 truncate" title={fileName}>{fileName}</h3>
-                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
-                                        Document Preview
-                                    </p>
+                                    <div className="flex items-center gap-2 flex-wrap text-[11px] font-bold text-slate-400">
+                                        <span className="uppercase tracking-widest">Document Preview</span>
+                                        {uploaderName && (
+                                            <span>• Attached by <span className="text-blue-600">{uploaderName}</span></span>
+                                        )}
+                                        {reason && (
+                                            <span className="text-slate-600 italic font-medium">• &ldquo;{reason}&rdquo;</span>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">

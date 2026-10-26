@@ -45,4 +45,7 @@ export interface Attachment {
     file_type: string;
     file_size: number;
     uploaded_at: string;
+    uploaded_by?: number | null;
+    uploader_name?: string | null;
+    reason?: string | null;
 }

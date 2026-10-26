@@ -10,14 +10,15 @@ import {
     FilePlus,
     Send,
     Landmark,
-    Pencil
+    Pencil,
+    Paperclip
 } from 'lucide-react';
 import { cn, formatDate } from '@/lib/utils';
 import { commentToPlainText } from '@/lib/rich-text';
 
 interface TimelineEvent {
     id: string | number;
-    type: 'creation' | 'approval' | 'rejection' | 'distribution' | 'acknowledgment' | 'finance' | 'revision';
+    type: 'creation' | 'approval' | 'rejection' | 'distribution' | 'acknowledgment' | 'finance' | 'revision' | 'attachment';
     title: string;
     description: string;
     timestamp: string | Date;
@@ -33,7 +34,7 @@ interface MemoHistoryProps {
     consultations?: any[];
     /** memo_finance_processing row, if the memo is in the Accountant's queue */
     financeRecord?: any;
-    /** audit_logs rows: SEND_TO_ACCOUNTANT, APPROVE_MEMO_TO_ACCOUNTANT, UPDATE_FINANCE_PROCESSING, REVISE_MEMO */
+    /** audit_logs rows: SEND_TO_ACCOUNTANT, APPROVE_MEMO_TO_ACCOUNTANT, UPDATE_FINANCE_PROCESSING, REVISE_MEMO, ADD_ATTACHMENT */
     activityLogs?: any[];
 }
 
@@ -225,6 +226,28 @@ export default function MemoHistory({ memo, approvals, recipients, routingLogs =
             });
         });
 
+    // 8. Attachments added post-submission / post-routing
+    activityLogs
+        .filter(l => l.action === 'ADD_ATTACHMENT')
+        .forEach((log) => {
+            const d = parseLogValue(log.new_value);
+            const count = d.addedAttachments?.length || 1;
+            const names = d.addedAttachments?.map((a: any) => a.name).filter(Boolean).join(', ');
+            const statusInfo = d.memoStatus ? ` (Status: ${d.memoStatus})` : '';
+            const reasonInfo = d.reason ? ` — Note: "${d.reason}"` : '';
+            const roleInfo = d.userRole ? ` (${d.userRole})` : '';
+
+            events.push({
+                id: `attach-${log.id}`,
+                type: 'attachment',
+                title: 'Document Attached',
+                description: `${log.action_by_name || 'User'}${roleInfo} attached ${count} document(s)${names ? `: ${names}` : ''}${statusInfo}${reasonInfo}.`,
+                timestamp: log.timestamp,
+                status: 'completed',
+                user: log.action_by_name
+            });
+        });
+
     // Sort events by timestamp or priority if null
     const sortedEvents = [...events].sort((a, b) => {
         const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
@@ -248,7 +271,7 @@ export default function MemoHistory({ memo, approvals, recipients, routingLogs =
                     <div key={event.id} className="relative flex items-start gap-6 pb-6 group last:pb-0">
                         <div className={cn(
                             "w-8 h-8 rounded-xl flex items-center justify-center z-10 border-2 border-white shadow-sm transition-all group-hover:scale-110",
-                            event.status === 'completed' ? "bg-emerald-500 text-white" :
+                            event.status === 'completed' ? (event.type === 'attachment' ? "bg-blue-600 text-white" : "bg-emerald-500 text-white") :
                                 event.status === 'failed' ? "bg-red-500 text-white" :
                                     "bg-amber-100 text-amber-600 animate-pulse border-amber-50"
                         )}>
@@ -258,6 +281,7 @@ export default function MemoHistory({ memo, approvals, recipients, routingLogs =
                             {event.type === 'distribution' && <Send size={14} />}
                             {event.type === 'finance' && <Landmark size={14} />}
                             {event.type === 'revision' && <Pencil size={14} />}
+                            {event.type === 'attachment' && <Paperclip size={14} />}
                         </div>
 
                         <div className="flex-grow space-y-0.5 pt-0.5">
