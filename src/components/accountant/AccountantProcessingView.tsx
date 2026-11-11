@@ -30,6 +30,28 @@ import toast from 'react-hot-toast';
 
 const FINANCE_QUEUE_PAGE_SIZE = 10;
 
+// ── Money helpers (amounts are NGN; compared in kobo to avoid rounding errors) ──
+const naira = (value: number) => `₦${value.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const toKobo = (value: unknown) => Math.round((Number(String(value ?? '').replace(/,/g, '')) || 0) * 100);
+const parseAmountInput = (value: string): number | null => {
+    const cleaned = value.replace(/,/g, '').trim();
+    if (cleaned === '') return null;
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? n : NaN;
+};
+
+type FinancePayment = { id: number; amount: string | number; voucher_number: string; payment_note: string | null; paid_at: string };
+
+// Total owed: the accountant's figure, otherwise the memo's budget items total
+const memoTotal = (m: any) => Number(m.total_amount ?? 0) > 0 ? Number(m.total_amount) : (parseFloat(m.total_budget_amount) || 0);
+const memoPaid = (m: any) => Number(m.paid_amount) || 0;
+const memoPayments = (m: any): FinancePayment[] => {
+    let list: any = m.payments_json;
+    if (typeof list === 'string') { try { list = JSON.parse(list); } catch { list = []; } }
+    if (!Array.isArray(list)) return [];
+    return [...list].sort((a, b) => new Date(a.paid_at).getTime() - new Date(b.paid_at).getTime());
+};
+
 // Suggestions for the bank name field (free text is still allowed).
 const NIGERIAN_BANKS = [
     'Access Bank', 'Citibank Nigeria', 'Ecobank Nigeria', 'Fidelity Bank', 'First Bank of Nigeria',
@@ -58,6 +80,11 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
     const [accountName, setAccountName] = useState<string>('');
     const [accountNumber, setAccountNumber] = useState<string>('');
     const [processingNotes, setProcessingNotes] = useState<string>('');
+    const [payeeName, setPayeeName] = useState<string>('');
+    const [payeeAddress, setPayeeAddress] = useState<string>('');
+    const [totalAmount, setTotalAmount] = useState<string>('');
+    const [payAmount, setPayAmount] = useState<string>('');
+    const [paymentNote, setPaymentNote] = useState<string>('');
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
     // Calculate Summary Stats
@@ -65,11 +92,12 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
         const total = initialMemos.length;
         const pending = initialMemos.filter(m => m.processing_status === 'Pending Processing').length;
         const inProgress = initialMemos.filter(m => m.processing_status === 'In Progress').length;
+        const partiallyPaid = initialMemos.filter(m => m.processing_status === 'Partially Paid').length;
         const processed = initialMemos.filter(m => m.processing_status === 'Processed').length;
         const rejected = initialMemos.filter(m => m.processing_status === 'Rejected').length;
-        const totalValue = initialMemos.reduce((sum, m) => sum + (parseFloat(m.total_budget_amount) || 0), 0);
+        const totalValue = initialMemos.reduce((sum, m) => sum + memoTotal(m), 0);
 
-        return { total, pending, inProgress, processed, rejected, totalValue };
+        return { total, pending, inProgress, partiallyPaid, processed, rejected, totalValue };
     }, [initialMemos]);
 
     // Filter Memos
@@ -85,7 +113,9 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                 const titleMatch = memo.title?.toLowerCase().includes(q);
                 const refMatch = memo.reference_number?.toLowerCase().includes(q);
                 const creatorMatch = memo.creator_name?.toLowerCase().includes(q);
-                const voucherMatch = memo.voucher_number?.toLowerCase().includes(q);
+                const voucherMatch = memo.voucher_number?.toLowerCase().includes(q)
+                    || memoPayments(memo).some(p => p.voucher_number?.toLowerCase().includes(q))
+                    || memo.payee_name?.toLowerCase().includes(q);
                 const catMatch = memo.category?.toLowerCase().includes(q);
                 if (!titleMatch && !refMatch && !creatorMatch && !voucherMatch && !catMatch) {
                     return false;
@@ -108,45 +138,95 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
         setAccountName(memo.account_name || '');
         setAccountNumber(memo.account_number || '');
         setProcessingNotes(memo.processing_notes || '');
+        setPayeeName(memo.payee_name || '');
+        setPayeeAddress(memo.payee_address || '');
+        const total = memoTotal(memo);
+        setTotalAmount(total > 0 ? String(total) : '');
+        setPayAmount('');
+        setPaymentNote('');
     };
 
-    const markingProcessed = processingStatus === 'Processed';
+    // ── Derived values for the open memo ──
+    const modalPayments = activeModalMemo ? memoPayments(activeModalMemo) : [];
+    const paidSoFarKobo = activeModalMemo ? toKobo(memoPaid(activeModalMemo)) : 0;
+    const totalParsed = parseAmountInput(totalAmount);
+    const payParsed = parseAmountInput(payAmount);
+    const totalKobo = totalParsed !== null && !Number.isNaN(totalParsed) ? Math.round(totalParsed * 100) : 0;
+    const payKobo = payParsed !== null && !Number.isNaN(payParsed) ? Math.round(payParsed * 100) : 0;
+    const balanceBeforeKobo = Math.max(totalKobo - paidSoFarKobo, 0);
+    const balanceAfterKobo = Math.max(balanceBeforeKobo - payKobo, 0);
+    const hasPayments = paidSoFarKobo > 0;
+    const paying = payKobo > 0;
+    const fullyPaid = totalKobo > 0 && paidSoFarKobo >= totalKobo;
+
     const accountNumberValid = accountNumber === '' || /^\d{10}$/.test(accountNumber);
     const accountDetailsComplete = bankName.trim() !== '' && accountName.trim() !== '' && /^\d{10}$/.test(accountNumber);
+    const payeeComplete = payeeName.trim() !== '' && payeeAddress.trim() !== '';
+    const needsPaymentDetails = paying || processingStatus === 'Processed';
+
+    // Status the record will end up with after saving (mirrors the server rules)
+    const resultingStatus = (paidSoFarKobo + payKobo) > 0
+        ? (totalKobo > 0 && paidSoFarKobo + payKobo >= totalKobo ? 'Processed' : 'Partially Paid')
+        : processingStatus;
 
     const handleSaveProcessing = async () => {
         if (!activeModalMemo) return;
+        if (totalParsed !== null && (Number.isNaN(totalParsed) || totalParsed < 0)) {
+            toast.error('Enter the total amount as a number, e.g. 700000.');
+            return;
+        }
+        if (payParsed !== null && (Number.isNaN(payParsed) || payParsed <= 0)) {
+            toast.error('Enter the amount to pay as a number greater than zero, e.g. 400000.');
+            return;
+        }
+        if (totalKobo > 0 && totalKobo < paidSoFarKobo) {
+            toast.error(`The total amount cannot be less than what has already been paid (${naira(paidSoFarKobo / 100)}).`);
+            return;
+        }
+        if (paying && payKobo > balanceBeforeKobo) {
+            toast.error(`The amount to pay is more than the balance left (${naira(balanceBeforeKobo / 100)}).`);
+            return;
+        }
         if (!accountNumberValid) {
             toast.error('Account number must be exactly 10 digits.');
             return;
         }
-        if (markingProcessed && !accountDetailsComplete) {
-            toast.error('Enter the bank name, account name and account number before marking this memo as Processed.');
+        if (needsPaymentDetails && (!payeeComplete || !accountDetailsComplete || totalKobo <= 0)) {
+            toast.error('Enter the payee name and address, the total amount and the bank details before recording a payment.');
+            return;
+        }
+        if (processingStatus === 'Processed' && !paying && totalKobo > paidSoFarKobo) {
+            toast.error(`There is still ${naira(balanceBeforeKobo / 100)} left to pay. Enter it under "Pay now" to complete this memo.`);
             return;
         }
         setIsSubmitting(true);
         try {
-            const res = await updateFinanceMemoProcessingStatus(
-                activeModalMemo.processing_id,
-                processingStatus as any,
-                processingNotes,
-                { bankName, accountName, accountNumber }
-            );
+            const res = await updateFinanceMemoProcessingStatus(activeModalMemo.processing_id, {
+                status: processingStatus as any,
+                notes: processingNotes,
+                account: { bankName, accountName, accountNumber },
+                payee: { name: payeeName, address: payeeAddress },
+                totalAmount: totalAmount === '' ? null : totalAmount,
+                payment: paying ? { amount: payAmount, note: paymentNote } : null,
+            });
 
             if (res.success) {
-                toast.success(
-                    res.voucherGenerated && res.voucherNumber
-                        ? `Memo processed. Payment Voucher ${res.voucherNumber} generated.`
-                        : 'Financial processing record updated successfully!'
-                );
+                if (res.voucherNumber) {
+                    const balance = Number(res.balance) || 0;
+                    toast.success(balance > 0
+                        ? `Payment recorded with voucher ${res.voucherNumber}. ${naira(balance)} is left to be settled later.`
+                        : `Payment recorded with voucher ${res.voucherNumber}. This memo is now fully paid.`);
+                } else {
+                    toast.success('Processing record saved.');
+                }
                 setActiveModalMemo(null);
                 router.refresh();
             } else {
-                toast.error(res.error || 'Failed to update record');
+                toast.error(res.error || "We couldn't save the processing record. Please try again.");
             }
         } catch (error: any) {
             console.error('Processing update error:', error);
-            toast.error('An error occurred while saving.');
+            toast.error("We couldn't save the processing record. Please try again.");
         } finally {
             setIsSubmitting(false);
         }
@@ -159,6 +239,13 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full font-bold text-[10px] uppercase tracking-wider">
                         <CheckCircle2 size={12} />
                         Processed
+                    </span>
+                );
+            case 'Partially Paid':
+                return (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-violet-50 border border-violet-200 text-violet-700 rounded-full font-bold text-[10px] uppercase tracking-wider">
+                        <CreditCard size={12} />
+                        Partially Paid
                     </span>
                 );
             case 'In Progress':
@@ -244,8 +331,8 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                 <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center justify-between">
                     <div>
                         <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pending Action</p>
-                        <p className="text-2xl font-black text-amber-600 mt-1">{stats.pending + stats.inProgress}</p>
-                        <p className="text-[10px] text-amber-600 font-bold mt-0.5">{stats.pending} Pending • {stats.inProgress} In Progress</p>
+                        <p className="text-2xl font-black text-amber-600 mt-1">{stats.pending + stats.inProgress + stats.partiallyPaid}</p>
+                        <p className="text-[10px] text-amber-600 font-bold mt-0.5">{stats.pending} Pending • {stats.inProgress} In Progress • {stats.partiallyPaid} Part-paid</p>
                     </div>
                     <div className="w-12 h-12 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
                         <Clock size={22} />
@@ -269,7 +356,7 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                     {/* Status Tabs */}
                     <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto scrollbar-none">
-                        {['All', 'Pending Processing', 'In Progress', 'Processed', 'Rejected'].map(tab => (
+                        {['All', 'Pending Processing', 'In Progress', 'Partially Paid', 'Processed', 'Rejected'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => { setSelectedTab(tab); setPage(1); }}
@@ -284,6 +371,7 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                                 {tab === 'All' && <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[9px] bg-white/20 text-white font-black">{stats.total}</span>}
                                 {tab === 'Pending Processing' && stats.pending > 0 && <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[9px] bg-amber-500 text-white font-black">{stats.pending}</span>}
                                 {tab === 'In Progress' && stats.inProgress > 0 && <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[9px] bg-blue-500 text-white font-black">{stats.inProgress}</span>}
+                                {tab === 'Partially Paid' && stats.partiallyPaid > 0 && <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[9px] bg-violet-500 text-white font-black">{stats.partiallyPaid}</span>}
                                 {tab === 'Processed' && stats.processed > 0 && <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[9px] bg-emerald-500 text-white font-black">{stats.processed}</span>}
                             </button>
                         ))}
@@ -324,7 +412,7 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                                 <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-black text-slate-500 uppercase tracking-wider">
                                     <th className="py-3.5 px-4">Reference & Title</th>
                                     <th className="py-3.5 px-4">Creator / Department</th>
-                                    <th className="py-3.5 px-4">Budget Total (NGN)</th>
+                                    <th className="py-3.5 px-4">Amount (NGN)</th>
                                     <th className="py-3.5 px-4">Status</th>
                                     <th className="py-3.5 px-4">Voucher No.</th>
                                     <th className="py-3.5 px-4">Date Routed</th>
@@ -333,7 +421,8 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                             </thead>
                             <tbody className="divide-y divide-slate-100 text-xs">
                                 {pagedMemos.map(memo => {
-                                    const amount = parseFloat(memo.total_budget_amount) || 0;
+                                    const amount = memoTotal(memo);
+                                    const paid = memoPaid(memo);
                                     return (
                                         <tr key={memo.processing_id} className="hover:bg-slate-50/80 transition-colors group">
                                             {/* Title & Ref */}
@@ -371,8 +460,17 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                                             <td className="py-4 px-4">
                                                 <div className="flex flex-col">
                                                     <span className="font-black text-slate-900 text-sm">
-                                                        ₦{amount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                                                        {amount > 0 ? naira(amount) : <span className="text-slate-400 font-semibold text-xs italic">Not set</span>}
                                                     </span>
+                                                    {paid > 0 && (
+                                                        <span className="text-[10px] font-bold">
+                                                            <span className="text-emerald-600">Paid {naira(paid)}</span>
+                                                            {amount - paid > 0 && <span className="text-violet-600"> · Bal {naira(amount - paid)}</span>}
+                                                        </span>
+                                                    )}
+                                                    {memo.payee_name && (
+                                                        <span className="text-[10px] text-slate-500 font-semibold line-clamp-1">To: {memo.payee_name}</span>
+                                                    )}
                                                     {memo.budget_items_count > 0 && (
                                                         <span className="text-[10px] text-slate-400 font-semibold">
                                                             {memo.budget_items_count} Item(s)
@@ -389,10 +487,15 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                                             {/* Voucher Number */}
                                             <td className="py-4 px-4">
                                                 {memo.voucher_number ? (
+                                                    <>
                                                     <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 border border-slate-200 font-mono font-bold text-[11px] text-slate-800 rounded-md">
                                                         <Receipt size={12} className="text-blue-600" />
                                                         {memo.voucher_number}
                                                     </span>
+                                                    {memoPayments(memo).length > 1 && (
+                                                        <span className="block text-[10px] text-slate-400 font-bold mt-1">+{memoPayments(memo).length - 1} more</span>
+                                                    )}
+                                                    </>
                                                 ) : (
                                                     <span className="text-slate-400 font-medium italic text-[11px]">Unassigned</span>
                                                 )}
@@ -432,185 +535,323 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
 
             {/* Interactive Update Modal */}
             {activeModalMemo && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg max-h-[92vh] flex flex-col overflow-hidden">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl max-h-[94vh] flex flex-col overflow-hidden">
                         {/* Modal Header */}
-                        <div className="bg-gradient-to-r from-[#0b2a5b] to-[#0f172a] p-5 text-white flex items-center justify-between">
-                            <div>
+                        <div className="bg-gradient-to-r from-[#0b2a5b] to-[#0f172a] px-6 py-5 text-white flex items-start justify-between gap-4">
+                            <div className="min-w-0">
                                 <div className="inline-flex items-center gap-1.5 text-blue-300 font-bold text-[10px] uppercase tracking-wider">
                                     <Landmark size={12} />
                                     Accountant Financial Processing
                                 </div>
-                                <h3 className="text-base font-black text-white mt-0.5 line-clamp-1">
+                                <h3 className="text-base md:text-lg font-black text-white mt-0.5 break-words">
                                     {activeModalMemo.title}
                                 </h3>
                                 <p className="text-xs font-mono text-slate-300">
-                                    Ref: {activeModalMemo.reference_number || 'N/A'}
+                                    Ref: {activeModalMemo.reference_number || 'N/A'} · Requested by {activeModalMemo.creator_name}
                                 </p>
                             </div>
                             <button
+                                type="button"
+                                aria-label="Close"
                                 onClick={() => setActiveModalMemo(null)}
-                                className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+                                className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors shrink-0"
                             >
                                 <X size={18} />
                             </button>
                         </div>
 
                         {/* Modal Body */}
-                        <div className="p-6 space-y-5 overflow-y-auto">
-                            {/* Summary Card inside modal */}
-                            <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 flex items-center justify-between">
-                                <div>
-                                    <p className="text-[10px] font-bold uppercase text-slate-400">Requisition Creator</p>
-                                    <p className="text-xs font-bold text-slate-800">{activeModalMemo.creator_name}</p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-[10px] font-bold uppercase text-slate-400">Total Amount</p>
-                                    <p className="text-sm font-black text-emerald-700">
-                                        ₦{(parseFloat(activeModalMemo.total_budget_amount) || 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
-                                    </p>
-                                </div>
-                            </div>
-
-                            {/* Processing Status Selector */}
-                            <div>
-                                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                                    Processing Status
-                                </label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {[
-                                        { id: 'Pending Processing', label: 'Pending', color: 'amber' },
-                                        { id: 'In Progress', label: 'In Progress', color: 'blue' },
-                                        { id: 'Processed', label: 'Processed / Vouchered', color: 'emerald' },
-                                        { id: 'Rejected', label: 'Rejected', color: 'rose' }
-                                    ].map(item => (
-                                        <button
-                                            key={item.id}
-                                            type="button"
-                                            onClick={() => setProcessingStatus(item.id)}
-                                            className={cn(
-                                                "py-2.5 px-3 rounded-xl border text-xs font-bold transition-all text-left flex items-center justify-between",
-                                                processingStatus === item.id
-                                                    ? item.color === 'emerald'
-                                                        ? "bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-500/20"
-                                                        : item.color === 'blue'
-                                                        ? "bg-blue-50 border-blue-500 text-blue-800 ring-2 ring-blue-500/20"
-                                                        : item.color === 'rose'
-                                                        ? "bg-rose-50 border-rose-500 text-rose-800 ring-2 ring-rose-500/20"
-                                                        : "bg-amber-50 border-amber-500 text-amber-800 ring-2 ring-amber-500/20"
-                                                    : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                                            )}
-                                        >
-                                            <span>{item.label}</span>
-                                            {processingStatus === item.id && (
-                                                <CheckCircle2 size={14} className="shrink-0" />
-                                            )}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Beneficiary Account Details */}
-                            <div>
-                                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 mb-2">
-                                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                                        Beneficiary Account Details
-                                    </label>
-                                    <span className={cn('text-[10px] font-bold', markingProcessed ? 'text-rose-500' : 'text-slate-400')}>
-                                        {markingProcessed ? 'Required to process' : 'Required when marked Processed'}
-                                    </span>
-                                </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="p-5 md:p-6 overflow-y-auto">
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                {/* ── Left: who is being paid ── */}
+                                <div className="space-y-5">
+                                    {/* Payee */}
                                     <div>
-                                        <label htmlFor="fp-bank-name" className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Bank Name</label>
-                                        <input
-                                            id="fp-bank-name"
-                                            type="text"
-                                            list="fp-bank-options"
-                                            value={bankName}
-                                            onChange={e => setBankName(e.target.value)}
-                                            maxLength={120}
-                                            placeholder="e.g. Access Bank"
-                                            className={cn(
-                                                'w-full px-3 py-2.5 bg-white border rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-600 transition-all',
-                                                markingProcessed && !bankName.trim() ? 'border-rose-300' : 'border-slate-200'
-                                            )}
-                                        />
-                                        <datalist id="fp-bank-options">
-                                            {NIGERIAN_BANKS.map(bank => <option key={bank} value={bank} />)}
-                                        </datalist>
+                                        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 mb-2">
+                                            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Payee (Vendor / Company / Organisation)</label>
+                                            <span className={cn('text-[10px] font-bold', needsPaymentDetails ? 'text-rose-500' : 'text-slate-400')}>
+                                                {needsPaymentDetails ? 'Required to pay' : 'Required before payment'}
+                                            </span>
+                                        </div>
+                                        <div className="space-y-3">
+                                            <div>
+                                                <label htmlFor="fp-payee-name" className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Name</label>
+                                                <input
+                                                    id="fp-payee-name"
+                                                    type="text"
+                                                    value={payeeName}
+                                                    onChange={e => setPayeeName(e.target.value)}
+                                                    maxLength={200}
+                                                    placeholder="e.g. Sahara Office Supplies Ltd"
+                                                    className={cn(
+                                                        'w-full px-3 py-2.5 bg-white border rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-600 transition-all',
+                                                        needsPaymentDetails && !payeeName.trim() ? 'border-rose-300' : 'border-slate-200'
+                                                    )}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label htmlFor="fp-payee-address" className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Address</label>
+                                                <textarea
+                                                    id="fp-payee-address"
+                                                    value={payeeAddress}
+                                                    onChange={e => setPayeeAddress(e.target.value)}
+                                                    maxLength={500}
+                                                    rows={2}
+                                                    placeholder="Street, city, state"
+                                                    className={cn(
+                                                        'w-full px-3 py-2.5 bg-white border rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-600 transition-all resize-none',
+                                                        needsPaymentDetails && !payeeAddress.trim() ? 'border-rose-300' : 'border-slate-200'
+                                                    )}
+                                                />
+                                            </div>
+                                        </div>
                                     </div>
+
+                                    {/* Beneficiary bank account */}
                                     <div>
-                                        <label htmlFor="fp-account-number" className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Account Number</label>
+                                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Payee Bank Account</label>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div>
+                                                <label htmlFor="fp-bank-name" className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Bank Name</label>
+                                                <input
+                                                    id="fp-bank-name"
+                                                    type="text"
+                                                    list="fp-bank-options"
+                                                    value={bankName}
+                                                    onChange={e => setBankName(e.target.value)}
+                                                    maxLength={120}
+                                                    placeholder="e.g. Access Bank"
+                                                    className={cn(
+                                                        'w-full px-3 py-2.5 bg-white border rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-600 transition-all',
+                                                        needsPaymentDetails && !bankName.trim() ? 'border-rose-300' : 'border-slate-200'
+                                                    )}
+                                                />
+                                                <datalist id="fp-bank-options">
+                                                    {NIGERIAN_BANKS.map(bank => <option key={bank} value={bank} />)}
+                                                </datalist>
+                                            </div>
+                                            <div>
+                                                <label htmlFor="fp-account-number" className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Account Number</label>
+                                                <input
+                                                    id="fp-account-number"
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    autoComplete="off"
+                                                    value={accountNumber}
+                                                    onChange={e => setAccountNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                                                    placeholder="10-digit NUBAN"
+                                                    className={cn(
+                                                        'w-full px-3 py-2.5 bg-white border rounded-xl text-xs font-mono font-bold tracking-wider text-slate-800 focus:outline-none focus:border-blue-600 transition-all',
+                                                        !accountNumberValid || (needsPaymentDetails && !accountNumber) ? 'border-rose-300' : 'border-slate-200'
+                                                    )}
+                                                />
+                                                {!accountNumberValid && (
+                                                    <p className="text-[10px] font-bold text-rose-500 mt-1">{accountNumber.length}/10 digits</p>
+                                                )}
+                                            </div>
+                                            <div className="sm:col-span-2">
+                                                <label htmlFor="fp-account-name" className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Account Name</label>
+                                                <input
+                                                    id="fp-account-name"
+                                                    type="text"
+                                                    value={accountName}
+                                                    onChange={e => setAccountName(e.target.value)}
+                                                    maxLength={150}
+                                                    placeholder="Name on the bank account"
+                                                    className={cn(
+                                                        'w-full px-3 py-2.5 bg-white border rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-600 transition-all',
+                                                        needsPaymentDetails && !accountName.trim() ? 'border-rose-300' : 'border-slate-200'
+                                                    )}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* ── Right: how much, and payments ── */}
+                                <div className="space-y-5">
+                                    {/* Amount summary */}
+                                    <div>
+                                        <label htmlFor="fp-total" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Total Amount Owed (NGN)</label>
                                         <input
-                                            id="fp-account-number"
+                                            id="fp-total"
                                             type="text"
-                                            inputMode="numeric"
-                                            autoComplete="off"
-                                            value={accountNumber}
-                                            onChange={e => setAccountNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                                            placeholder="10-digit NUBAN"
+                                            inputMode="decimal"
+                                            value={totalAmount}
+                                            onChange={e => setTotalAmount(e.target.value.replace(/[^\d.,]/g, ''))}
+                                            placeholder="e.g. 700000"
                                             className={cn(
-                                                'w-full px-3 py-2.5 bg-white border rounded-xl text-xs font-mono font-bold tracking-wider text-slate-800 focus:outline-none focus:border-blue-600 transition-all',
-                                                !accountNumberValid || (markingProcessed && !accountNumber) ? 'border-rose-300' : 'border-slate-200'
+                                                'w-full px-3 py-2.5 bg-white border rounded-xl text-sm font-black text-slate-800 focus:outline-none focus:border-blue-600 transition-all',
+                                                (totalParsed !== null && Number.isNaN(totalParsed)) || (needsPaymentDetails && totalKobo <= 0) ? 'border-rose-300' : 'border-slate-200'
                                             )}
                                         />
-                                        {!accountNumberValid && (
-                                            <p className="text-[10px] font-bold text-rose-500 mt-1">{accountNumber.length}/10 digits</p>
+                                        {Number(activeModalMemo.total_budget_amount) > 0 && (
+                                            <p className="text-[10px] text-slate-400 font-medium mt-1">
+                                                Budget items on the memo total {naira(Number(activeModalMemo.total_budget_amount))}.
+                                            </p>
                                         )}
+                                        <div className="grid grid-cols-3 gap-2 mt-3">
+                                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                                                <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Total</p>
+                                                <p className="text-xs sm:text-sm font-black text-slate-800 break-all">{naira(totalKobo / 100)}</p>
+                                            </div>
+                                            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5">
+                                                <p className="text-[9px] font-black uppercase tracking-wider text-emerald-600">Paid so far</p>
+                                                <p className="text-xs sm:text-sm font-black text-emerald-700 break-all">{naira(paidSoFarKobo / 100)}</p>
+                                            </div>
+                                            <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5">
+                                                <p className="text-[9px] font-black uppercase tracking-wider text-violet-600">Balance</p>
+                                                <p className="text-xs sm:text-sm font-black text-violet-700 break-all">{naira(balanceBeforeKobo / 100)}</p>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="sm:col-span-2">
-                                        <label htmlFor="fp-account-name" className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Account Name</label>
-                                        <input
-                                            id="fp-account-name"
-                                            type="text"
-                                            value={accountName}
-                                            onChange={e => setAccountName(e.target.value)}
-                                            maxLength={150}
-                                            placeholder="Name on the bank account"
-                                            className={cn(
-                                                'w-full px-3 py-2.5 bg-white border rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-600 transition-all',
-                                                markingProcessed && !accountName.trim() ? 'border-rose-300' : 'border-slate-200'
-                                            )}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
 
-                            {/* Payment Voucher (generated automatically) */}
-                            <div className="flex items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3">
-                                <Receipt className="text-slate-400 shrink-0" size={18} />
-                                <div className="min-w-0">
-                                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Payment Voucher (PV) Number</p>
-                                    {activeModalMemo.voucher_number ? (
-                                        <p className="text-sm font-mono font-black text-[#0b2a5b] break-all">{activeModalMemo.voucher_number}</p>
+                                    {/* Payment history */}
+                                    {modalPayments.length > 0 && (
+                                        <div>
+                                            <p className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Payments Made</p>
+                                            <div className="rounded-xl border border-slate-200 divide-y divide-slate-100">
+                                                {modalPayments.map(p => (
+                                                    <div key={p.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-3 py-2.5">
+                                                        <div className="min-w-0">
+                                                            <p className="text-xs font-black text-slate-800">{naira(Number(p.amount))}</p>
+                                                            <p className="text-[10px] text-slate-400 font-medium">
+                                                                {formatDate(p.paid_at)}{p.payment_note ? ` · ${p.payment_note}` : ''}
+                                                            </p>
+                                                        </div>
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 border border-slate-200 font-mono font-bold text-[10px] text-slate-700 rounded-md">
+                                                            <Receipt size={11} className="text-blue-600" />
+                                                            {p.voucher_number}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Pay now */}
+                                    {fullyPaid ? (
+                                        <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                                            <CheckCircle2 className="text-emerald-600 shrink-0" size={18} />
+                                            <p className="text-xs font-bold text-emerald-800">This memo has been paid in full.</p>
+                                        </div>
                                     ) : (
-                                        <p className="text-xs font-bold text-slate-500">
-                                            {markingProcessed
-                                                ? 'Will be generated automatically when you save.'
-                                                : 'Generated automatically when the memo is marked Processed.'}
-                                        </p>
+                                        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/60 p-4 space-y-3">
+                                            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                                                <label htmlFor="fp-pay-now" className="text-xs font-bold text-slate-700 uppercase tracking-wider">Pay Now (NGN)</label>
+                                                <span className="text-[10px] font-bold text-slate-400">Optional · can be part of the balance</span>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                <input
+                                                    id="fp-pay-now"
+                                                    type="text"
+                                                    inputMode="decimal"
+                                                    value={payAmount}
+                                                    onChange={e => setPayAmount(e.target.value.replace(/[^\d.,]/g, ''))}
+                                                    placeholder="e.g. 400000"
+                                                    className={cn(
+                                                        'flex-1 min-w-[10rem] px-3 py-2.5 bg-white border rounded-xl text-sm font-black text-slate-800 focus:outline-none focus:border-blue-600 transition-all',
+                                                        (payParsed !== null && Number.isNaN(payParsed)) || payKobo > balanceBeforeKobo ? 'border-rose-300' : 'border-slate-200'
+                                                    )}
+                                                />
+                                                {balanceBeforeKobo > 0 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setPayAmount(String(balanceBeforeKobo / 100))}
+                                                        className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-[10px] font-black uppercase tracking-wider text-[#0b2a5b] hover:bg-slate-100 transition-colors"
+                                                    >
+                                                        Pay full balance
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <input
+                                                type="text"
+                                                value={paymentNote}
+                                                onChange={e => setPaymentNote(e.target.value)}
+                                                maxLength={500}
+                                                placeholder="Payment note (optional), e.g. First instalment, transfer ref…"
+                                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-600 transition-all"
+                                            />
+                                            {paying && payKobo <= balanceBeforeKobo && (
+                                                <p className="text-[11px] font-bold text-slate-600">
+                                                    {balanceAfterKobo > 0
+                                                        ? <>After this payment, <span className="text-violet-700">{naira(balanceAfterKobo / 100)}</span> will be left to settle later.</>
+                                                        : <>This payment settles the full balance.</>}
+                                                    {' '}A Payment Voucher number will be generated for it.
+                                                </p>
+                                            )}
+                                            {payKobo > balanceBeforeKobo && (
+                                                <p className="text-[11px] font-bold text-rose-500">This is more than the balance of {naira(balanceBeforeKobo / 100)}.</p>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
                             </div>
 
-                            {/* Processing Notes */}
-                            <div>
-                                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                                    Accountant Notes & Disbursement Remarks
-                                </label>
-                                <textarea
-                                    value={processingNotes}
-                                    onChange={e => setProcessingNotes(e.target.value)}
-                                    rows={3}
-                                    placeholder="Add processing remarks, bank reference details, or rejection cause..."
-                                    className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-600 transition-all resize-none"
-                                />
+                            {/* ── Full width: status and notes ── */}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6 pt-6 border-t border-slate-100">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Processing Status</label>
+                                    {hasPayments || paying ? (
+                                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                                            <p className="text-[11px] font-medium text-slate-500">Set automatically from the payments.</p>
+                                            {getStatusBadge(resultingStatus)}
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-2">
+                                            {[
+                                                { id: 'Pending Processing', label: 'Pending', color: 'amber' },
+                                                { id: 'In Progress', label: 'In Progress', color: 'blue' },
+                                                { id: 'Processed', label: 'Processed', color: 'emerald' },
+                                                { id: 'Rejected', label: 'Rejected', color: 'rose' }
+                                            ].map(item => (
+                                                <button
+                                                    key={item.id}
+                                                    type="button"
+                                                    onClick={() => setProcessingStatus(item.id)}
+                                                    className={cn(
+                                                        "py-2.5 px-3 rounded-xl border text-xs font-bold transition-all text-left flex items-center justify-between gap-2",
+                                                        processingStatus === item.id
+                                                            ? item.color === 'emerald'
+                                                                ? "bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-500/20"
+                                                                : item.color === 'blue'
+                                                                ? "bg-blue-50 border-blue-500 text-blue-800 ring-2 ring-blue-500/20"
+                                                                : item.color === 'rose'
+                                                                ? "bg-rose-50 border-rose-500 text-rose-800 ring-2 ring-rose-500/20"
+                                                                : "bg-amber-50 border-amber-500 text-amber-800 ring-2 ring-amber-500/20"
+                                                            : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                                                    )}
+                                                >
+                                                    <span>{item.label}</span>
+                                                    {processingStatus === item.id && <CheckCircle2 size={14} className="shrink-0" />}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <p className="text-[10px] text-slate-400 mt-2">
+                                        A part payment marks the memo <span className="font-bold text-violet-600">Partially Paid</span>; it becomes <span className="font-bold text-emerald-600">Processed</span> once the balance reaches zero.
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <label htmlFor="fp-notes" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                                        Accountant Notes & Disbursement Remarks
+                                    </label>
+                                    <textarea
+                                        id="fp-notes"
+                                        value={processingNotes}
+                                        onChange={e => setProcessingNotes(e.target.value)}
+                                        rows={4}
+                                        placeholder="Processing remarks, payment schedule for the balance, or rejection reason..."
+                                        className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-600 transition-all resize-none"
+                                    />
+                                </div>
                             </div>
                         </div>
 
                         {/* Modal Footer */}
-                        <div className="bg-slate-50 p-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                        <div className="bg-slate-50 px-5 md:px-6 py-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
                             <Link
                                 href={`/dashboard/memos/${activeModalMemo.uuid}`}
                                 target="_blank"
@@ -619,7 +860,7 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                                 Open Full Memo
                                 <ArrowUpRight size={13} />
                             </Link>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                                 <button
                                     type="button"
                                     onClick={() => setActiveModalMemo(null)}
@@ -633,7 +874,7 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                                     disabled={isSubmitting}
                                     className="px-5 py-2 bg-[#0b2a5b] hover:bg-[#082352] text-white font-bold text-xs rounded-xl transition-all shadow-md disabled:opacity-50 flex items-center gap-2"
                                 >
-                                    {isSubmitting ? 'Saving...' : 'Save Processing Record'}
+                                    {isSubmitting ? 'Saving...' : paying ? 'Record Payment & Save' : 'Save Processing Record'}
                                 </button>
                             </div>
                         </div>

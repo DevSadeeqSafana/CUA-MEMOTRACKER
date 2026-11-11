@@ -1853,7 +1853,7 @@ export async function getSidebarCounts() {
         const [accountantQueue] = await query(`
             SELECT COUNT(*) as count 
             FROM memo_finance_processing fp
-            WHERE fp.status IN ('Pending Processing', 'In Progress')
+            WHERE fp.status IN ('Pending Processing', 'In Progress', 'Partially Paid')
         `) as any[];
 
         const actions = (pendingApprovals?.count || 0) + (pendingConsultations?.count || 0);
@@ -2443,6 +2443,13 @@ export async function getAccountantFinanceMemos(statusFilter?: string) {
                 fp.status as processing_status,
                 fp.processing_notes,
                 fp.voucher_number,
+                fp.payee_name,
+                fp.payee_address,
+                fp.total_amount,
+                (SELECT COALESCE(SUM(p.amount), 0) FROM memo_finance_payments p WHERE p.processing_id = fp.id) as paid_amount,
+                (SELECT JSON_ARRAYAGG(JSON_OBJECT('id', p.id, 'amount', p.amount, 'voucher_number', p.voucher_number,
+                                                  'payment_note', p.payment_note, 'paid_at', p.paid_at))
+                   FROM memo_finance_payments p WHERE p.processing_id = fp.id) as payments_json,
                 fp.bank_name,
                 fp.account_name,
                 fp.account_number,
@@ -2487,45 +2494,100 @@ export type FinanceAccountDetails = {
     accountNumber?: string;
 };
 
+export type FinanceProcessingInput = {
+    /** Pending Processing / In Progress / Processed / Rejected. Partially Paid is set automatically. */
+    status: 'Pending Processing' | 'In Progress' | 'Partially Paid' | 'Processed' | 'Rejected';
+    notes?: string;
+    account?: FinanceAccountDetails;
+    payee?: { name?: string; address?: string };
+    /** Total amount the university owes on this memo (NGN). */
+    totalAmount?: number | string | null;
+    /** Optional payment being made now. */
+    payment?: { amount?: number | string | null; note?: string } | null;
+};
+
+// Money is handled in kobo (integers) to avoid rounding errors.
+const toKobo = (value: unknown): number | null => {
+    if (value === null || value === undefined || value === '') return null;
+    const n = typeof value === 'number' ? value : Number(String(value).replace(/,/g, '').trim());
+    if (!Number.isFinite(n)) return NaN;
+    return Math.round(n * 100);
+};
+const koboToNaira = (kobo: number) => (kobo / 100).toFixed(2);
+const formatNaira = (kobo: number) =>
+    `NGN ${(kobo / 100).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+// Next Payment Voucher number for this year: PV/CUA/<year>/<0001>. Must run on the
+// transaction's connection (LAST_INSERT_ID is per connection).
+async function nextVoucherNumber(connection: any) {
+    const year = new Date().getFullYear();
+    await connection.execute(
+        `INSERT INTO memo_voucher_sequences (year, last_number) VALUES (?, LAST_INSERT_ID(1))
+         ON DUPLICATE KEY UPDATE last_number = LAST_INSERT_ID(last_number + 1)`,
+        [year]
+    );
+    const [seqRows] = await connection.execute('SELECT LAST_INSERT_ID() AS n') as any[];
+    return `PV/CUA/${year}/${String(Number(seqRows[0].n)).padStart(4, '0')}`;
+}
+
 /**
  * Saves the accountant's processing record for a finance memo.
- * - Beneficiary account details (bank, account name, 10-digit account number) are
- *   required when the memo is marked Processed.
- * - A Payment Voucher number (PV/CUA/<year>/<0001>) is generated automatically the
- *   first time a memo is marked Processed. It is never changed once assigned.
+ * - Payee (vendor / company / organisation) name and address, the total amount owed,
+ *   and the beneficiary bank account.
+ * - Optional payment now: may be part of the total. Each payment gets its own
+ *   Payment Voucher number (PV/CUA/<year>/<0001>).
+ * - Status follows the payments: some paid -> Partially Paid; all paid -> Processed.
+ *   With no payments the accountant chooses Pending Processing, In Progress or Rejected.
  */
-export async function updateFinanceMemoProcessingStatus(
-    processingId: number,
-    status: 'Pending Processing' | 'In Progress' | 'Processed' | 'Rejected',
-    notes?: string,
-    account?: FinanceAccountDetails
-) {
+export async function updateFinanceMemoProcessingStatus(processingId: number, input: FinanceProcessingInput) {
     const session = await auth();
-    if (!session?.user?.id) throw new Error('Unauthorized');
+    if (!session?.user?.id) return { success: false, error: NOT_AUTHORIZED_MESSAGE };
     if (!canAccessFinanceQueue(session)) return { success: false, error: NOT_AUTHORIZED_MESSAGE };
     const userId = parseInt(session.user.id);
 
-    if (!['Pending Processing', 'In Progress', 'Processed', 'Rejected'].includes(status)) {
-        return { success: false, error: 'Invalid processing status' };
+    const requestedStatus = input?.status;
+    if (!['Pending Processing', 'In Progress', 'Partially Paid', 'Processed', 'Rejected'].includes(requestedStatus)) {
+        return { success: false, error: 'Choose a valid processing status.' };
     }
 
-    const bankName = (account?.bankName || '').trim();
-    const accountName = (account?.accountName || '').trim();
-    const accountNumber = (account?.accountNumber || '').replace(/\s+/g, '');
+    const notes = (input.notes || '').trim();
+    const bankName = (input.account?.bankName || '').trim();
+    const accountName = (input.account?.accountName || '').trim();
+    const accountNumber = (input.account?.accountNumber || '').replace(/\s+/g, '');
+    const payeeName = (input.payee?.name || '').trim();
+    const payeeAddress = (input.payee?.address || '').trim();
+    const totalKobo = toKobo(input.totalAmount);
+    const payKobo = toKobo(input.payment?.amount);
+    const paymentNote = (input.payment?.note || '').trim();
 
-    if (bankName.length > 120) return { success: false, error: 'Bank name must be at most 120 characters' };
-    if (accountName.length > 150) return { success: false, error: 'Account name must be at most 150 characters' };
-    if (accountNumber && !/^\d{10}$/.test(accountNumber)) {
-        return { success: false, error: 'Account number must be exactly 10 digits' };
-    }
-    if (status === 'Processed' && (!bankName || !accountName || !accountNumber)) {
-        return { success: false, error: 'Enter the bank name, account name and account number before marking this memo as Processed' };
+    if (bankName.length > 120) return { success: false, error: 'Bank name must be at most 120 characters.' };
+    if (accountName.length > 150) return { success: false, error: 'Account name must be at most 150 characters.' };
+    if (accountNumber && !/^\d{10}$/.test(accountNumber)) return { success: false, error: 'Account number must be exactly 10 digits.' };
+    if (payeeName.length > 200) return { success: false, error: 'Payee name must be at most 200 characters.' };
+    if (payeeAddress.length > 500) return { success: false, error: 'Payee address must be at most 500 characters.' };
+    if (paymentNote.length > 500) return { success: false, error: 'Payment note must be at most 500 characters.' };
+    if (Number.isNaN(totalKobo)) return { success: false, error: 'Enter the total amount as a number, e.g. 700000.' };
+    if (totalKobo !== null && totalKobo < 0) return { success: false, error: 'The total amount cannot be negative.' };
+    if (totalKobo !== null && totalKobo > 999999999999999) return { success: false, error: 'The total amount is too large.' };
+    if (Number.isNaN(payKobo)) return { success: false, error: 'Enter the amount to pay as a number, e.g. 400000.' };
+    if (payKobo !== null && payKobo <= 0) return { success: false, error: 'The amount to pay must be more than zero.' };
+
+    const paying = payKobo !== null && payKobo > 0;
+    if (paying || requestedStatus === 'Processed') {
+        if (!payeeName || !payeeAddress) {
+            return { success: false, error: 'Enter the payee name and address before recording a payment.' };
+        }
+        if (!bankName || !accountName || !accountNumber) {
+            return { success: false, error: 'Enter the bank name, account name and account number before recording a payment.' };
+        }
+        if (!totalKobo) return { success: false, error: 'Enter the total amount owed before recording a payment.' };
     }
 
     const connection = await pool.getConnection();
     let record: any;
-    let voucherNumber: string | null = null;
-    let voucherGenerated = false;
+    let newVoucher: string | null = null;
+    let finalStatus: string = requestedStatus;
+    let paidKobo = 0;
 
     try {
         await connection.beginTransaction();
@@ -2537,36 +2599,69 @@ export async function updateFinanceMemoProcessingStatus(
             WHERE fp.id = ?
             FOR UPDATE
         `, [processingId]) as any[];
-
         if (rows.length === 0) {
             await connection.rollback();
-            return { success: false, error: 'Finance processing record not found' };
+            return { success: false, error: 'This finance record could not be found. Refresh the page and try again.' };
         }
-
         record = rows[0];
-        voucherNumber = record.voucher_number || null;
 
-        // First time this memo is processed: issue the next voucher number for the year.
-        if (status === 'Processed' && !voucherNumber) {
-            const year = new Date().getFullYear();
-            await connection.execute(
-                `INSERT INTO memo_voucher_sequences (year, last_number) VALUES (?, LAST_INSERT_ID(1))
-                 ON DUPLICATE KEY UPDATE last_number = LAST_INSERT_ID(last_number + 1)`,
-                [year]
-            );
-            const [seqRows] = await connection.execute('SELECT LAST_INSERT_ID() AS n') as any[];
-            const next = Number(seqRows[0].n);
-            voucherNumber = `PV/CUA/${year}/${String(next).padStart(4, '0')}`;
-            voucherGenerated = true;
+        const [paidRows] = await connection.execute(
+            'SELECT COALESCE(SUM(amount), 0) AS paid FROM memo_finance_payments WHERE processing_id = ?',
+            [processingId]
+        ) as any[];
+        const previouslyPaidKobo = toKobo(paidRows[0].paid) || 0;
+
+        if (totalKobo !== null && totalKobo < previouslyPaidKobo) {
+            await connection.rollback();
+            return { success: false, error: `The total amount cannot be less than what has already been paid (${formatNaira(previouslyPaidKobo)}).` };
+        }
+        const effectiveTotal = totalKobo ?? (toKobo(record.total_amount) || 0);
+        const balanceBefore = effectiveTotal - previouslyPaidKobo;
+
+        if (paying && payKobo! > balanceBefore) {
+            await connection.rollback();
+            return { success: false, error: `The amount to pay is more than the balance left (${formatNaira(balanceBefore)}).` };
+        }
+        if (requestedStatus === 'Rejected' && (previouslyPaidKobo > 0 || paying)) {
+            await connection.rollback();
+            return { success: false, error: 'A memo that has already received a payment cannot be marked as Rejected.' };
         }
 
-        const isFinal = status === 'Processed' || status === 'Rejected';
+        paidKobo = previouslyPaidKobo + (paying ? payKobo! : 0);
+
+        // Marking it Processed without paying the remaining balance is not allowed:
+        // the balance must be paid (or the total corrected) first.
+        if (requestedStatus === 'Processed' && effectiveTotal > 0 && paidKobo < effectiveTotal) {
+            await connection.rollback();
+            return { success: false, error: `There is still ${formatNaira(effectiveTotal - paidKobo)} left to pay. Record the remaining payment (or correct the total) before marking this memo as Processed.` };
+        }
+
+        if (paying) {
+            newVoucher = await nextVoucherNumber(connection);
+            await connection.execute(
+                'INSERT INTO memo_finance_payments (processing_id, amount, voucher_number, payment_note, recorded_by) VALUES (?, ?, ?, ?, ?)',
+                [processingId, koboToNaira(payKobo!), newVoucher, paymentNote || null, userId]
+            );
+        }
+
+        // Status follows the payments
+        if (paidKobo > 0 && effectiveTotal > 0 && paidKobo >= effectiveTotal) finalStatus = 'Processed';
+        else if (paidKobo > 0) finalStatus = 'Partially Paid';
+        else if (requestedStatus === 'Partially Paid') finalStatus = 'In Progress';
+        else finalStatus = requestedStatus;
+
+        const isFinal = finalStatus === 'Processed' || finalStatus === 'Rejected';
+        // The memo's main voucher number is its first payment's PV
+        const mainVoucher = record.voucher_number || newVoucher || null;
 
         await connection.execute(`
             UPDATE memo_finance_processing
             SET status = ?,
                 processing_notes = ?,
                 voucher_number = ?,
+                payee_name = ?,
+                payee_address = ?,
+                total_amount = ?,
                 bank_name = ?,
                 account_name = ?,
                 account_number = ?,
@@ -2574,53 +2669,62 @@ export async function updateFinanceMemoProcessingStatus(
                 accountant_id = COALESCE(?, accountant_id),
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-        `, [status, notes || null, voucherNumber, bankName || null, accountName || null, accountNumber || null,
+        `, [finalStatus, notes || null, mainVoucher, payeeName || null, payeeAddress || null,
+            effectiveTotal > 0 ? koboToNaira(effectiveTotal) : null,
+            bankName || null, accountName || null, accountNumber || null,
             isFinal ? new Date() : null,
             // An Administrator acting on the queue keeps the assigned accountant
             isAccountantUser(session) ? userId : null, processingId]);
 
         // Notify creator
-        let message = `Financial processing status for memo "${record.title}" updated to: ${status}`;
-        if (voucherNumber) {
-            message += ` (Payment Voucher: ${voucherNumber})`;
+        let message = `Financial processing for your memo "${record.title}" is now: ${finalStatus}.`;
+        if (paying) {
+            message += ` ${formatNaira(payKobo!)} was paid (Payment Voucher ${newVoucher}).`;
+            if (effectiveTotal - paidKobo > 0) message += ` ${formatNaira(effectiveTotal - paidKobo)} is left to be settled later.`;
         }
-        await connection.execute(`
-            INSERT INTO notifications (user_id, memo_id, message)
-            VALUES (?, ?, ?)
-        `, [record.created_by, record.memo_id, message]);
+        await connection.execute(
+            'INSERT INTO notifications (user_id, memo_id, message) VALUES (?, ?, ?)',
+            [record.created_by, record.memo_id, message]
+        );
 
         // Audit log (account number masked)
         await connection.execute(`
             INSERT INTO audit_logs (user_id, action, table_name, record_id, new_value)
             VALUES (?, 'UPDATE_FINANCE_PROCESSING', 'memo_finance_processing', ?, ?)
         `, [userId, processingId, JSON.stringify({
-            status,
+            status: finalStatus,
             notes,
-            voucherNumber,
-            voucherGenerated,
+            payeeName: payeeName || null,
+            totalAmount: effectiveTotal > 0 ? koboToNaira(effectiveTotal) : null,
+            payment: paying ? { amount: koboToNaira(payKobo!), voucherNumber: newVoucher, note: paymentNote || null } : null,
+            paidSoFar: koboToNaira(paidKobo),
+            balance: koboToNaira(Math.max(effectiveTotal - paidKobo, 0)),
             bankName: bankName || null,
             accountName: accountName || null,
             accountNumber: accountNumber ? `******${accountNumber.slice(-4)}` : null
         })]);
 
         await connection.commit();
+
+        revalidatePath('/dashboard/accountant');
+        revalidatePath(`/dashboard/memos/${record.uuid}`);
+        revalidatePath('/dashboard/tasks');
+        revalidatePath('/dashboard');
+
+        return {
+            success: true,
+            status: finalStatus,
+            voucherNumber: newVoucher,
+            paid: Number(koboToNaira(paidKobo)),
+            balance: Number(koboToNaira(Math.max(effectiveTotal - paidKobo, 0)))
+        };
     } catch (error: any) {
         await connection.rollback().catch(() => {});
         console.error('updateFinanceMemoProcessingStatus Error:', error);
-        if (error?.code === 'ER_BAD_FIELD_ERROR' || error?.code === 'ER_NO_SUCH_TABLE') {
-            return { success: false, error: 'The finance database update has not been applied yet. Ask the administrator to run the latest migration.' };
-        }
         return { success: false, error: friendlyError(error, "We couldn't save the processing record. Please try again.") };
     } finally {
         connection.release();
     }
-
-    revalidatePath('/dashboard/accountant');
-    revalidatePath(`/dashboard/memos/${record.uuid}`);
-    revalidatePath('/dashboard/tasks');
-    revalidatePath('/dashboard');
-
-    return { success: true, voucherNumber, voucherGenerated };
 }
 
 // ─── APPROVER GROUP (Settings > Approvers Settings) ──────────────────────────

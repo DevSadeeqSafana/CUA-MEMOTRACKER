@@ -106,15 +106,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                                 const username = payload.email.split('@')[0];
                                 const ssoPlaceholderHash = '$2a$10$google_sso_managed_account_no_local_pass';
 
+                                // hr_staff.LineManagerID is the manager's StaffID (e.g. "E0002"), but
+                                // memo_system_users.line_manager_id is the manager's memo account id.
+                                // Look it up; leave it empty if the manager has no memo account yet.
+                                let lineManagerUserId: number | null = null;
+                                if (staff.LineManagerID) {
+                                    const managerRows = await query(
+                                        'SELECT id FROM memo_system_users WHERE staff_id = ? LIMIT 1',
+                                        [String(staff.LineManagerID)]
+                                    ) as QueryRow[];
+                                    lineManagerUserId = managerRows.length > 0 ? Number(managerRows[0].id) : null;
+                                }
+
                                 const insertResult = await query(
                                     'INSERT INTO memo_system_users (uuid, staff_id, username, email, password_hash, department, line_manager_id, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
-                                    [uuid, staff.StaffID, username, payload.email, ssoPlaceholderHash, staff.DepartmentCode || 'General', staff.LineManagerID || null]
+                                    [uuid, staff.StaffID, username, payload.email, ssoPlaceholderHash, staff.DepartmentCode || 'General', lineManagerUserId]
                                 ) as { insertId: number };
 
+                                // New accounts get the standard roles most users have
                                 const newUserId = insertResult.insertId;
-                                const roleRows = await query("SELECT id FROM roles WHERE name = 'Initiator'", []) as QueryRow[];
-                                if (roleRows.length > 0) {
-                                    await query('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)', [newUserId, roleRows[0].id]);
+                                const roleRows = await query(
+                                    "SELECT id FROM roles WHERE name IN ('Memo Creator', 'Recipient')",
+                                    []
+                                ) as QueryRow[];
+                                for (const role of roleRows) {
+                                    await query('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)', [newUserId, role.id]);
                                 }
 
                                 user = await getUser(payload.email);

@@ -112,6 +112,19 @@ export default async function MemoDetailsPage({
 
     const financeProcessingRecord = financeProcessing[0] || null;
 
+    // Payments made against this memo (part payments each have their own voucher)
+    const financePayments = financeProcessingRecord
+        ? await query(
+            `SELECT id, amount, voucher_number, payment_note, paid_at
+             FROM memo_finance_payments WHERE processing_id = ? ORDER BY paid_at ASC, id ASC`,
+            [financeProcessingRecord.id]
+        ).catch(() => []) as any[]
+        : [];
+    const financePaidTotal = financePayments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
+    const financeTotalOwed = Number(financeProcessingRecord?.total_amount) || 0;
+    const financeBalance = Math.max(financeTotalOwed - financePaidTotal, 0);
+    const formatNGN = (v: number) => `₦${v.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
     // Finance, revision, and post-routing attachment activity for the audit trail:
     // approver-group sends to the Accountant, Accountant updates, content revisions, attachment uploads
     const activityLogs = await query(
@@ -300,10 +313,11 @@ export default async function MemoDetailsPage({
                         </div>
                         <span className={cn(
                             "text-[9px] font-black px-2.5 py-1 rounded-full border uppercase tracking-widest shadow-sm",
-                            financeProcessingRecord.status === 'Processed' && 'bg-emerald-50 border-emerald-200 text-emerald-700',
-                            financeProcessingRecord.status === 'Rejected' && 'bg-rose-50 border-rose-200 text-rose-700',
-                            financeProcessingRecord.status === 'In Progress' && 'bg-blue-50 border-blue-200 text-blue-700',
-                            'bg-amber-50 border-amber-200 text-amber-700'
+                            financeProcessingRecord.status === 'Processed' ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                : financeProcessingRecord.status === 'Rejected' ? 'bg-rose-50 border-rose-200 text-rose-700'
+                                : financeProcessingRecord.status === 'In Progress' ? 'bg-blue-50 border-blue-200 text-blue-700'
+                                : financeProcessingRecord.status === 'Partially Paid' ? 'bg-violet-50 border-violet-200 text-violet-700'
+                                : 'bg-amber-50 border-amber-200 text-amber-700'
                         )}>{financeProcessingRecord.status}</span>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 px-5 py-4">
@@ -333,6 +347,51 @@ export default async function MemoDetailsPage({
                             <p className="text-sm font-bold text-slate-700 mt-1">{financeProcessingRecord.processing_notes || 'No notes recorded yet'}</p>
                         </div>
                     </div>
+
+                    {(financeProcessingRecord.payee_name || financeTotalOwed > 0) && (
+                        <div className="px-5 pb-5 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3 min-w-0">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Payee</p>
+                                <p className="text-sm font-bold text-slate-800 mt-1 break-words">{financeProcessingRecord.payee_name || 'Not provided yet'}</p>
+                                {financeProcessingRecord.payee_address && (
+                                    <p className="text-xs font-medium text-slate-500 mt-0.5 break-words whitespace-pre-line">{financeProcessingRecord.payee_address}</p>
+                                )}
+                            </div>
+                            <div className="grid grid-cols-3 gap-2">
+                                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Total owed</p>
+                                    <p className="text-xs sm:text-sm font-black text-slate-800 mt-1 break-all">{formatNGN(financeTotalOwed)}</p>
+                                </div>
+                                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3">
+                                    <p className="text-[9px] font-black uppercase tracking-wider text-emerald-600">Paid</p>
+                                    <p className="text-xs sm:text-sm font-black text-emerald-700 mt-1 break-all">{formatNGN(financePaidTotal)}</p>
+                                </div>
+                                <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-3">
+                                    <p className="text-[9px] font-black uppercase tracking-wider text-violet-600">Balance</p>
+                                    <p className="text-xs sm:text-sm font-black text-violet-700 mt-1 break-all">{formatNGN(financeBalance)}</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {financePayments.length > 0 && (
+                        <div className="px-5 pb-5">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Payments</p>
+                            <div className="rounded-xl border border-slate-200 divide-y divide-slate-100">
+                                {financePayments.map((p: any) => (
+                                    <div key={p.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-2.5">
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-black text-slate-800">{formatNGN(Number(p.amount))}</p>
+                                            <p className="text-[11px] text-slate-400 font-medium">
+                                                {formatDate(p.paid_at)}{p.payment_note ? ` · ${p.payment_note}` : ''}
+                                            </p>
+                                        </div>
+                                        <span className="font-mono text-[11px] font-bold text-slate-700 bg-slate-100 border border-slate-200 rounded-md px-2 py-0.5">{p.voucher_number}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </section>
             )}
 
