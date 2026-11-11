@@ -156,7 +156,7 @@ export default function EditUserForm({ user, managers, onClose }: EditUserFormPr
                         />
                     </div>
 
-                    <div className="space-y-2 md:col-span-2">
+                    <div className="space-y-2">
                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Department</label>
                         <input
                             required
@@ -165,28 +165,28 @@ export default function EditUserForm({ user, managers, onClose }: EditUserFormPr
                             className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-5 focus:ring-0 text-slate-400 font-bold cursor-not-allowed text-sm"
                         />
                     </div>
-                </div>
 
-                <div className="p-4 bg-slate-50 rounded-[1.5rem] border border-slate-100 flex items-center justify-between">
-                    <div>
-                        <p className="text-xs font-black text-[#0b2a5b]">Account Status</p>
-                        <p className="text-[10px] text-slate-400 font-medium">Determine if this user can access the institutional portal.</p>
+                    <div className="p-4 bg-slate-50 rounded-[1.5rem] border border-slate-100 flex items-center justify-between gap-3">
+                        <div>
+                            <p className="text-xs font-black text-[#0b2a5b]">Account Status</p>
+                            <p className="text-[10px] text-slate-400 font-medium">Determine if this user can access the institutional portal.</p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setFormData(prev => ({ ...prev, is_active: !prev.is_active }))}
+                            className="transition-all"
+                        >
+                            {formData.is_active ? (
+                                <div className="flex items-center gap-2 text-emerald-600 font-bold uppercase text-[9px] tracking-widest">
+                                    Active <ToggleRight size={24} />
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-2 text-slate-400 font-bold uppercase text-[9px] tracking-widest">
+                                    Inactive <ToggleLeft size={24} />
+                                </div>
+                            )}
+                        </button>
                     </div>
-                    <button
-                        type="button"
-                        onClick={() => setFormData(prev => ({ ...prev, is_active: !prev.is_active }))}
-                        className="transition-all"
-                    >
-                        {formData.is_active ? (
-                            <div className="flex items-center gap-2 text-emerald-600 font-bold uppercase text-[9px] tracking-widest">
-                                Active <ToggleRight size={24} />
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-2 text-slate-400 font-bold uppercase text-[9px] tracking-widest">
-                                Inactive <ToggleLeft size={24} />
-                            </div>
-                        )}
-                    </button>
                 </div>
 
                 <div className="space-y-3">

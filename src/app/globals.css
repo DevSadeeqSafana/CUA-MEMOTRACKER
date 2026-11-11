@@ -161,3 +161,32 @@ a.memo-ref:hover {
 .memo-content th { background: #f4f7fb; font-weight: 600; text-align: left; color: #0b2a5b; }
 .memo-content th > p,
 .memo-content td > p { margin: 0; }
+
+/* Memo compose: the form card slides down from behind the type tabs.
+   .memo-reveal is pulled up under the tab bar (negative margin, same padding),
+   and clips the card only while the animation runs, so dropdowns aren't cut off afterwards. */
+.memo-reveal {
+  margin-top: -1rem;
+  padding-top: 1rem;
+}
+.memo-reveal--active {
+  overflow: hidden;
+}
+.memo-reveal__card {
+  animation: memo-slide-down 1.2s cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+@keyframes memo-slide-down {
+  from {
+    transform: translateY(-100%);
+    opacity: 0.4;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .memo-reveal__card {
+    animation-duration: 1ms;
+  }
+}

@@ -99,16 +99,30 @@ export default function NotificationBell() {
                                                 )}>
                                                     <Bell size={16} />
                                                 </div>
-                                                <div className="flex-grow space-y-1">
+                                                <div className="flex-grow min-w-0 space-y-1">
                                                     <p className={cn(
                                                         "text-xs leading-relaxed",
                                                         !notif.is_read ? "text-slate-900 font-bold" : "text-slate-500 font-medium"
                                                     )}>
                                                         {notif.message}
                                                     </p>
-                                                    <div className="flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                                                        <Clock size={10} />
-                                                        {formatDate(notif.created_at)}
+                                                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                                                        <div className="flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                                            <Clock size={10} />
+                                                            {formatDate(notif.created_at)}
+                                                        </div>
+                                                        {notif.memo_uuid && (
+                                                            <Link
+                                                                href={`/dashboard/memos/${notif.memo_uuid}`}
+                                                                onClick={() => {
+                                                                    setIsOpen(false);
+                                                                    if (!notif.is_read) handleMarkAsRead(notif.id);
+                                                                }}
+                                                                className="inline-block text-[9px] font-black text-blue-600 bg-white border border-blue-100 px-3 py-1 rounded-lg uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all"
+                                                            >
+                                                                Open memo
+                                                            </Link>
+                                                        )}
                                                     </div>
                                                 </div>
                                                 {!notif.is_read && (
@@ -121,18 +135,6 @@ export default function NotificationBell() {
                                                     </button>
                                                 )}
                                             </div>
-                                            {notif.memo_uuid && (
-                                                <Link
-                                                    href={`/dashboard/memos/${notif.memo_uuid}`}
-                                                    onClick={() => {
-                                                        setIsOpen(false);
-                                                        if (!notif.is_read) handleMarkAsRead(notif.id);
-                                                    }}
-                                                    className="inline-block mt-3 text-[9px] font-black text-blue-600 bg-white border border-blue-100 px-3 py-1 rounded-lg uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all"
-                                                >
-                                                    Open memo
-                                                </Link>
-                                            )}
                                         </div>
                                     ))}
                                 </div>

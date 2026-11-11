@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import MemoForm from '@/components/memos/MemoForm';
 import { createMemo } from '@/lib/actions';
-import { directUploadEnabled, uploadFilesDirect, MAX_ATTACHMENT_BYTES, formatBytes } from '@/lib/client-upload';
+import { directUploadEnabled, uploadFilesDirect, MAX_ATTACHMENT_BYTES, formatBytes, UploadError } from '@/lib/client-upload';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 
@@ -45,7 +45,7 @@ export default function NewMemoClient({ recipients }: NewMemoClientProps) {
                     itemFiles.forEach((x, i) => uploadedItems.set(x.index, uploaded[generalFiles.length + i]));
                     toast.dismiss(toastId);
                 } catch (e: any) {
-                    toast.error(e?.message || 'Attachment upload failed', { id: toastId });
+                    toast.error(e instanceof UploadError ? e.message : "We couldn't upload your attachments. Please try again.", { id: toastId });
                     return;
                 }
             }
@@ -95,7 +95,7 @@ export default function NewMemoClient({ recipients }: NewMemoClientProps) {
             const result = await createMemo(formData, isDraft);
 
             if (result.success) {
-                toast.success(isDraft ? 'Draft saved successfully' : 'Memo routed for approval');
+                toast.success(isDraft ? 'Draft saved successfully' : 'Memo sent');
                 router.push(`/dashboard/memos/${result.memoUuid}`);
             } else {
                 toast.error(result.error || 'Something went wrong');

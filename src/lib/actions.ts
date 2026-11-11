@@ -1,7 +1,8 @@
 'use server';
 
 import { auth } from '@/auth';
-import { query } from './db';
+import pool, { query } from './db';
+import { UserFacingError, friendlyError, NOT_AUTHORIZED_MESSAGE } from './errors';
 import { sendMemoNotificationEmail } from './mailer';
 import { generateReferenceNumber } from './memo-utils';
 import { sanitizeCommentHtml, isCommentEmpty } from './rich-text';
@@ -134,7 +135,7 @@ async function isApproverGroupMember(userId: number | string) {
 // regardless of whether it looks like a finance memo.
 async function sendMemoToAccountant(memoId: number, senderId: number | string) {
     const accountantId = await getAccountantUserId();
-    if (!accountantId) throw new Error('No Accountant is configured to receive this memo.');
+    if (!accountantId) throw new UserFacingError('No Accountant is configured to receive this memo.');
 
     const rows = await query(`
         SELECT m.title, COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as sender_name
@@ -166,7 +167,7 @@ async function sendMemoToAccountant(memoId: number, senderId: number | string) {
 // earlier in the chain) sends it to the Accountant after the fact.
 export async function sendReceivedMemoToAccountant(memoId: number) {
     const session = await auth();
-    if (!session?.user?.id) return { success: false, error: 'Unauthorized' };
+    if (!session?.user?.id) return { success: false, error: NOT_AUTHORIZED_MESSAGE };
     const userId = parseInt(session.user.id);
 
     try {
@@ -219,58 +220,13 @@ export async function sendReceivedMemoToAccountant(memoId: number) {
         return { success: true };
     } catch (error: any) {
         console.error('sendReceivedMemoToAccountant error:', error);
-        return { success: false, error: error?.message || 'Failed to send memo to the Accountant.' };
+        return { success: false, error: friendlyError(error, "We couldn't send this memo to the Accountant. Please try again.") };
     }
 }
 
-export async function routeApprovedFinanceMemoToAccountant(memoId: number) {
-    try {
-        const memoCheck = await query(`
-            SELECT m.id, m.title, m.category,
-                   (SELECT COUNT(*) FROM memo_budget_info bi WHERE bi.memo_id = m.id) as budget_info_count,
-                   (SELECT COUNT(*) FROM memo_budget_items bi WHERE bi.memo_id = m.id) as budget_items_count
-            FROM memos m
-            WHERE m.id = ?
-        `, [memoId]) as any[];
-
-        if (memoCheck.length === 0) return;
-
-        const memo = memoCheck[0];
-        const categoryLower = (memo.category || '').toLowerCase();
-        const financeTerms = ['finance', 'budget', 'payment', 'expense', 'reimbursement', 'procurement', 'financial', 'accounts', 'accounting', 'funds'];
-        const isFinanceCategory = financeTerms.some(term => categoryLower.includes(term));
-        const isBudgetMemo = memo.budget_info_count > 0 || memo.budget_items_count > 0 || isFinanceCategory;
-
-        if (!isBudgetMemo) return;
-
-        const accountantId = await getAccountantUserId();
-        if (!accountantId) {
-            console.warn(`routeApprovedFinanceMemoToAccountant: No Accountant user found for memo ${memoId}`);
-            return;
-        }
-
-        await query(`
-            INSERT INTO memo_finance_processing (memo_id, accountant_id, status)
-            VALUES (?, ?, 'Pending Processing')
-            ON DUPLICATE KEY UPDATE accountant_id = VALUES(accountant_id)
-        `, [memoId, accountantId]);
-
-        await query(`
-            INSERT IGNORE INTO memo_recipients (memo_id, recipient_id, recipient_type)
-            VALUES (?, ?, 'To')
-        `, [memoId, accountantId]);
-
-        await query(`
-            INSERT INTO notifications (user_id, memo_id, message)
-            VALUES (?, ?, ?)
-        `, [accountantId, memoId, `New approved financial budget memo requiring processing: "${memo.title}"`]);
-
-        console.log(`routeApprovedFinanceMemoToAccountant: Memo ${memoId} successfully routed to accountant ID ${accountantId}`);
-    } catch (error) {
-        console.error('routeApprovedFinanceMemoToAccountant Error:', error);
-    }
-}
-
+// Finance memos never reach the Accountant automatically. Only an approver-group
+// member can send a memo there: "Approve & Send to Accountant" while approving
+// (approveMemo), or "Send to Accountant" afterwards (sendReceivedMemoToAccountant).
 
 export async function createMemo(data: FormData, isDraft: boolean) {
     console.log('--- Starting createMemo action ---');
@@ -446,7 +402,6 @@ export async function createMemo(data: FormData, isDraft: boolean) {
                 await sendMemoNotificationEmail(memoId, 'SUBMITTED');
             } else {
                 await query('UPDATE memos SET status = "Distributed" WHERE id = ?', [memoId]);
-                await routeApprovedFinanceMemoToAccountant(memoId);
                 
                 // Trigger email notifications to recipients & creator for automatic distribution
                 await sendMemoNotificationEmail(memoId, 'DISTRIBUTED');
@@ -458,7 +413,7 @@ export async function createMemo(data: FormData, isDraft: boolean) {
         return { success: true, memoId, memoUuid: uuid };
     } catch (error: any) {
         console.error('createMemo Error:', error);
-        return { success: false, error: error.message || 'Failed to create memo.' };
+        return { success: false, error: friendlyError(error, "We couldn't save your memo. Please try again.") };
     }
 }
 
@@ -553,7 +508,6 @@ export async function approveMemo(memoId: number, approvalId: number, comments: 
         } else {
             // Last step complete: Distribute
             await query('UPDATE memos SET status = "Distributed" WHERE id = ?', [memoId]);
-            if (!sendToAccountant) await routeApprovedFinanceMemoToAccountant(memoId);
             const memo = [{ created_by: creatorId, title: memoTitle }];
 
             // Only the Line Manager in the chain means the memo was validated
@@ -612,7 +566,7 @@ export async function approveMemo(memoId: number, approvalId: number, comments: 
         return { success: true };
     } catch (error: any) {
         console.error('Approval Error:', error);
-        return { success: false, error: error?.message };
+        return { success: false, error: friendlyError(error, "We couldn't record your decision. Please try again.") };
     }
 }
 
@@ -880,7 +834,7 @@ export async function updateUser(userId: number, formData: any) {
 export async function updateLineManager(userId: number, managerId: number | null) {
     const session = await auth();
     if (!session?.user || !(session.user as any).role?.includes('Administrator')) {
-        return { success: false, error: 'Unauthorized' };
+        return { success: false, error: NOT_AUTHORIZED_MESSAGE };
     }
 
     try {
@@ -940,7 +894,7 @@ export async function deleteUser(userId: number) {
 export async function resetUserPassword(userId: number) {
     const session = await auth();
     if (!session?.user || !(session.user as any).role?.includes('Administrator')) {
-        return { success: false, error: 'Unauthorized' };
+        return { success: false, error: NOT_AUTHORIZED_MESSAGE };
     }
 
     try {
@@ -1334,77 +1288,122 @@ export async function updateMemoRouting(
 ) {
     const session = await auth();
     if (!session?.user?.id) throw new Error('Unauthorized');
+    const userId = parseInt(session.user.id);
+
+    // Clean the inputs: unique positive integer ids only
+    const uniqueIds = (ids: unknown[]) =>
+        Array.from(new Set(ids.map(Number).filter(n => Number.isInteger(n) && n > 0)));
+    const newRecipientIds = uniqueIds(recipientIds || []);
+    const approverIds = uniqueIds((additionalApprovers || []).map(a => a?.id));
+
+    if (newRecipientIds.length === 0) {
+        return { success: false, error: 'Select at least one final recipient.' };
+    }
+
+    // All changes are applied together or not at all
+    const connection = await pool.getConnection();
+    let memoUuid: string | null = null;
+    let notification: { creatorId: number; message: string } | null = null;
 
     try {
-        const userId = parseInt(session.user.id);
+        await connection.beginTransaction();
 
-        // Verify the user is a current pending approver for this memo
-        const pendingApprovals = await query(
-            'SELECT id FROM memo_approvals WHERE memo_id = ? AND approver_id = ? AND status = "Pending"',
-            [memoId, userId]
-        ) as any[];
-
-        if (pendingApprovals.length === 0) {
-            throw new Error('Only the current pending approver can modify routing.');
-        }
-
-        // 0. Fetch pre-change state for detailed logging
-        const originalRecipients = await query(
-            `SELECT u.username FROM memo_recipients mr JOIN memo_system_users u ON mr.recipient_id = u.id WHERE mr.memo_id = ?`,
+        const [memoRows] = await connection.execute(
+            'SELECT id, uuid, title, created_by FROM memos WHERE id = ? FOR UPDATE',
             [memoId]
         ) as any[];
-        const oldRecipientNames = originalRecipients.map(r => r.username);
+        const memo = memoRows[0];
+        if (!memo) throw new UserFacingError('Memo not found.');
+        memoUuid = memo.uuid;
 
-        // 1. Update Recipients
-        await query('DELETE FROM memo_recipients WHERE memo_id = ?', [memoId]);
-
-        const newRecipientResults: string[] = [];
-        for (const rid of recipientIds) {
-            await query(
-                'INSERT INTO memo_recipients (memo_id, recipient_id) VALUES (?, ?)',
-                [memoId, rid]
-            );
-            const user = await query(`
-                SELECT COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as full_name 
-                FROM memo_system_users u 
-                LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID 
-                WHERE u.id = ?`, [rid]) as any[];
-            if (user.length > 0) newRecipientResults.push(user[0].full_name);
+        // Verify the user is the current pending approver for this memo
+        const [pendingApprovals] = await connection.execute(
+            'SELECT id, step_order FROM memo_approvals WHERE memo_id = ? AND approver_id = ? AND status = "Pending"',
+            [memoId, userId]
+        ) as any[];
+        if (pendingApprovals.length === 0) {
+            throw new UserFacingError('Only the current pending approver can modify routing.');
         }
 
-        // Calculate deltas
-        const addedRecipients = newRecipientResults.filter(r => !oldRecipientNames.includes(r)).join(', ');
-        const removedRecipients = oldRecipientNames.filter(r => !newRecipientResults.includes(r)).join(', ');
+        // Approvers being added must be active users, not the creator, not you,
+        // and not already waiting in this memo's approval chain
+        if (approverIds.length > 0) {
+            const placeholders = approverIds.map(() => '?').join(',');
+            const [activeRows] = await connection.execute(
+                `SELECT id FROM memo_system_users WHERE is_active = 1 AND id IN (${placeholders})`,
+                approverIds
+            ) as any[];
+            if (activeRows.length !== approverIds.length) throw new UserFacingError('One of the selected approvers is not an active user.');
+            if (approverIds.includes(memo.created_by)) throw new UserFacingError('The memo creator cannot be added as an approver.');
+            if (approverIds.includes(userId)) throw new UserFacingError('You are already approving this memo.');
+            const [alreadyPending] = await connection.execute(
+                `SELECT approver_id FROM memo_approvals WHERE memo_id = ? AND status = 'Pending' AND approver_id IN (${placeholders})`,
+                [memoId, ...approverIds]
+            ) as any[];
+            if (alreadyPending.length > 0) throw new UserFacingError('One of the selected approvers is already in the approval chain.');
+        }
 
-        // 2. Add Additional Approvers
-        const currentStepResult = await query(
-            'SELECT step_order FROM memo_approvals WHERE id = ?',
-            [pendingApprovals[0].id]
+        const fullName = async (id: number) => {
+            const [rows] = await connection.execute(`
+                SELECT COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as full_name
+                FROM memo_system_users u
+                LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+                WHERE u.id = ?`, [id]) as any[];
+            return rows.length > 0 ? String(rows[0].full_name) : '';
+        };
+
+        // 1. Recipients: remove the ones dropped, add the new ones.
+        //    Recipients who stay keep their To/CC/BCC type and read/acknowledged status.
+        const [currentRows] = await connection.execute(
+            'SELECT recipient_id FROM memo_recipients WHERE memo_id = ?',
+            [memoId]
         ) as any[];
+        const currentIds: number[] = currentRows.map((r: any) => Number(r.recipient_id));
+        const removedIds = currentIds.filter(id => !newRecipientIds.includes(id));
+        const addedIds = newRecipientIds.filter(id => !currentIds.includes(id));
 
-        let nextStepOrder = currentStepResult[0].step_order + 1;
+        const oldRecipientNames: string[] = [];
+        for (const id of currentIds) oldRecipientNames.push(await fullName(id));
+        const newRecipientNames: string[] = [];
+        for (const id of newRecipientIds) newRecipientNames.push(await fullName(id));
 
-        if (additionalApprovers.length > 0) {
-            await query(
-                'UPDATE memo_approvals SET step_order = step_order + ? WHERE memo_id = ? AND step_order >= ?',
-                [additionalApprovers.length, memoId, nextStepOrder]
+        if (removedIds.length > 0) {
+            await connection.execute(
+                `DELETE FROM memo_recipients WHERE memo_id = ? AND recipient_id IN (${removedIds.map(() => '?').join(',')})`,
+                [memoId, ...removedIds]
             );
+        }
+        for (const rid of addedIds) {
+            await connection.execute(
+                'INSERT INTO memo_recipients (memo_id, recipient_id, recipient_type) VALUES (?, ?, ?)',
+                [memoId, rid, 'To']
+            );
+        }
 
-            for (const approver of additionalApprovers) {
-                await query(
+        const addedRecipients = (await Promise.all(addedIds.map(fullName))).join(', ');
+        const removedRecipients = (await Promise.all(removedIds.map(fullName))).join(', ');
+
+        // 2. Insert the additional approvers right after the current step
+        let nextStepOrder = Number(pendingApprovals[0].step_order) + 1;
+        if (approverIds.length > 0) {
+            await connection.execute(
+                'UPDATE memo_approvals SET step_order = step_order + ? WHERE memo_id = ? AND step_order >= ?',
+                [approverIds.length, memoId, nextStepOrder]
+            );
+            for (const approverId of approverIds) {
+                await connection.execute(
                     'INSERT INTO memo_approvals (memo_id, approver_id, step_order, status) VALUES (?, ?, ?, ?)',
-                    [approver.id, memoId, nextStepOrder++, 'Pending']
+                    [memoId, approverId, nextStepOrder++, 'Pending']
                 );
             }
         }
+        const approverNames = (await Promise.all(approverIds.map(fullName))).join(', ');
 
-        const approverNames = additionalApprovers.map(a => a.name).join(', ');
-
-        const newRecipientNames = newRecipientResults.join(', ');
         const oldRecipientNamesString = oldRecipientNames.join(', ');
+        const newRecipientNamesString = newRecipientNames.join(', ');
 
         // Log the action with rich details
-        await query(
+        await connection.execute(
             'INSERT INTO audit_logs (user_id, action, table_name, record_id, new_value) VALUES (?, ?, ?, ?, ?)',
             [
                 userId,
@@ -1416,51 +1415,42 @@ export async function updateMemoRouting(
                     removedRecipients,
                     addedApprovers: approverNames,
                     oldRecipients: oldRecipientNamesString,
-                    newRecipients: newRecipientNames
+                    newRecipients: newRecipientNamesString
                 })
             ]
         );
 
-        // Create notification for the creator
-        const memoRows = await query('SELECT created_by, title FROM memos WHERE id = ?', [memoId]) as any[];
-        if (memoRows.length > 0) {
-            const creatorId = memoRows[0].created_by;
-            
-            // Fetch current user's full name
-            const userRows = await query(`
-                SELECT COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as full_name
-                FROM memo_system_users u
-                LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
-                WHERE u.id = ?
-            `, [userId]) as any[];
-            const actorName = userRows.length > 0 ? userRows[0].full_name : session.user.name;
-
-            let message = `${actorName} has adjusted the routing for your memo "${memoRows[0].title}".`;
-
-            if (oldRecipientNamesString && newRecipientNames && oldRecipientNamesString !== newRecipientNames) {
-                message += ` Recipient changed from ${oldRecipientNamesString} to ${newRecipientNames}.`;
-            } else if (addedRecipients) {
-                message += ` Added recipients: ${addedRecipients}.`;
-            }
-
-            if (approverNames) {
-                message += ` Added ${approverNames} as an approver.`;
-            }
-
-            await query(
-                'INSERT INTO notifications (user_id, memo_id, message) VALUES (?, ?, ?)',
-                [creatorId, memoId, message]
-            );
+        // Notification for the creator
+        const actorName = (await fullName(userId)) || session.user.name || 'An approver';
+        let message = `${actorName} has adjusted the routing for your memo "${memo.title}".`;
+        if (oldRecipientNamesString && newRecipientNamesString && oldRecipientNamesString !== newRecipientNamesString) {
+            message += ` Recipient changed from ${oldRecipientNamesString} to ${newRecipientNamesString}.`;
+        } else if (addedRecipients) {
+            message += ` Added recipients: ${addedRecipients}.`;
         }
+        if (approverNames) {
+            message += ` Added ${approverNames} as ${approverIds.length === 1 ? 'an approver' : 'approvers'}.`;
+        }
+        await connection.execute(
+            'INSERT INTO notifications (user_id, memo_id, message) VALUES (?, ?, ?)',
+            [memo.created_by, memoId, message]
+        );
+        notification = { creatorId: memo.created_by, message };
 
-        revalidatePath(`/dashboard/memos/${memoId}`);
-        revalidatePath('/dashboard');
-
-        return { success: true };
+        await connection.commit();
     } catch (error: any) {
+        await connection.rollback().catch(() => {});
         console.error('Update Routing Error:', error);
-        return { success: false, error: error.message || 'Failed to update routing.' };
+        return { success: false, error: friendlyError(error, "We couldn't update the routing. Please try again.") };
+    } finally {
+        connection.release();
     }
+
+    if (memoUuid) revalidatePath(`/dashboard/memos/${memoUuid}`);
+    revalidatePath('/dashboard');
+    revalidatePath('/dashboard/tasks');
+
+    return { success: true, notified: Boolean(notification) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1479,8 +1469,13 @@ export async function forwardMemoConsultation(
     parentId: number | null = null
 ) {
     const session = await auth();
-    if (!session?.user?.id) return { success: false, error: 'Unauthorized' };
+    if (!session?.user?.id) return { success: false, error: NOT_AUTHORIZED_MESSAGE };
     const fromUserId = parseInt(session.user.id);
+
+    // Rich-text message: keep only the formatting the comment editor produces
+    if (isCommentEmpty(message)) return { success: false, error: 'Write a message before sending.' };
+    message = sanitizeCommentHtml(message);
+    if (message.length > 20000) return { success: false, error: 'This message is too long.' };
 
     try {
         const result = await query(
@@ -1524,7 +1519,7 @@ export async function forwardMemoConsultation(
         return { success: true, consultationId };
     } catch (error: any) {
         console.error('Forward consultation error:', error);
-        return { success: false, error: error.message || 'Failed to forward.' };
+        return { success: false, error: friendlyError(error, "We couldn't forward the memo. Please try again.") };
     }
 }
 
@@ -1539,8 +1534,13 @@ export async function respondToConsultation(
     message: string
 ) {
     const session = await auth();
-    if (!session?.user?.id) return { success: false, error: 'Unauthorized' };
+    if (!session?.user?.id) return { success: false, error: NOT_AUTHORIZED_MESSAGE };
     const fromUserId = parseInt(session.user.id);
+
+    // Rich-text message: keep only the formatting the comment editor produces
+    if (isCommentEmpty(message)) return { success: false, error: 'Write a message before sending.' };
+    message = sanitizeCommentHtml(message);
+    if (message.length > 20000) return { success: false, error: 'This message is too long.' };
 
     try {
         const result = await query(
@@ -1565,7 +1565,7 @@ export async function respondToConsultation(
         return { success: true, consultationId: result.insertId };
     } catch (error: any) {
         console.error('Respond to consultation error:', error);
-        return { success: false, error: error.message || 'Failed to respond.' };
+        return { success: false, error: friendlyError(error, "We couldn't send your response. Please try again.") };
     }
 }
 
@@ -1592,6 +1592,130 @@ export async function getConsultations(memoId: number) {
     } catch (error: any) {
         console.error('Get consultations error:', error);
         return [];
+    }
+}
+
+// ─── MEMO REPLIES ────────────────────────────────────────────────────────────
+// A reviewer may reply to the memo's creator before deciding: the pending
+// approver at the current step (line manager, approver or final approver), or a
+// recipient who has not acknowledged the memo yet. Each conversation is private
+// between the creator and that reviewer; the creator can answer in any of them.
+
+const MAX_REPLY_HTML_LENGTH = 20000;
+
+// Can this user start a reply on the memo right now? (before their decision)
+async function canStartMemoReply(memoId: number, userId: number) {
+    const rows = await query(`
+        SELECT m.created_by, m.status,
+               (SELECT a.approver_id FROM memo_approvals a
+                 WHERE a.memo_id = m.id AND a.status = 'Pending'
+                 ORDER BY a.step_order ASC LIMIT 1) AS pending_approver_id,
+               EXISTS (SELECT 1 FROM memo_recipients r
+                        WHERE r.memo_id = m.id AND r.recipient_id = ? AND r.acknowledged_at IS NULL) AS unacknowledged_recipient
+        FROM memos m WHERE m.id = ?
+    `, [userId, memoId]) as any[];
+    const memo = rows[0];
+    if (!memo || memo.created_by === userId || memo.status === 'Draft') return false;
+    if (memo.pending_approver_id === userId) return true;
+    return memo.status === 'Distributed' && Boolean(memo.unacknowledged_recipient);
+}
+
+export async function getMemoReplies(memoId: number) {
+    const session = await auth();
+    if (!session?.user?.id) return [];
+    const userId = parseInt(session.user.id);
+    try {
+        const memoRows = await query('SELECT created_by FROM memos WHERE id = ?', [memoId]) as any[];
+        if (memoRows.length === 0) return [];
+        const isCreator = memoRows[0].created_by === userId;
+        const rows = await query(`
+            SELECT r.id, r.memo_id, r.thread_user_id, r.author_id, r.message, r.created_at,
+                   COALESCE(CONCAT(ahs.FirstName, ' ', IFNULL(CONCAT(ahs.MiddleName, ' '), ''), ahs.Surname), au.username) AS author_name,
+                   COALESCE(CONCAT(ths.FirstName, ' ', IFNULL(CONCAT(ths.MiddleName, ' '), ''), ths.Surname), tu.username) AS thread_user_name
+            FROM memo_replies r
+            JOIN memo_system_users au ON au.id = r.author_id
+            LEFT JOIN hr_staff ahs ON au.staff_id = ahs.StaffID
+            JOIN memo_system_users tu ON tu.id = r.thread_user_id
+            LEFT JOIN hr_staff ths ON tu.staff_id = ths.StaffID
+            WHERE r.memo_id = ? ${isCreator ? '' : 'AND r.thread_user_id = ?'}
+            ORDER BY r.created_at ASC, r.id ASC
+        `, isCreator ? [memoId] : [memoId, userId]) as any[];
+        return rows;
+    } catch (error: any) {
+        // Table not migrated yet: behave as "no replies" instead of breaking the memo page
+        if (error?.code !== 'ER_NO_SUCH_TABLE') console.error('getMemoReplies error:', error);
+        return [];
+    }
+}
+
+/**
+ * Post a reply.
+ * - Reviewer: omit threadUserId. Starting a conversation requires being the pending
+ *   approver (or an unacknowledged recipient); continuing an existing one is always allowed.
+ * - Creator: pass threadUserId to answer that reviewer's conversation.
+ */
+export async function postMemoReply(memoId: number, message: string, threadUserId?: number) {
+    const session = await auth();
+    if (!session?.user?.id) return { success: false, error: NOT_AUTHORIZED_MESSAGE };
+    const userId = parseInt(session.user.id);
+
+    const html = isCommentEmpty(message) ? '' : sanitizeCommentHtml(message);
+    if (!html) return { success: false, error: 'Write a reply before sending.' };
+    if (html.length > MAX_REPLY_HTML_LENGTH) return { success: false, error: 'This reply is too long.' };
+
+    try {
+        const memoRows = await query('SELECT id, uuid, title, created_by, status FROM memos WHERE id = ?', [memoId]) as any[];
+        const memo = memoRows[0];
+        if (!memo) return { success: false, error: 'Memo not found.' };
+        const isCreator = memo.created_by === userId;
+
+        let threadId: number;
+        if (isCreator) {
+            if (!threadUserId) return { success: false, error: 'Choose the conversation to reply to.' };
+            const existing = await query(
+                'SELECT 1 FROM memo_replies WHERE memo_id = ? AND thread_user_id = ? LIMIT 1',
+                [memoId, threadUserId]
+            ) as any[];
+            if (existing.length === 0) return { success: false, error: 'You can only answer a reply someone sent you.' };
+            threadId = threadUserId;
+        } else {
+            const existing = await query(
+                'SELECT 1 FROM memo_replies WHERE memo_id = ? AND thread_user_id = ? LIMIT 1',
+                [memoId, userId]
+            ) as any[];
+            if (existing.length === 0 && !(await canStartMemoReply(memoId, userId))) {
+                return { success: false, error: 'You can reply to this memo only before making your decision on it.' };
+            }
+            threadId = userId;
+        }
+
+        const result = await query(
+            'INSERT INTO memo_replies (memo_id, thread_user_id, author_id, message) VALUES (?, ?, ?, ?)',
+            [memoId, threadId, userId, html]
+        ) as any;
+
+        const authorName = await getUserFullName(userId);
+        const notifyUserId = isCreator ? threadId : memo.created_by;
+        await query(
+            'INSERT INTO notifications (user_id, memo_id, message) VALUES (?, ?, ?)',
+            [notifyUserId, memoId, isCreator
+                ? `${authorName} answered your reply on the memo "${memo.title}".`
+                : `${authorName} replied to your memo "${memo.title}".`]
+        );
+
+        await query(
+            'INSERT INTO audit_logs (user_id, action, table_name, record_id, new_value) VALUES (?, ?, ?, ?, ?)',
+            [userId, 'MEMO_REPLY', 'memo_replies', result.insertId, JSON.stringify({ memoId, threadUserId: threadId })]
+        );
+
+        revalidatePath(`/dashboard/memos/${memo.uuid}`);
+        return { success: true };
+    } catch (error: any) {
+        console.error('postMemoReply error:', error);
+        if (error?.code === 'ER_NO_SUCH_TABLE') {
+            return { success: false, error: 'Replies are not enabled yet. Ask the administrator to run the latest migration.' };
+        }
+        return { success: false, error: 'Failed to send the reply.' };
     }
 }
 
@@ -1753,7 +1877,7 @@ export async function getSidebarCounts() {
 
 export async function deleteDraftMemo(memoId: number) {
     const session = await auth();
-    if (!session?.user?.id) return { success: false, error: 'Unauthorized' };
+    if (!session?.user?.id) return { success: false, error: NOT_AUTHORIZED_MESSAGE };
     const userId = parseInt(session.user.id);
 
     try {
@@ -1780,13 +1904,13 @@ export async function deleteDraftMemo(memoId: number) {
         return { success: true };
     } catch (e: any) {
         console.error('deleteDraftMemo error:', e);
-        return { success: false, error: e.message || 'Delete failed' };
+        return { success: false, error: friendlyError(e, "We couldn't delete this draft. Please try again.") };
     }
 }
 
 export async function updateDraftMemo(memoId: number, data: FormData, submitNow: boolean) {
     const session = await auth();
-    if (!session?.user?.id) return { success: false, error: 'Unauthorized' };
+    if (!session?.user?.id) return { success: false, error: NOT_AUTHORIZED_MESSAGE };
     const userId = parseInt(session.user.id);
 
     try {
@@ -1882,7 +2006,6 @@ export async function updateDraftMemo(memoId: number, data: FormData, submitNow:
                 await sendMemoNotificationEmail(memoId, 'SUBMITTED');
             } else {
                 await query('UPDATE memos SET status = "Distributed" WHERE id = ?', [memoId]);
-                await routeApprovedFinanceMemoToAccountant(memoId);
 
                 // Trigger email notifications to recipients & creator for automatic distribution
                 await sendMemoNotificationEmail(memoId, 'DISTRIBUTED');
@@ -1895,7 +2018,7 @@ export async function updateDraftMemo(memoId: number, data: FormData, submitNow:
         return { success: true, memoUuid: uuid };
     } catch (e: any) {
         console.error('updateDraftMemo error:', e);
-        return { success: false, error: e.message || 'Update failed' };
+        return { success: false, error: friendlyError(e, "We couldn't save your changes to this draft. Please try again.") };
     }
 }
 
@@ -1903,7 +2026,7 @@ export async function updateDraftMemo(memoId: number, data: FormData, submitNow:
 
 export async function updateRejectedMemo(memoId: number, data: FormData, submitNow: boolean) {
     const session = await auth();
-    if (!session?.user?.id) return { success: false, error: 'Unauthorized' };
+    if (!session?.user?.id) return { success: false, error: NOT_AUTHORIZED_MESSAGE };
     const userId = parseInt(session.user.id);
 
     try {
@@ -2015,7 +2138,6 @@ export async function updateRejectedMemo(memoId: number, data: FormData, submitN
                 await sendMemoNotificationEmail(memoId, 'RESUBMITTED');
             } else {
                 await query('UPDATE memos SET status = "Distributed" WHERE id = ?', [memoId]);
-                await routeApprovedFinanceMemoToAccountant(memoId);
 
                 // Trigger email notifications to recipients & creator for automatic distribution
                 await sendMemoNotificationEmail(memoId, 'DISTRIBUTED');
@@ -2040,7 +2162,7 @@ export async function updateRejectedMemo(memoId: number, data: FormData, submitN
         return { success: true, memoUuid: uuid };
     } catch (e: any) {
         console.error('updateRejectedMemo error:', e);
-        return { success: false, error: e.message || 'Update failed' };
+        return { success: false, error: friendlyError(e, "We couldn't save your changes to this memo. Please try again.") };
     }
 }
 
@@ -2072,7 +2194,7 @@ export async function getMyInputRequests(memoId: number) {
 
 export async function reviseMemoContent(memoId: number, data: FormData) {
     const session = await auth();
-    if (!session?.user?.id) return { success: false, error: 'Unauthorized' };
+    if (!session?.user?.id) return { success: false, error: NOT_AUTHORIZED_MESSAGE };
     const userId = parseInt(session.user.id);
 
     try {
@@ -2125,7 +2247,7 @@ export async function reviseMemoContent(memoId: number, data: FormData) {
         return { success: true, memoUuid: memo.uuid };
     } catch (e: any) {
         console.error('reviseMemoContent error:', e);
-        return { success: false, error: e.message || 'Update failed' };
+        return { success: false, error: friendlyError(e, "We couldn't save your changes to this memo. Please try again.") };
     }
 }
 
@@ -2283,7 +2405,7 @@ export async function addAttachmentToMemo(memoId: number, data: FormData) {
         return { success: true, count: addedFiles.length, memoUuid: memo.uuid };
     } catch (e: any) {
         console.error('addAttachmentToMemo error:', e);
-        return { success: false, error: e.message || 'Failed to attach file.' };
+        return { success: false, error: friendlyError(e, "We couldn't attach the file. Please try again.") };
     }
 }
 
@@ -2303,7 +2425,7 @@ function canAccessFinanceQueue(session: any) {
 export async function getAccountantFinanceMemos(statusFilter?: string) {
     const session = await auth();
     if (!session?.user?.id) throw new Error('Unauthorized');
-    if (!canAccessFinanceQueue(session)) return { success: false, error: 'Unauthorized' };
+    if (!canAccessFinanceQueue(session)) return { success: false, error: NOT_AUTHORIZED_MESSAGE };
 
     try {
         let whereClause = '';
@@ -2321,6 +2443,9 @@ export async function getAccountantFinanceMemos(statusFilter?: string) {
                 fp.status as processing_status,
                 fp.processing_notes,
                 fp.voucher_number,
+                fp.bank_name,
+                fp.account_name,
+                fp.account_number,
                 fp.processed_at,
                 fp.created_at as routed_at,
                 m.uuid,
@@ -2352,46 +2477,105 @@ export async function getAccountantFinanceMemos(statusFilter?: string) {
         return { success: true, memos };
     } catch (error: any) {
         console.error('getAccountantFinanceMemos Error:', error);
-        return { success: false, error: error.message || 'Failed to fetch accountant memos' };
+        return { success: false, error: friendlyError(error, "We couldn't load the finance queue. Please refresh the page.") };
     }
 }
 
+export type FinanceAccountDetails = {
+    bankName?: string;
+    accountName?: string;
+    accountNumber?: string;
+};
+
+/**
+ * Saves the accountant's processing record for a finance memo.
+ * - Beneficiary account details (bank, account name, 10-digit account number) are
+ *   required when the memo is marked Processed.
+ * - A Payment Voucher number (PV/CUA/<year>/<0001>) is generated automatically the
+ *   first time a memo is marked Processed. It is never changed once assigned.
+ */
 export async function updateFinanceMemoProcessingStatus(
     processingId: number,
     status: 'Pending Processing' | 'In Progress' | 'Processed' | 'Rejected',
     notes?: string,
-    voucherNumber?: string
+    account?: FinanceAccountDetails
 ) {
     const session = await auth();
     if (!session?.user?.id) throw new Error('Unauthorized');
-    if (!canAccessFinanceQueue(session)) return { success: false, error: 'Unauthorized' };
+    if (!canAccessFinanceQueue(session)) return { success: false, error: NOT_AUTHORIZED_MESSAGE };
     const userId = parseInt(session.user.id);
 
+    if (!['Pending Processing', 'In Progress', 'Processed', 'Rejected'].includes(status)) {
+        return { success: false, error: 'Invalid processing status' };
+    }
+
+    const bankName = (account?.bankName || '').trim();
+    const accountName = (account?.accountName || '').trim();
+    const accountNumber = (account?.accountNumber || '').replace(/\s+/g, '');
+
+    if (bankName.length > 120) return { success: false, error: 'Bank name must be at most 120 characters' };
+    if (accountName.length > 150) return { success: false, error: 'Account name must be at most 150 characters' };
+    if (accountNumber && !/^\d{10}$/.test(accountNumber)) {
+        return { success: false, error: 'Account number must be exactly 10 digits' };
+    }
+    if (status === 'Processed' && (!bankName || !accountName || !accountNumber)) {
+        return { success: false, error: 'Enter the bank name, account name and account number before marking this memo as Processed' };
+    }
+
+    const connection = await pool.getConnection();
+    let record: any;
+    let voucherNumber: string | null = null;
+    let voucherGenerated = false;
+
     try {
-        const existing = await query(`
+        await connection.beginTransaction();
+
+        const [rows] = await connection.execute(`
             SELECT fp.*, m.id as memo_id, m.created_by, m.title, m.uuid
             FROM memo_finance_processing fp
             JOIN memos m ON fp.memo_id = m.id
             WHERE fp.id = ?
+            FOR UPDATE
         `, [processingId]) as any[];
 
-        if (existing.length === 0) {
+        if (rows.length === 0) {
+            await connection.rollback();
             return { success: false, error: 'Finance processing record not found' };
         }
 
-        const record = existing[0];
+        record = rows[0];
+        voucherNumber = record.voucher_number || null;
+
+        // First time this memo is processed: issue the next voucher number for the year.
+        if (status === 'Processed' && !voucherNumber) {
+            const year = new Date().getFullYear();
+            await connection.execute(
+                `INSERT INTO memo_voucher_sequences (year, last_number) VALUES (?, LAST_INSERT_ID(1))
+                 ON DUPLICATE KEY UPDATE last_number = LAST_INSERT_ID(last_number + 1)`,
+                [year]
+            );
+            const [seqRows] = await connection.execute('SELECT LAST_INSERT_ID() AS n') as any[];
+            const next = Number(seqRows[0].n);
+            voucherNumber = `PV/CUA/${year}/${String(next).padStart(4, '0')}`;
+            voucherGenerated = true;
+        }
+
         const isFinal = status === 'Processed' || status === 'Rejected';
 
-        await query(`
+        await connection.execute(`
             UPDATE memo_finance_processing
             SET status = ?,
                 processing_notes = ?,
                 voucher_number = ?,
+                bank_name = ?,
+                account_name = ?,
+                account_number = ?,
                 processed_at = ?,
                 accountant_id = COALESCE(?, accountant_id),
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-        `, [status, notes || null, voucherNumber || null, isFinal ? new Date() : null,
+        `, [status, notes || null, voucherNumber, bankName || null, accountName || null, accountNumber || null,
+            isFinal ? new Date() : null,
             // An Administrator acting on the queue keeps the assigned accountant
             isAccountantUser(session) ? userId : null, processingId]);
 
@@ -2400,27 +2584,43 @@ export async function updateFinanceMemoProcessingStatus(
         if (voucherNumber) {
             message += ` (Payment Voucher: ${voucherNumber})`;
         }
-        await query(`
+        await connection.execute(`
             INSERT INTO notifications (user_id, memo_id, message)
             VALUES (?, ?, ?)
         `, [record.created_by, record.memo_id, message]);
 
-        // Audit log
-        await query(`
+        // Audit log (account number masked)
+        await connection.execute(`
             INSERT INTO audit_logs (user_id, action, table_name, record_id, new_value)
             VALUES (?, 'UPDATE_FINANCE_PROCESSING', 'memo_finance_processing', ?, ?)
-        `, [userId, processingId, JSON.stringify({ status, notes, voucherNumber })]);
+        `, [userId, processingId, JSON.stringify({
+            status,
+            notes,
+            voucherNumber,
+            voucherGenerated,
+            bankName: bankName || null,
+            accountName: accountName || null,
+            accountNumber: accountNumber ? `******${accountNumber.slice(-4)}` : null
+        })]);
 
-        revalidatePath('/dashboard/accountant');
-        revalidatePath(`/dashboard/memos/${record.uuid}`);
-        revalidatePath('/dashboard/tasks');
-        revalidatePath('/dashboard');
-
-        return { success: true };
+        await connection.commit();
     } catch (error: any) {
+        await connection.rollback().catch(() => {});
         console.error('updateFinanceMemoProcessingStatus Error:', error);
-        return { success: false, error: error.message || 'Failed to update processing status' };
+        if (error?.code === 'ER_BAD_FIELD_ERROR' || error?.code === 'ER_NO_SUCH_TABLE') {
+            return { success: false, error: 'The finance database update has not been applied yet. Ask the administrator to run the latest migration.' };
+        }
+        return { success: false, error: friendlyError(error, "We couldn't save the processing record. Please try again.") };
+    } finally {
+        connection.release();
     }
+
+    revalidatePath('/dashboard/accountant');
+    revalidatePath(`/dashboard/memos/${record.uuid}`);
+    revalidatePath('/dashboard/tasks');
+    revalidatePath('/dashboard');
+
+    return { success: true, voucherNumber, voucherGenerated };
 }
 
 // ─── APPROVER GROUP (Settings > Approvers Settings) ──────────────────────────
@@ -2437,7 +2637,7 @@ function isAdministrator(session: any) {
 
 export async function getApproverGroupMembers() {
     const session = await auth();
-    if (!isAdministrator(session)) return { success: false as const, error: 'Unauthorized' };
+    if (!isAdministrator(session)) return { success: false as const, error: NOT_AUTHORIZED_MESSAGE };
 
     try {
         const members = await query(`
@@ -2483,7 +2683,7 @@ export async function searchUsersForApproverGroup(searchTerm: string) {
 
 export async function addApproverGroupMember(userId: number) {
     const session = await auth();
-    if (!isAdministrator(session)) return { success: false, error: 'Unauthorized' };
+    if (!isAdministrator(session)) return { success: false, error: NOT_AUTHORIZED_MESSAGE };
 
     try {
         await query('INSERT IGNORE INTO memo_approver_group (user_id, added_by) VALUES (?, ?)', [userId, session!.user!.id]);
@@ -2501,7 +2701,7 @@ export async function addApproverGroupMember(userId: number) {
 
 export async function removeApproverGroupMember(userId: number) {
     const session = await auth();
-    if (!isAdministrator(session)) return { success: false, error: 'Unauthorized' };
+    if (!isAdministrator(session)) return { success: false, error: NOT_AUTHORIZED_MESSAGE };
 
     try {
         await query('DELETE FROM memo_approver_group WHERE user_id = ?', [userId]);

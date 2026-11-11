@@ -87,11 +87,11 @@ export default function PromptModal({
                         />
                     </div>
 
-                    <div className="flex flex-col sm:flex-row gap-4 w-full">
+                    <div className="flex flex-wrap gap-4 w-full">
                         <button
                             type="submit"
                             disabled={isLoading || (required && isEmpty)}
-                            className="flex-[2] py-4 rounded-2xl bg-[#0b2a5b] text-white font-bold hover:bg-blue-800 transition-all shadow-lg shadow-blue-900/20 active:scale-95 disabled:opacity-50"
+                            className="flex-[2] min-w-[8rem] py-4 rounded-2xl bg-[#0b2a5b] text-white font-bold hover:bg-blue-800 transition-all shadow-lg shadow-blue-900/20 active:scale-95 disabled:opacity-50"
                         >
                             {isLoading ? 'Processing...' : confirmText}
                         </button>
@@ -103,7 +103,7 @@ export default function PromptModal({
                                     onSecondaryConfirm(value);
                                 }}
                                 disabled={isLoading || (required && isEmpty)}
-                                className="flex-[2] py-4 rounded-2xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-900/20 active:scale-95 disabled:opacity-50"
+                                className="flex-[2] min-w-[12rem] py-4 rounded-2xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-900/20 active:scale-95 disabled:opacity-50"
                             >
                                 {isLoading ? 'Processing...' : secondaryConfirmText}
                             </button>
@@ -112,7 +112,7 @@ export default function PromptModal({
                             type="button"
                             onClick={onClose}
                             disabled={isLoading}
-                            className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold hover:bg-slate-200 transition-all active:scale-95 disabled:opacity-50"
+                            className="flex-1 min-w-[6rem] py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold hover:bg-slate-200 transition-all active:scale-95 disabled:opacity-50"
                         >
                             {cancelText}
                         </button>

@@ -24,8 +24,21 @@ import {
     X
 } from 'lucide-react';
 import { cn, formatDate } from '@/lib/utils';
+import Pagination from '@/components/ui/Pagination';
 import { updateFinanceMemoProcessingStatus } from '@/lib/actions';
 import toast from 'react-hot-toast';
+
+const FINANCE_QUEUE_PAGE_SIZE = 10;
+
+// Suggestions for the bank name field (free text is still allowed).
+const NIGERIAN_BANKS = [
+    'Access Bank', 'Citibank Nigeria', 'Ecobank Nigeria', 'Fidelity Bank', 'First Bank of Nigeria',
+    'First City Monument Bank (FCMB)', 'Globus Bank', 'Guaranty Trust Bank (GTBank)', 'Jaiz Bank', 'Keystone Bank',
+    'Kuda Microfinance Bank', 'Moniepoint Microfinance Bank', 'OPay', 'Optimus Bank', 'PalmPay', 'Parallex Bank',
+    'Polaris Bank', 'Providus Bank', 'Stanbic IBTC Bank', 'Standard Chartered Bank', 'Sterling Bank', 'SunTrust Bank',
+    'Taj Bank', 'Titan Trust Bank', 'Union Bank of Nigeria', 'United Bank for Africa (UBA)', 'Unity Bank', 'Wema Bank',
+    'Zenith Bank'
+];
 
 interface AccountantProcessingViewProps {
     initialMemos: any[];
@@ -36,11 +49,14 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
     const [memos, setMemos] = useState<any[]>(initialMemos);
     const [selectedTab, setSelectedTab] = useState<string>('All');
     const [searchQuery, setSearchQuery] = useState<string>('');
+    const [page, setPage] = useState<number>(1);
     const [activeModalMemo, setActiveModalMemo] = useState<any | null>(null);
 
     // Modal Form State
     const [processingStatus, setProcessingStatus] = useState<string>('Pending Processing');
-    const [voucherNumber, setVoucherNumber] = useState<string>('');
+    const [bankName, setBankName] = useState<string>('');
+    const [accountName, setAccountName] = useState<string>('');
+    const [accountNumber, setAccountNumber] = useState<string>('');
     const [processingNotes, setProcessingNotes] = useState<string>('');
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
@@ -79,26 +95,50 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
         });
     }, [initialMemos, selectedTab, searchQuery]);
 
+    // Pagination (client-side, over the filtered list)
+    const totalPages = Math.max(1, Math.ceil(filteredMemos.length / FINANCE_QUEUE_PAGE_SIZE));
+    const currentPage = Math.min(page, totalPages); // stays valid when memos leave the list
+    const pageStart = (currentPage - 1) * FINANCE_QUEUE_PAGE_SIZE;
+    const pagedMemos = filteredMemos.slice(pageStart, pageStart + FINANCE_QUEUE_PAGE_SIZE);
+
     const openProcessingModal = (memo: any) => {
         setActiveModalMemo(memo);
         setProcessingStatus(memo.processing_status || 'Pending Processing');
-        setVoucherNumber(memo.voucher_number || '');
+        setBankName(memo.bank_name || '');
+        setAccountName(memo.account_name || '');
+        setAccountNumber(memo.account_number || '');
         setProcessingNotes(memo.processing_notes || '');
     };
 
+    const markingProcessed = processingStatus === 'Processed';
+    const accountNumberValid = accountNumber === '' || /^\d{10}$/.test(accountNumber);
+    const accountDetailsComplete = bankName.trim() !== '' && accountName.trim() !== '' && /^\d{10}$/.test(accountNumber);
+
     const handleSaveProcessing = async () => {
         if (!activeModalMemo) return;
+        if (!accountNumberValid) {
+            toast.error('Account number must be exactly 10 digits.');
+            return;
+        }
+        if (markingProcessed && !accountDetailsComplete) {
+            toast.error('Enter the bank name, account name and account number before marking this memo as Processed.');
+            return;
+        }
         setIsSubmitting(true);
         try {
             const res = await updateFinanceMemoProcessingStatus(
                 activeModalMemo.processing_id,
                 processingStatus as any,
                 processingNotes,
-                voucherNumber
+                { bankName, accountName, accountNumber }
             );
 
             if (res.success) {
-                toast.success('Financial processing record updated successfully!');
+                toast.success(
+                    res.voucherGenerated && res.voucherNumber
+                        ? `Memo processed. Payment Voucher ${res.voucherNumber} generated.`
+                        : 'Financial processing record updated successfully!'
+                );
                 setActiveModalMemo(null);
                 router.refresh();
             } else {
@@ -232,7 +272,7 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                         {['All', 'Pending Processing', 'In Progress', 'Processed', 'Rejected'].map(tab => (
                             <button
                                 key={tab}
-                                onClick={() => setSelectedTab(tab)}
+                                onClick={() => { setSelectedTab(tab); setPage(1); }}
                                 className={cn(
                                     "px-4 py-2 rounded-lg font-bold text-xs transition-all whitespace-nowrap",
                                     selectedTab === tab
@@ -255,7 +295,7 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                         <input
                             type="text"
                             value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
+                            onChange={e => { setSearchQuery(e.target.value); setPage(1); }}
                             placeholder="Search reference, title, PV..."
                             className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:border-blue-500 transition-all"
                         />
@@ -292,7 +332,7 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 text-xs">
-                                {filteredMemos.map(memo => {
+                                {pagedMemos.map(memo => {
                                     const amount = parseFloat(memo.total_budget_amount) || 0;
                                     return (
                                         <tr key={memo.processing_id} className="hover:bg-slate-50/80 transition-colors group">
@@ -380,12 +420,20 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                         </table>
                     </div>
                 )}
+                {filteredMemos.length > 0 && (
+                    <>
+                        <p className="px-4 sm:px-8 py-3 text-[11px] font-bold text-slate-400 border-t border-slate-100">
+                            Showing {pageStart + 1}–{pageStart + pagedMemos.length} of {filteredMemos.length} memo{filteredMemos.length === 1 ? '' : 's'}
+                        </p>
+                        <Pagination totalPages={totalPages} currentPage={currentPage} onPageChange={setPage} />
+                    </>
+                )}
             </div>
 
             {/* Interactive Update Modal */}
             {activeModalMemo && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden">
+                    <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg max-h-[92vh] flex flex-col overflow-hidden">
                         {/* Modal Header */}
                         <div className="bg-gradient-to-r from-[#0b2a5b] to-[#0f172a] p-5 text-white flex items-center justify-between">
                             <div>
@@ -409,7 +457,7 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                         </div>
 
                         {/* Modal Body */}
-                        <div className="p-6 space-y-5">
+                        <div className="p-6 space-y-5 overflow-y-auto">
                             {/* Summary Card inside modal */}
                             <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 flex items-center justify-between">
                                 <div>
@@ -462,22 +510,88 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                                 </div>
                             </div>
 
-                            {/* Payment Voucher Input */}
+                            {/* Beneficiary Account Details */}
                             <div>
-                                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                                    Payment Voucher (PV) Number
-                                </label>
-                                <div className="relative">
-                                    <Receipt className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                                    <input
-                                        type="text"
-                                        value={voucherNumber}
-                                        onChange={e => setVoucherNumber(e.target.value)}
-                                        placeholder="e.g. PV/2026/0481"
-                                        className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:border-blue-600 transition-all"
-                                    />
+                                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 mb-2">
+                                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                        Beneficiary Account Details
+                                    </label>
+                                    <span className={cn('text-[10px] font-bold', markingProcessed ? 'text-rose-500' : 'text-slate-400')}>
+                                        {markingProcessed ? 'Required to process' : 'Required when marked Processed'}
+                                    </span>
                                 </div>
-                                <p className="text-[10px] text-slate-400 mt-1">Enter Bursary payment voucher code for audit reference.</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                        <label htmlFor="fp-bank-name" className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Bank Name</label>
+                                        <input
+                                            id="fp-bank-name"
+                                            type="text"
+                                            list="fp-bank-options"
+                                            value={bankName}
+                                            onChange={e => setBankName(e.target.value)}
+                                            maxLength={120}
+                                            placeholder="e.g. Access Bank"
+                                            className={cn(
+                                                'w-full px-3 py-2.5 bg-white border rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-600 transition-all',
+                                                markingProcessed && !bankName.trim() ? 'border-rose-300' : 'border-slate-200'
+                                            )}
+                                        />
+                                        <datalist id="fp-bank-options">
+                                            {NIGERIAN_BANKS.map(bank => <option key={bank} value={bank} />)}
+                                        </datalist>
+                                    </div>
+                                    <div>
+                                        <label htmlFor="fp-account-number" className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Account Number</label>
+                                        <input
+                                            id="fp-account-number"
+                                            type="text"
+                                            inputMode="numeric"
+                                            autoComplete="off"
+                                            value={accountNumber}
+                                            onChange={e => setAccountNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                                            placeholder="10-digit NUBAN"
+                                            className={cn(
+                                                'w-full px-3 py-2.5 bg-white border rounded-xl text-xs font-mono font-bold tracking-wider text-slate-800 focus:outline-none focus:border-blue-600 transition-all',
+                                                !accountNumberValid || (markingProcessed && !accountNumber) ? 'border-rose-300' : 'border-slate-200'
+                                            )}
+                                        />
+                                        {!accountNumberValid && (
+                                            <p className="text-[10px] font-bold text-rose-500 mt-1">{accountNumber.length}/10 digits</p>
+                                        )}
+                                    </div>
+                                    <div className="sm:col-span-2">
+                                        <label htmlFor="fp-account-name" className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Account Name</label>
+                                        <input
+                                            id="fp-account-name"
+                                            type="text"
+                                            value={accountName}
+                                            onChange={e => setAccountName(e.target.value)}
+                                            maxLength={150}
+                                            placeholder="Name on the bank account"
+                                            className={cn(
+                                                'w-full px-3 py-2.5 bg-white border rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-600 transition-all',
+                                                markingProcessed && !accountName.trim() ? 'border-rose-300' : 'border-slate-200'
+                                            )}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Payment Voucher (generated automatically) */}
+                            <div className="flex items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3">
+                                <Receipt className="text-slate-400 shrink-0" size={18} />
+                                <div className="min-w-0">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Payment Voucher (PV) Number</p>
+                                    {activeModalMemo.voucher_number ? (
+                                        <p className="text-sm font-mono font-black text-[#0b2a5b] break-all">{activeModalMemo.voucher_number}</p>
+                                    ) : (
+                                        <p className="text-xs font-bold text-slate-500">
+                                            {markingProcessed
+                                                ? 'Will be generated automatically when you save.'
+                                                : 'Generated automatically when the memo is marked Processed.'}
+                                        </p>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Processing Notes */}
@@ -496,7 +610,7 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                         </div>
 
                         {/* Modal Footer */}
-                        <div className="bg-slate-50 p-4 border-t border-slate-200 flex items-center justify-between">
+                        <div className="bg-slate-50 p-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
                             <Link
                                 href={`/dashboard/memos/${activeModalMemo.uuid}`}
                                 target="_blank"

@@ -346,95 +346,97 @@ export default function CreateUserForm({ onClose }: CreateUserFormProps) {
                     </div>
                 </div>
 
-                <div className="space-y-3">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] ml-1">3. Security Configuration</label>
-                    <div className="relative group">
-                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={16} />
-                        <input
-                            type="password"
-                            required
-                            value={formData.password}
-                            onChange={e => setFormData(prev => ({ ...prev, password: e.target.value }))}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-12 pr-5 focus:ring-8 focus:ring-blue-500/5 focus:border-blue-500 transition-all outline-none font-bold text-slate-700 text-sm placeholder:text-slate-300 placeholder:font-medium"
-                            placeholder="Set Initial Account Token..."
-                        />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-8 items-start">
+                    <div className="space-y-3">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] ml-1">3. Security Configuration</label>
+                        <div className="relative group">
+                            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={16} />
+                            <input
+                                type="password"
+                                required
+                                value={formData.password}
+                                onChange={e => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-12 pr-5 focus:ring-8 focus:ring-blue-500/5 focus:border-blue-500 transition-all outline-none font-bold text-slate-700 text-sm placeholder:text-slate-300 placeholder:font-medium"
+                                placeholder="Set Initial Account Token..."
+                            />
+                        </div>
                     </div>
-                </div>
 
-                <div className="space-y-3">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] ml-1">4. Line Manager Assignment</label>
-                    <div className="relative group">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={16} />
-                        <input
-                            type="text"
-                            placeholder="Search Managers by Name or Staff ID..."
-                            value={managerSearchTerm}
-                            onChange={e => setManagerSearchTerm(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-12 pr-5 focus:ring-8 focus:ring-blue-500/5 focus:border-blue-500 transition-all outline-none font-bold text-slate-700 text-sm placeholder:text-slate-300 placeholder:font-medium"
-                        />
-                        {isSearchingManagers && (
-                            <div className="absolute right-5 top-1/2 -translate-y-1/2">
-                                <Loader2 className="animate-spin text-blue-500" size={20} />
+                    <div className="space-y-3">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] ml-1">4. Line Manager Assignment</label>
+                        <div className="relative group">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={16} />
+                            <input
+                                type="text"
+                                placeholder="Search Managers by Name or Staff ID..."
+                                value={managerSearchTerm}
+                                onChange={e => setManagerSearchTerm(e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-12 pr-5 focus:ring-8 focus:ring-blue-500/5 focus:border-blue-500 transition-all outline-none font-bold text-slate-700 text-sm placeholder:text-slate-300 placeholder:font-medium"
+                            />
+                            {isSearchingManagers && (
+                                <div className="absolute right-5 top-1/2 -translate-y-1/2">
+                                    <Loader2 className="animate-spin text-blue-500" size={20} />
+                                </div>
+                            )}
+                        </div>
+
+                        {managerSearchTerm && availableManagers.length > 0 && (
+                            <div className="bg-white border border-slate-200 rounded-[2rem] shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300 max-h-48 overflow-y-auto">
+                                {availableManagers.map((manager) => (
+                                    <button
+                                        key={manager.staff_id || manager.id}
+                                        type="button"
+                                        onClick={() => {
+                                            if (!manager.id) {
+                                                toast.error(`${manager.username} does not have a system account. Provision them first to assign as a manager.`);
+                                                return;
+                                            }
+                                            setSelectedManager(manager);
+                                            setFormData(prev => ({ ...prev, line_manager_id: manager.id }));
+                                            setManagerSearchTerm('');
+                                        }}
+                                        className={cn(
+                                            "w-full flex items-center gap-4 p-4 hover:bg-blue-50 text-left transition-all border-b border-slate-50 last:border-0",
+                                            !manager.id && "opacity-50 cursor-not-allowed grayscale"
+                                        )}
+                                    >
+                                        <div className={cn(
+                                            "w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs",
+                                            manager.id ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-400"
+                                        )}>
+                                            {manager.username[0]}
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-slate-900 text-sm tracking-tight">{manager.username}</p>
+                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{manager.department} {!manager.id && "• No Account"}</p>
+                                        </div>
+                                    </button>
+                                ))
+                                }
+                            </div>
+                        )}
+
+                        {selectedManager && (
+                            <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-900/20">
+                                        <Check size={16} />
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest leading-none mb-1">Assigned Manager</p>
+                                        <p className="font-bold text-slate-900 text-sm">{selectedManager.username}</p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => { setSelectedManager(null); setFormData(prev => ({ ...prev, line_manager_id: null })); }}
+                                    className="text-[10px] font-black text-red-500 uppercase tracking-widest hover:underline"
+                                >
+                                    Remove
+                                </button>
                             </div>
                         )}
                     </div>
-
-                    {managerSearchTerm && availableManagers.length > 0 && (
-                        <div className="bg-white border border-slate-200 rounded-[2rem] shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300 max-h-48 overflow-y-auto">
-                            {availableManagers.map((manager) => (
-                                <button
-                                    key={manager.staff_id || manager.id}
-                                    type="button"
-                                    onClick={() => {
-                                        if (!manager.id) {
-                                            toast.error(`${manager.username} does not have a system account. Provision them first to assign as a manager.`);
-                                            return;
-                                        }
-                                        setSelectedManager(manager);
-                                        setFormData(prev => ({ ...prev, line_manager_id: manager.id }));
-                                        setManagerSearchTerm('');
-                                    }}
-                                    className={cn(
-                                        "w-full flex items-center gap-4 p-4 hover:bg-blue-50 text-left transition-all border-b border-slate-50 last:border-0",
-                                        !manager.id && "opacity-50 cursor-not-allowed grayscale"
-                                    )}
-                                >
-                                    <div className={cn(
-                                        "w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs",
-                                        manager.id ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-400"
-                                    )}>
-                                        {manager.username[0]}
-                                    </div>
-                                    <div>
-                                        <p className="font-bold text-slate-900 text-sm tracking-tight">{manager.username}</p>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{manager.department} {!manager.id && "• No Account"}</p>
-                                    </div>
-                                </button>
-                            ))
-                            }
-                        </div>
-                    )}
-
-                    {selectedManager && (
-                        <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-900/20">
-                                    <Check size={16} />
-                                </div>
-                                <div>
-                                    <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest leading-none mb-1">Assigned Manager</p>
-                                    <p className="font-bold text-slate-900 text-sm">{selectedManager.username}</p>
-                                </div>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => { setSelectedManager(null); setFormData(prev => ({ ...prev, line_manager_id: null })); }}
-                                className="text-[10px] font-black text-red-500 uppercase tracking-widest hover:underline"
-                            >
-                                Remove
-                            </button>
-                        </div>
-                    )}
                 </div>
 
                 <div className="pt-4 flex gap-4">

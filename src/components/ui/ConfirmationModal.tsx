@@ -69,12 +69,12 @@ export default function ConfirmationModal({
                         <p className="text-xs text-slate-500 font-medium leading-relaxed">{description}</p>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row gap-3 w-full pt-2">
+                    <div className="flex flex-wrap gap-3 w-full pt-2">
                         <button
                             onClick={onConfirm}
                             disabled={isLoading}
                             className={cn(
-                                "flex-1 py-3 rounded-xl text-white text-xs uppercase tracking-wider font-bold transition-all shadow-md disabled:opacity-50",
+                                "flex-1 min-w-[7rem] py-3 rounded-xl text-white text-xs uppercase tracking-wider font-bold transition-all shadow-md disabled:opacity-50",
                                 variantStyles[variant]
                             )}
                         >
@@ -83,7 +83,7 @@ export default function ConfirmationModal({
                         <button
                             onClick={onClose}
                             disabled={isLoading}
-                            className="flex-1 py-3 rounded-xl bg-slate-100 text-slate-600 text-xs uppercase tracking-wider font-bold hover:bg-slate-200 transition-all border border-slate-200 disabled:opacity-50"
+                            className="flex-1 min-w-[7rem] py-3 rounded-xl bg-slate-100 text-slate-600 text-xs uppercase tracking-wider font-bold hover:bg-slate-200 transition-all border border-slate-200 disabled:opacity-50"
                         >
                             {cancelText}
                         </button>

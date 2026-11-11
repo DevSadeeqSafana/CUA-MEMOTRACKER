@@ -32,7 +32,8 @@ import LineManagerRoutingAdjustment from '@/components/memos/LineManagerRoutingA
 import ConsultationThread from '@/components/memos/ConsultationThread';
 import DocumentPreviewModal from '@/components/memos/DocumentPreviewModal';
 import AddAttachmentButton from '@/components/memos/AddAttachmentButton';
-import { getRecipients, getManagers, getConsultations, isCurrentUserApproverGroupMember } from '@/lib/actions';
+import { getRecipients, getManagers, getConsultations, isCurrentUserApproverGroupMember, getMemoReplies } from '@/lib/actions';
+import MemoRepliesThread, { MemoReplyButton } from '@/components/memos/MemoReplies';
 import CommentContent from '@/components/memos/CommentContent';
 
 export default async function MemoDetailsPage({
@@ -188,6 +189,12 @@ export default async function MemoDetailsPage({
     const isForwardRecipient = consultations.some((c: any) => c.to_user_id === currentUserId);
     const canForward = isPendingApprover || isForwardRecipient || isRecipient || !!myDecision;
 
+    // Reply: the reviewer the memo is waiting on (line manager / approver / final approver),
+    // or a recipient who has not acknowledged it yet, can reply to the creator before deciding.
+    const replies = await getMemoReplies(memo.id);
+    const canReply = isPendingApprover
+        || (isRecipient && memo.status === 'Distributed' && !recipientRecord?.acknowledged_at);
+
     // Revise gate: creator may edit content/attachments of a submitted memo once
     // someone has requested input from them or commented to them on it
     const inputRequestsToCreator = isCreator
@@ -249,11 +256,11 @@ export default async function MemoDetailsPage({
                 </div>
             </div>
             {/* Gmail-Style Page Header (Subject) */}
-            <div className="flex flex-col gap-2">
-                <h1 className="text-xl md:text-3xl lg:text-3xl font-medium text-[#0b2a5b] leading-tight font-display tracking-tight">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <h1 className="min-w-0 break-words text-xl md:text-3xl lg:text-3xl font-medium text-[#0b2a5b] leading-tight font-display tracking-tight">
                     {memo.title}
                 </h1>
-                <div className="flex items-center gap-2 flex-wrap mt-1">
+                <div className="flex items-center gap-2 flex-wrap">
                     <div className={cn(
                         "text-[9px] font-black px-2.5 py-1 rounded-lg border uppercase tracking-widest shadow-sm",
                         memo.status === 'Draft' && !canEdit && "bg-slate-50 border-slate-200 text-slate-400",
@@ -299,7 +306,7 @@ export default async function MemoDetailsPage({
                             'bg-amber-50 border-amber-200 text-amber-700'
                         )}>{financeProcessingRecord.status}</span>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 px-5 py-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 px-5 py-4">
                         <div>
                             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Accountant</p>
                             <p className="text-sm font-bold text-slate-700 mt-1">{financeProcessingRecord.accountant_name}</p>
@@ -307,6 +314,19 @@ export default async function MemoDetailsPage({
                         <div>
                             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Voucher Number</p>
                             <p className="text-sm font-bold text-slate-700 mt-1">{financeProcessingRecord.voucher_number || 'Not assigned yet'}</p>
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Beneficiary Account</p>
+                            {financeProcessingRecord.account_number ? (
+                                <div className="mt-1">
+                                    <p className="text-sm font-bold text-slate-700 break-words">{financeProcessingRecord.account_name}</p>
+                                    <p className="text-xs font-bold text-slate-500 break-words">
+                                        {financeProcessingRecord.bank_name} · <span className="font-mono">{financeProcessingRecord.account_number}</span>
+                                    </p>
+                                </div>
+                            ) : (
+                                <p className="text-sm font-bold text-slate-700 mt-1">Not provided yet</p>
+                            )}
                         </div>
                         <div>
                             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Processing Notes</p>
@@ -435,11 +455,13 @@ export default async function MemoDetailsPage({
                         availableUsers={availableUsers}
                         availableManagers={availableManagers}
                         canSendToAccountant={canSendToAccountant}
+                        canReply={canReply}
+                        creatorName={memo.creator_name}
                     />
                 ) : (
-                    <div className="bg-[#0b2a5b] border border-blue-900 rounded-2xl p-5 md:p-6 flex flex-col items-start gap-5 shadow-xl relative overflow-hidden group">
+                    <div className="bg-[#0b2a5b] border border-blue-900 rounded-2xl p-5 md:p-6 flex flex-wrap items-center justify-between gap-x-6 gap-y-5 shadow-xl relative overflow-hidden group">
                         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform"></div>
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-4 relative z-10 w-full">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-4 relative z-10 w-full lg:w-auto">
                             <div className="flex items-center gap-4 text-white">
                                 <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center text-blue-400 border border-white/10 shrink-0">
                                     <ShieldCheck size={24} />
@@ -450,7 +472,7 @@ export default async function MemoDetailsPage({
                                 </div>
                             </div>
 
-                            {/* Forward for Input — right next to title */}
+                            {/* Forward for Input and Reply — right next to title */}
                             {canForward && (
                                 <ConsultationThread
                                     memoId={memo.id}
@@ -462,9 +484,10 @@ export default async function MemoDetailsPage({
                                     buttonOnly
                                 />
                             )}
+                            {canReply && <MemoReplyButton memoId={memo.id} creatorName={memo.creator_name} />}
                         </div>
 
-                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 relative z-10 w-full">
+                        <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3 relative z-10 w-full lg:w-auto">
                             {canAdjustRouting && (
                                 <LineManagerRoutingAdjustment
                                     memoId={memo.id}
@@ -525,38 +548,41 @@ export default async function MemoDetailsPage({
                     <div className="bg-emerald-600 border border-emerald-700 rounded-2xl p-5 md:p-6 flex flex-col gap-5 shadow-xl relative overflow-hidden group">
                         <MarkAsRead memoId={memo.id} />
                         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform"></div>
-                        <div className="flex items-center gap-4 md:gap-6 text-white relative z-10">
-                            <div className="w-12 h-12 md:w-16 md:h-16 rounded-xl md:rounded-2xl bg-white/10 flex items-center justify-center text-emerald-200 border border-white/10 shrink-0">
-                                <CheckCircle2 size={24} className="md:hidden" /><CheckCircle2 size={32} className="hidden md:block" />
+                        <div className="relative z-10 flex flex-wrap items-center justify-between gap-x-6 gap-y-5">
+                            <div className="flex items-center gap-4 md:gap-6 text-white relative z-10">
+                                <div className="w-12 h-12 md:w-16 md:h-16 rounded-xl md:rounded-2xl bg-white/10 flex items-center justify-center text-emerald-200 border border-white/10 shrink-0">
+                                    <CheckCircle2 size={24} className="md:hidden" /><CheckCircle2 size={32} className="hidden md:block" />
+                                </div>
+                                <div className="space-y-1">
+                                    <h3 className="text-base md:text-xl font-medium font-display">Institutional Send</h3>
+                                    <p className="text-emerald-50/70 font-medium text-xs md:text-sm">
+                                        {recipientRecord?.acknowledged_at
+                                            ? 'Thank you — your acknowledgment has been recorded.'
+                                            : 'Please acknowledge receipt of this communication.'}
+                                    </p>
+                                </div>
                             </div>
-                            <div className="space-y-1">
-                                <h3 className="text-base md:text-xl font-medium font-display">Institutional Send</h3>
-                                <p className="text-emerald-50/70 font-medium text-xs md:text-sm">
-                                    {recipientRecord?.acknowledged_at
-                                        ? 'Thank you — your acknowledgment has been recorded.'
-                                        : 'Please acknowledge receipt of this communication.'}
-                                </p>
-                            </div>
-                        </div>
 
-                        <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                            <AcknowledgeButton
-                                memoId={memo.id}
-                                decision={recipientRecord?.decision || null}
-                                acknowledgedAt={recipientRecord?.acknowledged_at || null}
-                            />
-                            {canSendReceivedToAccountant && <SendToAccountantButton memoId={memo.id} memoTitle={memo.title} />}
-                            {canForward && (
-                                <ConsultationThread
+                            <div className="relative z-10 flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-3">
+                                <AcknowledgeButton
                                     memoId={memo.id}
-                                    memoUuid={memo.uuid}
-                                    currentUserId={currentUserId}
-                                    currentUserName={(session.user as any).name || ''}
-                                    consultations={consultations}
-                                    canForward={canForward}
-                                    buttonOnly
+                                    decision={recipientRecord?.decision || null}
+                                    acknowledgedAt={recipientRecord?.acknowledged_at || null}
                                 />
-                            )}
+                                {canReply && <MemoReplyButton memoId={memo.id} creatorName={memo.creator_name} />}
+                                {canSendReceivedToAccountant && <SendToAccountantButton memoId={memo.id} memoTitle={memo.title} />}
+                                {canForward && (
+                                    <ConsultationThread
+                                        memoId={memo.id}
+                                        memoUuid={memo.uuid}
+                                        currentUserId={currentUserId}
+                                        currentUserName={(session.user as any).name || ''}
+                                        consultations={consultations}
+                                        canForward={canForward}
+                                        buttonOnly
+                                    />
+                                )}
+                            </div>
                         </div>
                     </div>
                 )
@@ -775,6 +801,17 @@ export default async function MemoDetailsPage({
                             </div>
                         )}
                     </div>
+
+                    {/* Reply conversations between the creator and reviewers */}
+                    {replies.length > 0 && (isCreator || replies.some((r: any) => r.thread_user_id === currentUserId)) && (
+                        <MemoRepliesThread
+                            memoId={memo.id}
+                            replies={replies}
+                            currentUserId={currentUserId}
+                            isCreator={isCreator}
+                            creatorName={memo.creator_name}
+                        />
+                    )}
 
                     {/* Consultation Thread — read-only view below main card */}
                     {consultations.length > 0 && (

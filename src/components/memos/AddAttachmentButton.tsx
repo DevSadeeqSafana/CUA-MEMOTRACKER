@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Paperclip, Upload, X, Loader2, FileText, CheckCircle2, ShieldCheck, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { cn } from '@/lib/utils';
-import { appendGeneralAttachments, formatBytes, MAX_ATTACHMENT_BYTES } from '@/lib/client-upload';
+import { appendGeneralAttachments, formatBytes, MAX_ATTACHMENT_BYTES, UploadError } from '@/lib/client-upload';
 import { addAttachmentToMemo } from '@/lib/actions';
 import { createPortal } from 'react-dom';
 
@@ -116,7 +116,7 @@ export default function AddAttachmentButton({
                 toast.error(result.error || 'Failed to attach files.');
             }
         } catch (err: any) {
-            toast.error(err?.message || 'Upload failed. Please try again.', toastId ? { id: toastId } : undefined);
+            toast.error(err instanceof UploadError ? err.message : "We couldn't upload the file. Please try again.", toastId ? { id: toastId } : undefined);
         } finally {
             setIsUploading(false);
         }

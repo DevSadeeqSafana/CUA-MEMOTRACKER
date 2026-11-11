@@ -257,11 +257,9 @@ export default function MemoHistory({ memo, approvals, recipients, routingLogs =
 
     return (
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                <div>
-                    <h3 className="text-lg font-medium text-[#0b2a5b] font-display tracking-tight">Audit Trail</h3>
-                    <p className="text-[10px] text-slate-400 font-medium mt-0.5">Reference {memo.reference_number}</p>
-                </div>
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-slate-100 pb-3">
+                <h3 className="text-lg font-medium text-[#0b2a5b] font-display tracking-tight">Audit Trail</h3>
+                <p className="text-[10px] text-slate-400 font-medium break-all">Reference {memo.reference_number}</p>
             </div>
 
             <div className="space-y-1 relative ml-2">

@@ -8,13 +8,20 @@ import { cn } from '@/lib/utils';
 interface PaginationProps {
     totalPages: number;
     currentPage: number;
+    /** When set, pages change through this callback instead of the ?page= URL param (for lists filtered in the browser). */
+    onPageChange?: (page: number) => void;
 }
 
-export default function Pagination({ totalPages, currentPage }: PaginationProps) {
+export default function Pagination({ totalPages, currentPage, onPageChange }: PaginationProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
 
     const handlePageChange = (page: number) => {
+        if (page < 1 || page > totalPages) return;
+        if (onPageChange) {
+            onPageChange(page);
+            return;
+        }
         const params = new URLSearchParams(searchParams.toString());
         params.set('page', String(page));
         router.push(`?${params.toString()}`);
@@ -36,6 +43,7 @@ export default function Pagination({ totalPages, currentPage }: PaginationProps)
         for (let i = startPage; i <= endPage; i++) {
             pages.push(
                 <button
+                    type="button"
                     key={i}
                     onClick={() => handlePageChange(i)}
                     className={cn(
@@ -53,13 +61,15 @@ export default function Pagination({ totalPages, currentPage }: PaginationProps)
     };
 
     return (
-        <div className="flex items-center justify-between px-8 py-6 bg-slate-50 border-t border-slate-100">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-8 py-4 sm:py-6 bg-slate-50 border-t border-slate-100">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
                 Page <span className="text-slate-900">{currentPage}</span> of <span className="text-slate-900">{totalPages}</span>
             </p>
             
             <div className="flex items-center gap-2">
                 <button
+                    type="button"
+                    aria-label="Previous page"
                     onClick={() => handlePageChange(currentPage - 1)}
                     disabled={currentPage === 1}
                     className="p-2.5 rounded-xl border border-slate-200 bg-white text-slate-400 hover:text-blue-600 hover:border-blue-400 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
@@ -72,6 +82,8 @@ export default function Pagination({ totalPages, currentPage }: PaginationProps)
                 </div>
 
                 <button
+                    type="button"
+                    aria-label="Next page"
                     onClick={() => handlePageChange(currentPage + 1)}
                     disabled={currentPage === totalPages}
                     className="p-2.5 rounded-xl border border-slate-200 bg-white text-slate-400 hover:text-blue-600 hover:border-blue-400 disabled:opacity-30 disabled:cursor-not-allowed transition-all"

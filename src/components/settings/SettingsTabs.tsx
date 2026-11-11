@@ -169,8 +169,8 @@ export default function SettingsTabs({ user, roles }: SettingsTabsProps) {
                                     setPwdStatus({ loading: false });
                                 }
                             }}>
-                                <div className="space-y-4">
-                                    <div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                    <div className="md:col-span-2 xl:col-span-1">
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Current Password</label>
                                         <input
                                             type="password"
@@ -181,29 +181,27 @@ export default function SettingsTabs({ user, roles }: SettingsTabsProps) {
                                             placeholder="••••••••"
                                         />
                                     </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">New Password</label>
-                                            <input
-                                                type="password"
-                                                required
-                                                value={passwordData.newPassword}
-                                                onChange={e => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                                                className="w-full bg-white border border-slate-200 rounded-2xl py-3.5 px-6 font-bold outline-none focus:border-blue-500 transition-all text-slate-900 text-xs"
-                                                placeholder="••••••••"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Confirm New Password</label>
-                                            <input
-                                                type="password"
-                                                required
-                                                value={passwordData.confirmPassword}
-                                                onChange={e => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                                                className="w-full bg-white border border-slate-200 rounded-2xl py-3.5 px-6 font-bold outline-none focus:border-blue-500 transition-all text-slate-900 text-xs"
-                                                placeholder="••••••••"
-                                            />
-                                        </div>
+                                    <div>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">New Password</label>
+                                        <input
+                                            type="password"
+                                            required
+                                            value={passwordData.newPassword}
+                                            onChange={e => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                                            className="w-full bg-white border border-slate-200 rounded-2xl py-3.5 px-6 font-bold outline-none focus:border-blue-500 transition-all text-slate-900 text-xs"
+                                            placeholder="••••••••"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Confirm New Password</label>
+                                        <input
+                                            type="password"
+                                            required
+                                            value={passwordData.confirmPassword}
+                                            onChange={e => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                                            className="w-full bg-white border border-slate-200 rounded-2xl py-3.5 px-6 font-bold outline-none focus:border-blue-500 transition-all text-slate-900 text-xs"
+                                            placeholder="••••••••"
+                                        />
                                     </div>
                                 </div>
                                 <div className="flex gap-4">

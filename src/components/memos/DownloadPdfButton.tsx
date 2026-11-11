@@ -13,8 +13,11 @@ export default function DownloadPdfButton({ memoUuid }: { memoUuid: string }) {
         try {
             const res = await fetch(`/api/memos/${memoUuid}/pdf`);
             if (!res.ok) {
-                const data = await res.json().catch(() => null);
-                throw new Error(data?.error || 'Failed to generate PDF');
+                throw new Error(
+                    res.status === 401 ? 'Your session has expired. Sign in again to download this memo.'
+                    : res.status === 404 ? 'This memo could not be found. It may have been deleted.'
+                    : "We couldn't create the PDF. Please try again."
+                );
             }
             const filename = res.headers.get('Content-Disposition')?.match(/filename="(.+?)"/)?.[1] || 'memo.pdf';
             const url = URL.createObjectURL(await res.blob());
@@ -26,7 +29,11 @@ export default function DownloadPdfButton({ memoUuid }: { memoUuid: string }) {
             a.remove();
             URL.revokeObjectURL(url);
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Failed to generate PDF');
+            // Messages above are written for users; anything else (e.g. no connection) gets a plain fallback
+            const shown = error instanceof Error && /^(Your session|This memo|We couldn't)/.test(error.message)
+                ? error.message
+                : "We couldn't download the PDF. Check your connection and try again.";
+            toast.error(shown);
         } finally {
             setIsLoading(false);
         }

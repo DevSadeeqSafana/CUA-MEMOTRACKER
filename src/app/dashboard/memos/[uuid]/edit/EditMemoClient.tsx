@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import MemoForm from '@/components/memos/MemoForm';
 import { updateRejectedMemo } from '@/lib/actions';
-import { appendGeneralAttachments } from '@/lib/client-upload';
+import { appendGeneralAttachments, UploadError } from '@/lib/client-upload';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { AlertTriangle, ArrowLeft, Clock, User } from 'lucide-react';
@@ -76,7 +76,7 @@ export default function EditMemoClient({
                     toast.loading(`Uploading attachments (${done}/${total})…`, { id: toastId }));
                 if (toastId) toast.dismiss(toastId);
             } catch (e: any) {
-                toast.error(e?.message || 'Attachment upload failed', toastId ? { id: toastId } : undefined);
+                toast.error(e instanceof UploadError ? e.message : "We couldn't upload your attachments. Please try again.", toastId ? { id: toastId } : undefined);
                 return;
             }
 

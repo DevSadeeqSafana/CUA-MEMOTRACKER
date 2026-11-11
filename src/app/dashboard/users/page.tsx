@@ -112,14 +112,16 @@ export default async function UserManagementPage({
             {/* Controls */}
             <div className="flex flex-col sm:flex-row gap-3">
                 <UserSearch />
-                <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-500 font-bold hover:bg-slate-50 transition-all shadow-sm shrink-0">
-                    <Filter size={14} />
-                    Filters
-                </button>
-                <div className="flex-grow" />
-                <div className="bg-slate-50 border border-slate-200 px-3.5 py-1.5 rounded-lg flex items-center gap-3">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Users</span>
-                    <span className="text-sm font-black text-[#0b2a5b]">{totalUsers}</span>
+                <div className="flex items-center gap-3 sm:contents">
+                    <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-500 font-bold hover:bg-slate-50 transition-all shadow-sm shrink-0">
+                        <Filter size={14} />
+                        Filters
+                    </button>
+                    <div className="flex-grow" />
+                    <div className="bg-slate-50 border border-slate-200 px-3.5 py-1.5 rounded-lg flex items-center gap-3">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Users</span>
+                        <span className="text-sm font-black text-[#0b2a5b]">{totalUsers}</span>
+                    </div>
                 </div>
             </div>
 

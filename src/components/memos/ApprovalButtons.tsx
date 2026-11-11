@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { CheckCircle2, XCircle, Loader2, Landmark } from 'lucide-react';
 import { approveMemo, rejectMemo } from '@/lib/actions';
 import PromptModal from '@/components/ui/PromptModal';
 import toast from 'react-hot-toast';
@@ -17,7 +17,8 @@ export default function ApprovalButtons({ memoId, approvalId, canSendToAccountan
     const [isLoading, setIsLoading] = useState(false);
     const [isCompleted, setIsCompleted] = useState(false);
     const [showRejectModal, setShowRejectModal] = useState(false);
-    const [showApproveModal, setShowApproveModal] = useState(false);
+    // null = closed; 'approve' = approve only; 'send' = approve and send to the Accountant
+    const [approveMode, setApproveMode] = useState<null | 'approve' | 'send'>(null);
 
     const handleApprove = async (comments: string = '', sendToAccountant: boolean = false) => {
         setIsLoading(true);
@@ -26,7 +27,7 @@ export default function ApprovalButtons({ memoId, approvalId, canSendToAccountan
             if (result.success) {
                 toast.success(sendToAccountant ? 'Memo approved and sent to the Accountant' : 'Memo approved successfully');
                 setIsCompleted(true);
-                setShowApproveModal(false);
+                setApproveMode(null);
             } else {
                 toast.error((result as any).error || 'Failed to approve memo');
             }
@@ -67,7 +68,7 @@ export default function ApprovalButtons({ memoId, approvalId, canSendToAccountan
     }
 
     return (
-        <div className="flex gap-3 shrink-0">
+        <div className="flex flex-wrap gap-3 shrink-0">
             <button
                 onClick={() => setShowRejectModal(true)}
                 disabled={isLoading}
@@ -77,13 +78,23 @@ export default function ApprovalButtons({ memoId, approvalId, canSendToAccountan
                 Reject
             </button>
             <button
-                onClick={() => setShowApproveModal(true)}
+                onClick={() => setApproveMode('approve')}
                 disabled={isLoading}
                 className="flex items-center gap-2 px-8 py-2 bg-emerald-600 text-white hover:bg-emerald-700 rounded-xl transition-all font-bold text-xs uppercase tracking-widest disabled:opacity-50 shadow-lg shadow-emerald-900/20"
             >
                 {isLoading ? <Loader2 className="animate-spin" size={14} /> : <CheckCircle2 size={14} />}
                 Approve
             </button>
+            {canSendToAccountant && (
+                <button
+                    onClick={() => setApproveMode('send')}
+                    disabled={isLoading}
+                    className="flex items-center gap-2 px-6 py-2 bg-[#e3ac3a] text-[#0b2a5b] hover:bg-[#d39b28] rounded-xl transition-all font-bold text-xs uppercase tracking-widest disabled:opacity-50 shadow-lg shadow-amber-900/20"
+                >
+                    {isLoading ? <Loader2 className="animate-spin" size={14} /> : <Landmark size={14} />}
+                    Approve & Send to Accountant
+                </button>
+            )}
 
             <PromptModal
                 isOpen={showRejectModal}
@@ -98,17 +109,15 @@ export default function ApprovalButtons({ memoId, approvalId, canSendToAccountan
             />
 
             <PromptModal
-                isOpen={showApproveModal}
-                onClose={() => setShowApproveModal(false)}
-                onConfirm={(comments) => handleApprove(comments)}
-                title="Approve Memo"
-                description={canSendToAccountant
-                    ? 'Approve only, or approve and send this memo to the Accountant for processing. You may add an optional note.'
+                isOpen={approveMode !== null}
+                onClose={() => setApproveMode(null)}
+                onConfirm={(comments) => handleApprove(comments, approveMode === 'send')}
+                title={approveMode === 'send' ? 'Approve & Send to Accountant' : 'Approve Memo'}
+                description={approveMode === 'send'
+                    ? 'Your approval will also send this memo to the Accountant\'s desk for financial processing. You may add an optional note.'
                     : 'Optional: Add a signature note or administrative comment to this approval.'}
                 placeholder="Write a note (optional)..."
-                confirmText={canSendToAccountant ? 'Approve Only' : 'Approve Memo'}
-                secondaryConfirmText={canSendToAccountant ? 'Approve & Send to Accountant' : undefined}
-                onSecondaryConfirm={canSendToAccountant ? (comments) => handleApprove(comments, true) : undefined}
+                confirmText={approveMode === 'send' ? 'Approve & Send' : 'Approve Memo'}
                 isLoading={isLoading}
             />
         </div>

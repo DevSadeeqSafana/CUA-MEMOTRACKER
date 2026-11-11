@@ -14,6 +14,9 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { cn, formatDate } from '@/lib/utils';
+import { isCommentEmpty } from '@/lib/rich-text';
+import CommentEditor from '@/components/memos/CommentEditor';
+import CommentContent from '@/components/memos/CommentContent';
 import {
     forwardMemoConsultation,
     respondToConsultation,
@@ -107,18 +110,19 @@ function ConsultationModal({
     const { query, setQuery, results, loading, setResults } = useUserSearch();
 
     const submit = () => {
-        if (!selectedUser || !message.trim()) return;
+        if (!selectedUser || isCommentEmpty(message)) return;
         startTransition(async () => {
             try {
-                if (actionType === 'Response' && parentId !== null) {
+                const res = actionType === 'Response' && parentId !== null
                     // responding in thread
-                    await respondToConsultation(memoId, parentId, selectedUser.id, message);
-                    toast.success('Response sent successfully');
-                } else {
+                    ? await respondToConsultation(memoId, parentId, selectedUser.id, message)
                     // new forward (top-level or child thread)
-                    await forwardMemoConsultation(memoId, selectedUser.id, message, parentId);
-                    toast.success('Memo forwarded for consultation');
+                    : await forwardMemoConsultation(memoId, selectedUser.id, message, parentId);
+                if (!res?.success) {
+                    toast.error(res?.error || 'Failed to send message. Please try again.');
+                    return;
                 }
+                toast.success(actionType === 'Response' && parentId !== null ? 'Response sent successfully' : 'Memo forwarded for consultation');
                 onDone();
             } catch (error) {
                 toast.error('Failed to send message. Please try again.');
@@ -185,12 +189,10 @@ function ConsultationModal({
                 {/* Message */}
                 <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Message / Query</label>
-                    <textarea
+                    <CommentEditor
                         value={message}
-                        onChange={e => setMessage(e.target.value)}
+                        onChange={setMessage}
                         placeholder={placeholder}
-                        rows={4}
-                        className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 resize-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 outline-none leading-relaxed"
                     />
                 </div>
 
@@ -200,7 +202,7 @@ function ConsultationModal({
                     </button>
                     <button
                         onClick={submit}
-                        disabled={!selectedUser || !message.trim() || isPending}
+                        disabled={!selectedUser || isCommentEmpty(message) || isPending}
                         className="flex-1 py-2 text-xs font-black text-white bg-[#0b2a5b] rounded-xl hover:bg-[#2d4a7a] disabled:opacity-40 transition-colors flex items-center justify-center gap-2"
                     >
                         {isPending ? <Loader2 size={13} className="animate-spin" /> : <SendHorizonal size={13} />}
@@ -270,7 +272,7 @@ function ThreadNode({
                 </div>
 
                 {/* Message */}
-                <p className="text-[11px] font-medium text-slate-700 leading-relaxed whitespace-pre-wrap">{node.message}</p>
+                <CommentContent value={node.message} className="text-[11px] font-medium text-slate-700 leading-relaxed" />
 
                 {/* Actions — only the direct recipient can act */}
                 {canAct && (

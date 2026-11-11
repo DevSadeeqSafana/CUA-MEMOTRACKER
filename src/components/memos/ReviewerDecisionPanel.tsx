@@ -7,7 +7,8 @@ import {
     Loader2,
     ShieldCheck,
     AlertTriangle,
-    FileSignature
+    FileSignature,
+    Landmark
 } from 'lucide-react';
 import { approveMemo, rejectMemo } from '@/lib/actions';
 import { cn } from '@/lib/utils';
@@ -32,9 +33,13 @@ interface ReviewerDecisionPanelProps {
     availableManagers?: any[];
     // Approver-group members may also approve and send the memo to the Accountant
     canSendToAccountant?: boolean;
+    // Reply to the memo's creator before deciding
+    canReply?: boolean;
+    creatorName?: string;
 }
 
 import ConsultationThread from '@/components/memos/ConsultationThread';
+import { MemoReplyButton } from '@/components/memos/MemoReplies';
 import LineManagerRoutingAdjustment from '@/components/memos/LineManagerRoutingAdjustment';
 
 export default function ReviewerDecisionPanel({
@@ -51,13 +56,16 @@ export default function ReviewerDecisionPanel({
     initialApprovers,
     availableUsers,
     availableManagers,
-    canSendToAccountant = false
+    canSendToAccountant = false,
+    canReply = false,
+    creatorName = 'the sender'
 }: ReviewerDecisionPanelProps) {
     const [isLoading, setIsLoading] = useState(false);
     const [isCompleted, setIsCompleted] = useState(false);
     const [showRejectionForm, setShowRejectionForm] = useState(false);
     const [rejectionComments, setRejectionComments] = useState('');
-    const [showApproveConfirm, setShowApproveConfirm] = useState(false);
+    // null = closed; 'approve' = approve & distribute; 'send' = approve and send to the Accountant
+    const [approveMode, setApproveMode] = useState<null | 'approve' | 'send'>(null);
 
     const handleApprove = async (comments: string = '', sendToAccountant: boolean = false) => {
         setIsLoading(true);
@@ -66,7 +74,7 @@ export default function ReviewerDecisionPanel({
             if (result.success) {
                 toast.success(sendToAccountant ? 'Memo approved and sent to the Accountant' : 'Memo approved and distributed institutionally');
                 setIsCompleted(true);
-                setShowApproveConfirm(false);
+                setApproveMode(null);
             } else {
                 toast.error((result as any).error || 'Failed to approve memo');
             }
@@ -132,7 +140,7 @@ export default function ReviewerDecisionPanel({
                             </p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex flex-wrap items-center gap-4">
                         {/* If they have adjusting power, show the routing component */}
                         {canAdjustRouting && initialRecipients && initialApprovers && (
                             <LineManagerRoutingAdjustment
@@ -154,11 +162,12 @@ export default function ReviewerDecisionPanel({
                                 buttonOnly
                             />
                         )}
+                        {canReply && <MemoReplyButton memoId={memoId} creatorName={creatorName} />}
                     </div>
                 </div>
 
                 {!showRejectionForm ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className={cn('grid grid-cols-1 gap-4', canSendToAccountant ? 'md:grid-cols-3' : 'md:grid-cols-2')}>
                         <button
                             onClick={() => setShowRejectionForm(true)}
                             disabled={isLoading}
@@ -170,7 +179,7 @@ export default function ReviewerDecisionPanel({
                         </button>
 
                         <button
-                            onClick={() => setShowApproveConfirm(true)}
+                            onClick={() => setApproveMode('approve')}
                             disabled={isLoading}
                             className="flex flex-col items-center justify-center p-6 bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700 transition-all group/app shadow-xl shadow-emerald-900/40 border border-emerald-500/50"
                         >
@@ -178,6 +187,18 @@ export default function ReviewerDecisionPanel({
                             <span className="text-base font-black uppercase tracking-wider">Approve & Distribute</span>
                             <p className="text-[10px] text-white/60 mt-1.5 text-center">Digital signature for immediate institutional release.</p>
                         </button>
+
+                        {canSendToAccountant && (
+                            <button
+                                onClick={() => setApproveMode('send')}
+                                disabled={isLoading}
+                                className="flex flex-col items-center justify-center p-6 bg-[#e3ac3a] text-[#0b2a5b] rounded-2xl hover:bg-[#d39b28] transition-all group/acc shadow-xl shadow-amber-900/30 border border-amber-300/60"
+                            >
+                                {isLoading ? <Loader2 size={28} className="animate-spin mb-3" /> : <Landmark size={28} className="mb-3 group-hover/acc:scale-110 transition-transform" />}
+                                <span className="text-base font-black uppercase tracking-wider text-center">Approve & Send to Accountant</span>
+                                <p className="text-[10px] text-[#0b2a5b]/70 mt-1.5 text-center">Approve and place this memo on the Accountant&apos;s desk for processing.</p>
+                            </button>
+                        )}
                     </div>
                 ) : (
                     <div className="space-y-6 animate-in slide-in-from-bottom-5 duration-300">
@@ -220,16 +241,14 @@ export default function ReviewerDecisionPanel({
             </div>
 
             <PromptModal
-                isOpen={showApproveConfirm}
-                onClose={() => setShowApproveConfirm(false)}
-                onConfirm={(comments) => handleApprove(comments)}
-                title="Institutional Approval"
-                description={canSendToAccountant
-                    ? `Provide final authorization for "${memoTitle}". Approve only, or approve and send it to the Accountant for processing. You may add an optional administrative note.`
+                isOpen={approveMode !== null}
+                onClose={() => setApproveMode(null)}
+                onConfirm={(comments) => handleApprove(comments, approveMode === 'send')}
+                title={approveMode === 'send' ? 'Approve & Send to Accountant' : 'Institutional Approval'}
+                description={approveMode === 'send'
+                    ? `Provide final authorization for "${memoTitle}" and send it to the Accountant's desk for financial processing. You may add an optional administrative note.`
                     : `Provide final authorization for "${memoTitle}". You may add an optional administrative note to this distribution.`}
-                confirmText={canSendToAccountant ? 'Approve Only' : 'Approve & Distribute'}
-                secondaryConfirmText={canSendToAccountant ? 'Approve & Send to Accountant' : undefined}
-                onSecondaryConfirm={canSendToAccountant ? (comments) => handleApprove(comments, true) : undefined}
+                confirmText={approveMode === 'send' ? 'Approve & Send' : 'Approve & Distribute'}
                 placeholder="Administrative note (optional)..."
                 isLoading={isLoading}
             />

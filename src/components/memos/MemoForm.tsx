@@ -206,6 +206,12 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
     const [showBCC, setShowBCC] = useState(false);
     const [showMeta, setShowMeta] = useState(false);
     const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
+    // New memos must pick a tab (General or Budget) before the form fields appear.
+    // Editing an existing memo (initialData) skips this step.
+    const [typeChosen, setTypeChosen] = useState<boolean>(Boolean(initialData));
+    // True only while the form card is sliding down after a tab click.
+    const [revealing, setRevealing] = useState(false);
+    const revealCardRef = useRef<HTMLDivElement>(null);
 
     const [budgetYears, setBudgetYears] = useState<any[]>([]);
     const [budgetCategories, setBudgetCategories] = useState<{ id: string | number, name: string }[]>([]);
@@ -363,59 +369,67 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
 
     const totalSelected = selectedRecipientIds.length + selectedCCIds.length + selectedBCCIds.length;
 
+    // Slides the form card down from behind the tabs on the first pick and
+    // again every time the user switches to the other memo type.
+    const chooseType = (budget: boolean) => {
+        const changed = !typeChosen || budget !== Boolean(isBudgetMemo);
+        setValue('is_budget_memo', budget);
+        setTypeChosen(true);
+        if (!changed) return;
+        const card = revealCardRef.current;
+        if (card) {
+            // Restart the animation if it is still running from a previous click.
+            card.style.animation = 'none';
+            void card.offsetHeight;
+            card.style.animation = '';
+        }
+        setRevealing(true);
+    };
+
     return (
         <form className="w-full pb-20 font-sans space-y-4">
 
-            {/* ── Top bar: type switcher + actions ── */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
+            {/* ── Top bar: type switcher + actions (sits above the card as it slides out) ── */}
+            <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
                 {/* Memo type pill */}
                 <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl p-1.5 shadow-sm w-fit">
                     <button
                         type="button"
-                        onClick={() => setValue('is_budget_memo', false)}
+                        onClick={() => chooseType(false)}
                         className={cn(
                             'flex items-center gap-2 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-200',
-                            !isBudgetMemo ? 'bg-[#0b2a5b] text-white shadow-md shadow-blue-900/20' : 'text-slate-400 hover:text-slate-600'
+                            typeChosen && !isBudgetMemo ? 'bg-[#0b2a5b] text-white shadow-md shadow-blue-900/20' : 'text-slate-400 hover:text-slate-600'
                         )}
                     >
                         <FileTextIcon size={12} /> General Memo
                     </button>
                     <button
                         type="button"
-                        onClick={() => setValue('is_budget_memo', true)}
+                        onClick={() => chooseType(true)}
                         className={cn(
                             'flex items-center gap-2 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-200',
-                            isBudgetMemo ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/20' : 'text-slate-400 hover:text-slate-600'
+                            typeChosen && isBudgetMemo ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/20' : 'text-slate-400 hover:text-slate-600'
                         )}
                     >
                         <Wallet size={12} /> Budget Memo
                     </button>
                 </div>
 
-                {/* Action buttons */}
-                <div className="flex items-center gap-3">
-                    <button
-                        type="button"
-                        onClick={handleSubmit(data => handleSubmission(data, true), onInvalid)}
-                        disabled={isLoading}
-                        className="flex items-center gap-2 px-5 py-2.5 border border-slate-200 bg-white rounded-xl font-bold text-xs text-slate-600 hover:bg-slate-50 transition-all disabled:opacity-50 shadow-sm"
-                    >
-                        {isLoading ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-                        Save Draft
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleSubmit(data => handleSubmission(data, false), onInvalid)}
-                        disabled={isLoading}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-[#0b2a5b] text-white rounded-xl font-bold text-xs shadow-lg shadow-blue-900/20 hover:bg-[#1a5aa6] transition-all disabled:opacity-50 outline-none"
-                    >
-                        {isLoading ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-                        Route for Approval
-                    </button>
-                </div>
+                {/* Before a type is picked, a hint sits beside the tabs.
+                    Draft and Send live in the form's bottom toolbar. */}
+                {!typeChosen && (
+                    <p className="text-xs font-medium text-slate-400">Select General Memo or Budget Memo to start composing.</p>
+                )}
             </div>
 
-            {/* ── Main compose card ── */}
+            {/* ── Main compose card (shown once a memo type is selected) ── */}
+            {typeChosen && (
+            <div className={cn('memo-reveal', revealing && 'memo-reveal--active')}>
+            <div
+                ref={revealCardRef}
+                className={cn(revealing && 'memo-reveal__card')}
+                onAnimationEnd={(e) => { if (e.target === e.currentTarget) setRevealing(false); }}
+            >
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
 
                 {/* Subject line */}
@@ -753,7 +767,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                             disabled={isLoading}
                             className="flex items-center gap-2 px-4 py-2 border border-slate-200 bg-white rounded-xl font-bold text-[10px] uppercase tracking-widest text-slate-500 hover:bg-slate-50 transition-all disabled:opacity-50"
                         >
-                            <Save size={12} /> Draft
+                            {isLoading ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Draft
                         </button>
                         <button
                             type="button"
@@ -762,11 +776,15 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                             className="flex items-center gap-2 px-5 py-2 bg-[#0b2a5b] text-white rounded-xl font-bold text-[10px] uppercase tracking-widest shadow-lg shadow-blue-900/20 hover:bg-[#1a5aa6] transition-all disabled:opacity-50"
                         >
                             {isLoading ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
-                            Route for Approval
+                            Send
                         </button>
                     </div>
                 </div>
             </div>
+
+            </div>
+            </div>
+            )}
 
             {/* ── Budget Requisition Modal Overlay ── */}
             {isBudgetModalOpen && (
@@ -1087,7 +1105,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
 
                                                     {/* Unit Price & Subtotal — always editable, pre-filled from DB for catalogue items */}
                                                     <>
-                                                        <div className="md:col-span-5 space-y-1.5">
+                                                        <div className="md:col-span-5 lg:col-span-4 space-y-1.5">
                                                             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
                                                                 Unit Price (NGN) <span className="text-red-500">*</span>
                                                                 {!isCustom && Number(watch(`budget_items.${index}.amount`) || 0) > 0 && (
@@ -1111,7 +1129,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                                             />
                                                         </div>
 
-                                                        <div className="md:col-span-7 space-y-1.5">
+                                                        <div className="md:col-span-7 lg:col-span-4 space-y-1.5">
                                                             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
                                                                 Sub-Total (NGN)
                                                             </label>
@@ -1124,7 +1142,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                                     </>
 
                                                     {/* Attachment */}
-                                                    <div className="md:col-span-12 space-y-1.5">
+                                                    <div className="md:col-span-12 lg:col-span-4 min-w-0 space-y-1.5">
                                                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
                                                             Item Attachment / Proforma Invoice (optional)
                                                         </label>
@@ -1141,7 +1159,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                                                             <label
                                                                 htmlFor={`budget-item-file-${index}`}
                                                                 className={cn(
-                                                                    'flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-bold uppercase tracking-widest cursor-pointer transition-all',
+                                                                    'flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-bold uppercase tracking-widest cursor-pointer transition-all min-w-0 break-all',
                                                                     watch(`budget_items.${index}.file`)
                                                                         ? 'bg-emerald-50 border-emerald-200 text-emerald-600'
                                                                         : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'

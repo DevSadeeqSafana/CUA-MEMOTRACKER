@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 import { ArrowLeft, Clock, MessageSquare, Paperclip, Plus, Save, Undo2, User, X, Loader2 } from 'lucide-react';
 import RichTextEditor from '@/components/memos/RichTextEditor';
 import { reviseMemoContent } from '@/lib/actions';
-import { appendGeneralAttachments, formatBytes } from '@/lib/client-upload';
+import { appendGeneralAttachments, formatBytes, UploadError } from '@/lib/client-upload';
 import { cn } from '@/lib/utils';
 
 interface ExistingAttachment {
@@ -78,7 +78,7 @@ export default function ReviseMemoClient({
                 toast.error(result.error || 'Update failed.');
             }
         } catch (err: any) {
-            toast.error(err?.message || 'An unexpected error occurred.', toastId ? { id: toastId } : undefined);
+            toast.error(err instanceof UploadError ? err.message : "We couldn't save your changes. Please try again.", toastId ? { id: toastId } : undefined);
         } finally {
             setIsSaving(false);
         }
@@ -156,8 +156,13 @@ export default function ReviseMemoClient({
 
                 {/* Attachments */}
                 <div className="px-6 py-4 border-t border-slate-100 space-y-3">
-                    <div className="flex items-center justify-between">
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Attachments</p>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Attachments</p>
+                            {attachments.length === 0 && newFiles.length === 0 && (
+                                <p className="text-[11px] text-slate-400 font-medium italic">No attachments.</p>
+                            )}
+                        </div>
                         <label className="flex items-center gap-1.5 text-[10px] font-black text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-xl cursor-pointer uppercase tracking-widest transition-colors">
                             <Plus size={12} /> Add Files
                             <input
@@ -172,10 +177,6 @@ export default function ReviseMemoClient({
                             />
                         </label>
                     </div>
-
-                    {attachments.length === 0 && newFiles.length === 0 && (
-                        <p className="text-[11px] text-slate-400 font-medium italic">No attachments.</p>
-                    )}
 
                     <div className="flex flex-wrap gap-2">
                         {attachments.map(file => {
