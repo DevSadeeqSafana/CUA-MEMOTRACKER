@@ -103,6 +103,8 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
     const [payeeName, setPayeeName] = useState<string>('');
     const [payeeAddress, setPayeeAddress] = useState<string>('');
     const [payeeVendor, setPayeeVendor] = useState<VendorOption | null>(null);
+    // 'vendor': a registered vendor; 'other': payee entered by hand; null: not chosen yet
+    const [payeeMode, setPayeeMode] = useState<'vendor' | 'other' | null>(null);
     const [totalAmount, setTotalAmount] = useState<string>('');
     const [payAmount, setPayAmount] = useState<string>('');
     const [paymentNote, setPaymentNote] = useState<string>('');
@@ -165,6 +167,8 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
         setProcessingNotes(memo.processing_notes || '');
         setPayeeName(memo.payee_name || vendor?.name || '');
         setPayeeAddress(memo.payee_address || vendor?.address || '');
+        // A saved payee with no vendor link was entered by hand
+        setPayeeMode(vendor ? 'vendor' : memo.payee_name ? 'other' : null);
         const total = memoTotal(memo);
         setTotalAmount(total > 0 ? String(total) : '');
         setPayAmount('');
@@ -600,57 +604,99 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                                             </span>
                                         </div>
                                         <div className="space-y-3">
-                                            <div>
-                                                <span className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Registered vendor</span>
-                                                <VendorPicker
-                                                    value={payeeVendor}
-                                                    compact
-                                                    canManage
-                                                    placeholder="Search vendors to fill in the payee…"
-                                                    onChange={v => {
-                                                        setPayeeVendor(v);
-                                                        if (!v) return;
-                                                        setPayeeName(v.name);
-                                                        if (v.address) setPayeeAddress(v.address);
-                                                        if (v.bankName) setBankName(v.bankName);
-                                                        if (v.accountName) setAccountName(v.accountName);
-                                                        if (v.accountNumber) setAccountNumber(v.accountNumber);
-                                                    }}
-                                                />
-                                                {activeModalMemo?.memo_vendor_id && payeeVendor && payeeVendor.id !== Number(activeModalMemo.memo_vendor_id) && (
-                                                    <p className="mt-1 text-[10px] font-semibold text-amber-600">Different from the vendor named on the memo.</p>
-                                                )}
-                                            </div>
-                                            <div>
-                                                <label htmlFor="fp-payee-name" className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Name</label>
-                                                <input
-                                                    id="fp-payee-name"
-                                                    type="text"
-                                                    value={payeeName}
-                                                    onChange={e => setPayeeName(e.target.value)}
-                                                    maxLength={200}
-                                                    placeholder="e.g. Sahara Office Supplies Ltd"
-                                                    className={cn(
-                                                        'w-full px-3 py-2.5 bg-white border rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-600 transition-all',
-                                                        needsPaymentDetails && !payeeName.trim() ? 'border-rose-300' : 'border-slate-200'
+                                            {payeeMode === 'other' ? (
+                                                <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-100 bg-amber-50/60 px-3 py-2">
+                                                    <span className="text-[11px] font-bold text-amber-700">Other payee: not a registered vendor</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => { setPayeeMode(null); setPayeeName(''); setPayeeAddress(''); }}
+                                                        className="shrink-0 text-[10px] font-black uppercase tracking-widest text-[#1a5aa6] hover:underline"
+                                                    >
+                                                        Choose from vendor list
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div>
+                                                    <span className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Vendor</span>
+                                                    <VendorPicker
+                                                        value={payeeVendor}
+                                                        compact
+                                                        hideContact
+                                                        placeholder="Search vendors by name…"
+                                                        onOther={() => {
+                                                            // Start the manual entry clean if a vendor had filled the form
+                                                            if (payeeVendor) {
+                                                                setPayeeName(''); setPayeeAddress('');
+                                                                setBankName(''); setAccountName(''); setAccountNumber('');
+                                                            }
+                                                            setPayeeVendor(null);
+                                                            setPayeeMode('other');
+                                                        }}
+                                                        onChange={v => {
+                                                            setPayeeVendor(v);
+                                                            if (!v) {
+                                                                setPayeeMode(null);
+                                                                setPayeeName(''); setPayeeAddress('');
+                                                                return;
+                                                            }
+                                                            setPayeeMode('vendor');
+                                                            setPayeeName(v.name);
+                                                            setPayeeAddress(v.address || '');
+                                                            if (v.bankName) setBankName(v.bankName);
+                                                            if (v.accountName) setAccountName(v.accountName);
+                                                            if (v.accountNumber) setAccountNumber(v.accountNumber);
+                                                        }}
+                                                    />
+                                                    {activeModalMemo?.memo_vendor_id && payeeVendor && payeeVendor.id !== Number(activeModalMemo.memo_vendor_id) && (
+                                                        <p className="mt-1 text-[10px] font-semibold text-amber-600">Different from the vendor named on the memo.</p>
                                                     )}
-                                                />
-                                            </div>
-                                            <div>
-                                                <label htmlFor="fp-payee-address" className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Address</label>
-                                                <textarea
-                                                    id="fp-payee-address"
-                                                    value={payeeAddress}
-                                                    onChange={e => setPayeeAddress(e.target.value)}
-                                                    maxLength={500}
-                                                    rows={2}
-                                                    placeholder="Street, city, state"
-                                                    className={cn(
-                                                        'w-full px-3 py-2.5 bg-white border rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-600 transition-all resize-none',
-                                                        needsPaymentDetails && !payeeAddress.trim() ? 'border-rose-300' : 'border-slate-200'
+                                                    {!payeeMode && (
+                                                        <p className={cn('mt-1 text-[10px] font-semibold', needsPaymentDetails ? 'text-rose-500' : 'text-slate-400')}>
+                                                            Pick a registered vendor, or choose &ldquo;Other&rdquo; at the bottom of the list to enter the payee yourself.
+                                                        </p>
                                                     )}
-                                                />
-                                            </div>
+                                                </div>
+                                            )}
+
+                                            {/* Manual entry ("Other"): name and address */}
+                                            {payeeMode === 'other' && (
+                                                <div>
+                                                    <label htmlFor="fp-payee-name" className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Payee name</label>
+                                                    <input
+                                                        id="fp-payee-name"
+                                                        type="text"
+                                                        autoFocus
+                                                        value={payeeName}
+                                                        onChange={e => setPayeeName(e.target.value)}
+                                                        maxLength={200}
+                                                        placeholder="e.g. Sahara Office Supplies Ltd"
+                                                        className={cn(
+                                                            'w-full px-3 py-2.5 bg-white border rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-600 transition-all',
+                                                            needsPaymentDetails && !payeeName.trim() ? 'border-rose-300' : 'border-slate-200'
+                                                        )}
+                                                    />
+                                                </div>
+                                            )}
+                                            {/* Address: typed for "Other"; pre-filled (and editable) for a vendor */}
+                                            {payeeMode && (
+                                                <div>
+                                                    <label htmlFor="fp-payee-address" className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
+                                                        {payeeMode === 'vendor' ? 'Vendor address' : 'Payee address'}
+                                                    </label>
+                                                    <textarea
+                                                        id="fp-payee-address"
+                                                        value={payeeAddress}
+                                                        onChange={e => setPayeeAddress(e.target.value)}
+                                                        maxLength={500}
+                                                        rows={2}
+                                                        placeholder="Street, city, state"
+                                                        className={cn(
+                                                            'w-full px-3 py-2.5 bg-white border rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-600 transition-all resize-none',
+                                                            needsPaymentDetails && !payeeAddress.trim() ? 'border-rose-300' : 'border-slate-200'
+                                                        )}
+                                                    />
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
 

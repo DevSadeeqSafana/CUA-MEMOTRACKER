@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState } from 'react';
-import { Building2, Check, Loader2, Mail, Phone, Plus, Search, X } from 'lucide-react';
+import { Building2, Check, Loader2, Mail, Pencil, Phone, Plus, Search, X } from 'lucide-react';
 import { searchVendors } from '@/lib/vendor-actions';
 import type { VendorOption } from '@/lib/vendor-data';
 import VendorFormModal from './VendorFormModal';
@@ -15,13 +15,18 @@ interface Props {
     placeholder?: string;
     className?: string;
     compact?: boolean;
+    /** Hide email / phone in the suggestions and the selected card (names only). */
+    hideContact?: boolean;
+    /** Adds an "Other" choice for a payee that is not a registered vendor (replaces "Register"). */
+    onOther?: () => void;
+    otherLabel?: string;
 }
 
 /**
  * Combo box over the shared vendor list: type to search registered vendors, pick one,
  * or register a new vendor when it isn't listed.
  */
-export default function VendorPicker({ value, onChange, canManage = false, placeholder = 'Search registered vendors…', className, compact }: Props) {
+export default function VendorPicker({ value, onChange, canManage = false, placeholder = 'Search registered vendors…', className, compact, hideContact = false, onOther, otherLabel = 'Other (not on the list): enter details manually' }: Props) {
     const [term, setTerm] = useState('');
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -62,8 +67,10 @@ export default function VendorPicker({ value, onChange, canManage = false, place
     };
 
     const exact = options.some(o => o.name.trim().toLowerCase() === term.trim().toLowerCase());
-    const showCreate = term.trim().length >= 2 && !exact;
-    const itemCount = options.length + (showCreate ? 1 : 0);
+    const showCreate = !onOther && term.trim().length >= 2 && !exact;
+    const showOther = Boolean(onOther);
+    const itemCount = options.length + (showCreate || showOther ? 1 : 0);
+    const chooseOther = () => { setOpen(false); setTerm(''); onOther?.(); };
 
     const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'ArrowDown') { e.preventDefault(); if (!open) { setOpen(true); setLoading(true); } setActive(a => Math.min(a + 1, Math.max(itemCount - 1, 0))); }
@@ -73,6 +80,7 @@ export default function VendorPicker({ value, onChange, canManage = false, place
             e.preventDefault();
             if (!open) return;
             if (active < options.length) { if (options[active]) choose(options[active]); }
+            else if (showOther) chooseOther();
             else if (showCreate) { setOpen(false); setCreating(true); }
         } else if (e.key === 'Escape') { setOpen(false); }
     };
@@ -83,7 +91,7 @@ export default function VendorPicker({ value, onChange, canManage = false, place
                 <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white"><Building2 size={14} /></div>
                 <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-bold text-[#0b2a5b]">{value.name}</p>
-                    {!compact && (value.email || value.phone || value.address) && (
+                    {!compact && !hideContact && (value.email || value.phone || value.address) && (
                         <p className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] font-medium text-slate-500">
                             {value.email && <span className="inline-flex items-center gap-1"><Mail size={10} />{value.email}</span>}
                             {value.phone && <span className="inline-flex items-center gap-1"><Phone size={10} />{value.phone}</span>}
@@ -126,7 +134,10 @@ export default function VendorPicker({ value, onChange, canManage = false, place
 
             {open && (
                 <ul id={listId} role="listbox" className="absolute left-0 right-0 top-full z-40 mt-1.5 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1.5 shadow-xl shadow-slate-900/10">
-                    {!loading && options.length === 0 && !showCreate && (
+                    {!loading && options.length === 0 && showOther && term.trim() && (
+                        <li className="px-4 py-2.5 text-xs font-medium text-slate-400">No registered vendor matches.</li>
+                    )}
+                    {!loading && options.length === 0 && !showCreate && !showOther && (
                         <li className="px-4 py-3 text-xs font-medium text-slate-400">
                             {term.trim() ? 'No registered vendor matches.' : 'No vendors registered yet. Type a name to add one.'}
                         </li>
@@ -143,11 +154,23 @@ export default function VendorPicker({ value, onChange, canManage = false, place
                             <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500"><Building2 size={13} /></div>
                             <div className="min-w-0 flex-1">
                                 <p className="truncate text-sm font-semibold text-slate-800">{o.name}</p>
-                                {(o.email || o.phone) && <p className="truncate text-[11px] text-slate-400">{[o.email, o.phone].filter(Boolean).join(' · ')}</p>}
+                                {!hideContact && (o.email || o.phone) && <p className="truncate text-[11px] text-slate-400">{[o.email, o.phone].filter(Boolean).join(' · ')}</p>}
                             </div>
                             {i === active && <Check size={14} className="shrink-0 text-blue-500" />}
                         </li>
                     ))}
+                    {showOther && (
+                        <li
+                            role="option"
+                            aria-selected={active === options.length}
+                            onMouseDown={e => { e.preventDefault(); chooseOther(); }}
+                            onMouseEnter={() => setActive(options.length)}
+                            className={cn('flex cursor-pointer items-center gap-3 border-t border-slate-100 px-3.5 py-2.5', active === options.length ? 'bg-amber-50' : 'hover:bg-slate-50')}
+                        >
+                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white"><Pencil size={13} /></div>
+                            <p className="min-w-0 truncate text-sm font-semibold text-amber-700">{otherLabel}</p>
+                        </li>
+                    )}
                     {showCreate && (
                         <li
                             role="option"
