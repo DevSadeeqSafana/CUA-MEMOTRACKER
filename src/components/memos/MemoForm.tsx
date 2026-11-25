@@ -25,6 +25,8 @@ import { cn } from '@/lib/utils';
 import { MemoPriority, MemoType } from '@/types/memo';
 import { getBudgetItemsByListId, getBudgetYears, getBudgetItemLists, getDepartments, getCurrentFiscalYear } from '@/lib/actions';
 import toast from 'react-hot-toast';
+import VendorPicker from '@/components/vendors/VendorPicker';
+import type { VendorOption } from '@/lib/vendor-data';
 
 const memoSchema = z.object({
     title: z.string().min(5, 'Title must be at least 5 characters'),
@@ -42,6 +44,8 @@ const memoSchema = z.object({
     budget_category: z.string().optional(),
     other_category: z.string().optional(),
     custom_category: z.string().optional(),
+    // Registered vendor this memo concerns (shared Staff Portal vendor list)
+    vendor: z.custom<VendorOption | null>().optional().nullable(),
     budget_items: z.array(z.object({
         name: z.string(),
         budget_category: z.string().optional(),
@@ -91,6 +95,8 @@ interface MemoFormProps {
     recipients?: any[];
     // Attachments already saved on the memo (edit mode); the user may remove them
     existingAttachments?: ExistingAttachment[];
+    // Finance users can also enter bank details when registering a vendor
+    canManageVendors?: boolean;
 }
 
 
@@ -199,12 +205,13 @@ function RecipientRow({
     );
 }
 
-export default function MemoForm({ initialData, onSubmit, isLoading, recipients = [], existingAttachments = [] }: MemoFormProps) {
+export default function MemoForm({ initialData, onSubmit, isLoading, recipients = [], existingAttachments = [], canManageVendors = false }: MemoFormProps) {
     const [attachments, setAttachments] = useState<File[]>([]);
     const [removedAttachmentIds, setRemovedAttachmentIds] = useState<number[]>([]);
     const keptAttachments = existingAttachments.filter(a => !removedAttachmentIds.includes(a.id));
     const [showBCC, setShowBCC] = useState(false);
     const [showMeta, setShowMeta] = useState(false);
+    const [showVendor, setShowVendor] = useState(Boolean(initialData?.vendor));
     const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
     // New memos must pick a tab (General or Budget) before the form fields appear.
     // Editing an existing memo (initialData) skips this step.
@@ -247,6 +254,7 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
             budget_category: initialData?.budget_category || '',
             other_category: initialData?.other_category || '',
             custom_category: (initialData as any)?.custom_category || '',
+            vendor: initialData?.vendor ?? null,
             budget_items: initialData?.budget_items && initialData.budget_items.length > 0
                 ? initialData.budget_items.map((i: any) => ({
                     ...i,
@@ -498,6 +506,41 @@ export default function MemoForm({ initialData, onSubmit, isLoading, recipients 
                         </p>
                     )}
                 </div>
+
+                {/* Vendor: shown for budget memos, or on request for general memos */}
+                {(isBudgetMemo || showVendor || watch('vendor')) ? (
+                    <div className="px-6 py-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 sm:w-16 shrink-0">Vendor</span>
+                        <Controller
+                            name="vendor"
+                            control={control}
+                            render={({ field }) => (
+                                <VendorPicker
+                                    value={field.value ?? null}
+                                    onChange={v => field.onChange(v)}
+                                    canManage={canManageVendors}
+                                    placeholder={isBudgetMemo ? 'Who is being paid? Search registered vendors… (optional)' : 'Search registered vendors…'}
+                                    className="flex-1 min-w-0"
+                                />
+                            )}
+                        />
+                        {!isBudgetMemo && !watch('vendor') && (
+                            <button type="button" onClick={() => setShowVendor(false)} className="self-end sm:self-center text-[10px] font-black uppercase tracking-widest text-slate-300 hover:text-slate-500">
+                                Hide
+                            </button>
+                        )}
+                    </div>
+                ) : (
+                    <div className="px-6 py-2 border-b border-slate-100">
+                        <button
+                            type="button"
+                            onClick={() => setShowVendor(true)}
+                            className="text-[10px] font-black uppercase tracking-widest text-slate-300 hover:text-emerald-600 transition-colors"
+                        >
+                            + Link a vendor
+                        </button>
+                    </div>
+                )}
 
                 {/* Metadata row — collapsible */}
                 <div className="px-6 border-b border-slate-100">

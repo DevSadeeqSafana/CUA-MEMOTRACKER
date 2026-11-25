@@ -27,6 +27,7 @@ import {
     Pencil,
     Landmark
 } from 'lucide-react';
+import { memoPreview } from '@/lib/memo-preview';
 import { cn, formatDate } from '@/lib/utils';
 import { deleteDraftMemo } from '@/lib/actions';
 import toast from 'react-hot-toast';
@@ -174,13 +175,6 @@ export default function MemoInboxContainer({ memos, initialFolder = 'inbox', isA
 
         return counts;
     }, [memos, isAccountant]);
-
-    // Quick helper to strip HTML tags for mail preview body snippet
-    const getSnippet = (htmlContent: string) => {
-        if (!htmlContent) return '';
-        const rawText = htmlContent.replace(/<[^>]*>/g, ' ');
-        return rawText.length > 95 ? rawText.substring(0, 95) + '...' : rawText;
-    };
 
     return (
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col font-sans h-full min-h-[600px] animate-in fade-in duration-500">
@@ -376,37 +370,38 @@ export default function MemoInboxContainer({ memos, initialFolder = 'inbox', isA
                                         />
                                     </button>
 
-                                    {/* Sender Column */}
-                                    <div className="w-40 md:w-48 shrink-0 overflow-hidden">
-                                        <div className="flex items-center gap-2">
-                                            <div className={cn(
-                                                "w-6 h-6 rounded-lg flex items-center justify-center font-black text-[9px] uppercase tracking-wider shrink-0",
+                                    {/* Title, with the sender and a preview of the message below it */}
+                                    <div className="flex-grow min-w-0 flex items-start gap-3">
+                                        <div
+                                            aria-hidden
+                                            className={cn(
+                                                "mt-0.5 w-7 h-7 rounded-lg flex items-center justify-center font-black text-[10px] uppercase shrink-0",
                                                 memo.is_unread ? "bg-blue-600 text-white shadow-md shadow-blue-600/10" : "bg-slate-100 text-slate-400"
-                                            )}>
-                                                {memo.creator_name?.[0]}
-                                            </div>
-                                            <span className={cn(
-                                                "text-xs truncate block",
-                                                memo.is_unread ? "font-black text-slate-800" : "font-semibold text-slate-500"
-                                            )}>
-                                                {memo.creator_name}
-                                            </span>
+                                            )}
+                                        >
+                                            {memo.creator_name?.[0]}
                                         </div>
-                                    </div>
-
-                                    {/* Subject & snippet column */}
-                                    <div className="flex-grow min-w-0">
-                                        <div className="flex items-center gap-3">
-                                            <span className={cn(
-                                                "text-xs truncate shrink-0 max-w-[200px] md:max-w-[320px] tracking-tight uppercase",
+                                        <div className="min-w-0 flex-1">
+                                            <p className={cn(
+                                                "text-xs truncate tracking-tight uppercase",
                                                 memo.is_unread ? "font-black text-slate-800" : "font-bold text-slate-600"
                                             )}>
                                                 {memo.title}
-                                            </span>
-                                            <span className="text-slate-300 shrink-0 select-none font-light">—</span>
-                                            <span className="text-[11px] font-bold text-slate-400 truncate block">
-                                                {getSnippet(memo.content)}
-                                            </span>
+                                            </p>
+                                            <p className="mt-0.5 flex items-baseline gap-1.5 min-w-0 text-[11px]">
+                                                <span className={cn(
+                                                    "shrink-0 max-w-[60%] truncate",
+                                                    memo.is_unread ? "font-bold text-slate-700" : "font-semibold text-slate-500"
+                                                )}>
+                                                    {memo.creator_name}
+                                                </span>
+                                                {memo.content && (
+                                                    <>
+                                                        <span aria-hidden className="text-slate-300 shrink-0">·</span>
+                                                        <span className="truncate font-medium text-slate-400">{memoPreview(memo.content)}</span>
+                                                    </>
+                                                )}
+                                            </p>
                                         </div>
                                     </div>
 

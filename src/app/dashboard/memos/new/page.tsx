@@ -1,11 +1,13 @@
 export const dynamic = 'force-dynamic';
+import { auth } from '@/auth';
 import { getRecipients } from '@/lib/actions';
+import { canManageVendors } from '@/lib/vendor-data';
 import NewMemoClient from './NewMemoClient';
 
 import { PlusCircle } from 'lucide-react';
 
 export default async function NewMemoPage() {
-    const recipients = await getRecipients();
+    const [recipients, session] = await Promise.all([getRecipients(), auth()]);
 
     return (
         <div className="space-y-6 animate-in fade-in duration-700 font-sans pb-10">
@@ -21,7 +23,7 @@ export default async function NewMemoPage() {
                 </div>
             </div>
 
-            <NewMemoClient recipients={recipients} />
+            <NewMemoClient recipients={recipients} canManageVendors={canManageVendors(session)} />
         </div>
     );
 }

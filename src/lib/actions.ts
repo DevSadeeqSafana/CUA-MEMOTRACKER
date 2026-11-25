@@ -11,6 +11,7 @@ import { redirect } from 'next/navigation';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import { createUploadTicket } from './upload-ticket';
+import { resolveVendorId } from './vendor-data';
 
 // Attachment already stored by the backend upload endpoint (see client-upload.ts).
 interface UploadedFile { url: string; name: string; size: number; type: string; }
@@ -266,6 +267,8 @@ export async function createMemo(data: FormData, isDraft: boolean) {
     console.log(`createMemo: User ${userId} is creating a "${title}" memo (isDraft: ${isDraft})`);
 
     try {
+        // A memo may name one registered vendor (shared Staff Portal vendor list)
+        const vendorId = await resolveVendorId(data.get('vendor_id'));
         const referenceNumber = await generateReferenceNumber(department);
         const status = isDraft ? 'Draft' : 'Line Manager Review';
         const uuid = crypto.randomUUID();
@@ -273,8 +276,8 @@ export async function createMemo(data: FormData, isDraft: boolean) {
         // 1. Insert Core Memo
         const result = await query(
             `INSERT INTO memos 
-             (uuid, reference_number, title, content, department, category, priority, memo_type, status, expiry_date, created_by) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             (uuid, reference_number, title, content, department, category, priority, memo_type, status, expiry_date, created_by, vendor_id) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 uuid,
                 referenceNumber,
@@ -286,7 +289,8 @@ export async function createMemo(data: FormData, isDraft: boolean) {
                 memo_type,
                 status,
                 expiry_date || null,
-                userId
+                userId,
+                vendorId
             ]
         ) as any;
 
@@ -2048,7 +2052,7 @@ export async function updateDraftMemo(memoId: number, data: FormData, submitNow:
 
     try {
         const rows = await query(
-            `SELECT id, uuid FROM memos WHERE id = ? AND created_by = ? AND status = 'Draft' LIMIT 1`,
+            `SELECT id, uuid, vendor_id FROM memos WHERE id = ? AND created_by = ? AND status = 'Draft' LIMIT 1`,
             [memoId, userId]
         ) as any[];
 
@@ -2063,12 +2067,14 @@ export async function updateDraftMemo(memoId: number, data: FormData, submitNow:
         const memo_type     = data.get('memo_type') as string;
         const expiry_date   = data.get('expiry_date') as string || null;
         const is_budget     = data.get('is_budget_memo') === 'true';
+        // A vendor deactivated after it was linked may stay; new links must be active
+        const vendorId      = await resolveVendorId(data.get('vendor_id'), rows[0].vendor_id);
 
         // Update core memo
         await query(
-            `UPDATE memos SET title=?, content=?, department=?, category=?, priority=?, memo_type=?, expiry_date=?, updated_at=NOW()
+            `UPDATE memos SET title=?, content=?, department=?, category=?, priority=?, memo_type=?, expiry_date=?, vendor_id=?, updated_at=NOW()
              WHERE id = ?`,
-            [title, content, department, category, priority, memo_type, expiry_date, memoId]
+            [title, content, department, category, priority, memo_type, expiry_date, vendorId, memoId]
         );
 
         // Refresh recipients
@@ -2165,7 +2171,7 @@ export async function updateRejectedMemo(memoId: number, data: FormData, submitN
     try {
         // 1. Verify memo belongs to user and is in Draft status
         const rows = await query(
-            `SELECT id, uuid, title FROM memos WHERE id = ? AND created_by = ? AND status = 'Draft' LIMIT 1`,
+            `SELECT id, uuid, title, vendor_id FROM memos WHERE id = ? AND created_by = ? AND status = 'Draft' LIMIT 1`,
             [memoId, userId]
         ) as any[];
         if (rows.length === 0) return { success: false, error: 'Memo not found or not in Draft status.' };
@@ -2190,12 +2196,14 @@ export async function updateRejectedMemo(memoId: number, data: FormData, submitN
         const memo_type   = data.get('memo_type') as string;
         const expiry_date = data.get('expiry_date') as string || null;
         const is_budget   = data.get('is_budget_memo') === 'true';
+        // A vendor deactivated after it was linked may stay; new links must be active
+        const vendorId    = await resolveVendorId(data.get('vendor_id'), rows[0].vendor_id);
 
         // 3. Update core memo fields
         await query(
-            `UPDATE memos SET title=?, content=?, department=?, category=?, priority=?, memo_type=?, expiry_date=?, updated_at=NOW()
+            `UPDATE memos SET title=?, content=?, department=?, category=?, priority=?, memo_type=?, expiry_date=?, vendor_id=?, updated_at=NOW()
              WHERE id = ?`,
-            [title, content, department, category, priority, memo_type, expiry_date, memoId]
+            [title, content, department, category, priority, memo_type, expiry_date, vendorId, memoId]
         );
 
         // 4. Refresh recipients
@@ -2579,6 +2587,11 @@ export async function getAccountantFinanceMemos(statusFilter?: string) {
                 fp.payee_name,
                 fp.payee_address,
                 fp.total_amount,
+                fp.vendor_id as finance_vendor_id,
+                m.vendor_id as memo_vendor_id,
+                v.vendor_id, v.vendor_name, v.email_address as vendor_email, v.phone_number as vendor_phone,
+                v.address as vendor_address, v.bank_name as vendor_bank_name, v.account_name as vendor_account_name,
+                v.account_number as vendor_account_number, v.is_active as vendor_is_active,
                 (SELECT COALESCE(SUM(p.amount), 0) FROM memo_finance_payments p WHERE p.processing_id = fp.id) as paid_amount,
                 (SELECT JSON_ARRAYAGG(JSON_OBJECT('id', p.id, 'amount', p.amount, 'voucher_number', p.voucher_number,
                                                   'payment_note', p.payment_note, 'paid_at', p.paid_at))
@@ -2610,6 +2623,8 @@ export async function getAccountantFinanceMemos(statusFilter?: string) {
             LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
             LEFT JOIN hr_designation hd ON hs.DesignationID = hd.EntryID
             LEFT JOIN memo_budget_info bi ON m.id = bi.memo_id
+            -- The vendor Finance chose, else the vendor named on the memo
+            LEFT JOIN inventory_vendor v ON v.vendor_id = COALESCE(fp.vendor_id, m.vendor_id)
             ${whereClause}
             ORDER BY fp.created_at DESC
         `, params) as any[];
@@ -2632,7 +2647,8 @@ export type FinanceProcessingInput = {
     status: 'Pending Processing' | 'In Progress' | 'Partially Paid' | 'Processed' | 'Rejected';
     notes?: string;
     account?: FinanceAccountDetails;
-    payee?: { name?: string; address?: string };
+    /** vendorId: registered vendor being paid (shared vendor list), if any. */
+    payee?: { name?: string; address?: string; vendorId?: number | null };
     /** Total amount the university owes on this memo (NGN). */
     totalAmount?: number | string | null;
     /** Optional payment being made now. */
@@ -2738,6 +2754,9 @@ export async function updateFinanceMemoProcessingStatus(processingId: number, in
         }
         record = rows[0];
 
+        // Registered vendor being paid. One deactivated after it was linked may stay linked.
+        const vendorId = await resolveVendorId(input.payee?.vendorId ?? null, record.vendor_id);
+
         const [paidRows] = await connection.execute(
             'SELECT COALESCE(SUM(amount), 0) AS paid FROM memo_finance_payments WHERE processing_id = ?',
             [processingId]
@@ -2794,6 +2813,7 @@ export async function updateFinanceMemoProcessingStatus(processingId: number, in
                 voucher_number = ?,
                 payee_name = ?,
                 payee_address = ?,
+                vendor_id = ?,
                 total_amount = ?,
                 bank_name = ?,
                 account_name = ?,
@@ -2802,7 +2822,7 @@ export async function updateFinanceMemoProcessingStatus(processingId: number, in
                 accountant_id = COALESCE(?, accountant_id),
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-        `, [finalStatus, notes || null, mainVoucher, payeeName || null, payeeAddress || null,
+        `, [finalStatus, notes || null, mainVoucher, payeeName || null, payeeAddress || null, vendorId,
             effectiveTotal > 0 ? koboToNaira(effectiveTotal) : null,
             bankName || null, accountName || null, accountNumber || null,
             isFinal ? new Date() : null,
@@ -2828,6 +2848,7 @@ export async function updateFinanceMemoProcessingStatus(processingId: number, in
             status: finalStatus,
             notes,
             payeeName: payeeName || null,
+            vendorId,
             totalAmount: effectiveTotal > 0 ? koboToNaira(effectiveTotal) : null,
             payment: paying ? { amount: koboToNaira(payKobo!), voucherNumber: newVoucher, note: paymentNote || null } : null,
             paidSoFar: koboToNaira(paidKobo),
@@ -2837,9 +2858,20 @@ export async function updateFinanceMemoProcessingStatus(processingId: number, in
             accountNumber: accountNumber ? `******${accountNumber.slice(-4)}` : null
         })]);
 
+        // First time Finance records bank details for a vendor: keep them on the vendor
+        // record so later payments to the same vendor are pre-filled.
+        if (vendorId && bankName && accountName && accountNumber) {
+            await connection.execute(`
+                UPDATE inventory_vendor
+                   SET bank_name = ?, account_name = ?, account_number = ?, updated_date = NOW()
+                 WHERE vendor_id = ? AND COALESCE(bank_name, '') = '' AND COALESCE(account_number, '') = ''
+            `, [bankName, accountName, accountNumber, vendorId]);
+        }
+
         await connection.commit();
 
         revalidatePath('/dashboard/accountant');
+        revalidatePath('/dashboard/vendors');
         revalidatePath(`/dashboard/memos/${record.uuid}`);
         revalidatePath('/dashboard/tasks');
         revalidatePath('/dashboard');

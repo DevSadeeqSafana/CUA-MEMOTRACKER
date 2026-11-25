@@ -19,10 +19,16 @@ export default async function DashboardLayout({
 
     return (
         <div className="min-h-screen bg-[#f4f7fb] text-slate-900 overflow-hidden font-sans relative">
+            {/* Apply the saved sidebar width before the first paint (no jump on load) */}
+            <script
+                dangerouslySetInnerHTML={{
+                    __html: "try{if(localStorage.getItem('cua.sidebar')==='collapsed')document.documentElement.dataset.sidebar='collapsed'}catch(e){}",
+                }}
+            />
             <Sidebar userRoles={userRoles} />
 
             {/* Main Content Area - Shifted for fixed sidebar */}
-            <main className="md:pl-72 w-full flex flex-col min-h-screen h-screen overflow-y-auto bg-[radial-gradient(ellipse_at_top_right,#dde9f6_0%,#eef3fa_40%,#f4f7fb_75%)] relative pt-16 md:pt-0">
+            <main className="md:pl-64 md:sb-collapsed:pl-[4.5rem] transition-[padding] duration-300 w-full flex flex-col min-h-screen h-screen overflow-y-auto bg-[radial-gradient(ellipse_at_top_right,#dde9f6_0%,#eef3fa_40%,#f4f7fb_75%)] relative pt-16 md:pt-0">
                 {/* Top bar: global search, notifications and account menu; sticky while the page scrolls */}
                 <header className="sticky top-0 z-30 bg-white/75 backdrop-blur-md border-b border-slate-200/70">
                     <div className="max-w-[1400px] mx-auto px-4 md:px-8 lg:px-10 h-16 flex items-center gap-3">

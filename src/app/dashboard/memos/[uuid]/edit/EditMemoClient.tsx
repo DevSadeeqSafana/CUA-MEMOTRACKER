@@ -26,6 +26,7 @@ interface EditMemoClientProps {
     recipients: any[];
     initialData: any;
     attachments: { id: number; file_name: string; file_size?: number }[];
+    canManageVendors?: boolean;
 }
 
 export default function EditMemoClient({
@@ -36,6 +37,7 @@ export default function EditMemoClient({
     recipients,
     initialData,
     attachments,
+    canManageVendors = false,
 }: EditMemoClientProps) {
     const [isLoading, setIsLoading] = useState(false);
     const router = useRouter();
@@ -55,6 +57,7 @@ export default function EditMemoClient({
             formData.append('recipient_ids',   JSON.stringify(data.recipient_ids));
             formData.append('cc_ids',          JSON.stringify(data.cc_ids  || []));
             formData.append('bcc_ids',         JSON.stringify(data.bcc_ids || []));
+            formData.append('vendor_id', data.vendor?.id ? String(data.vendor.id) : '');
             formData.append('is_budget_memo',  data.is_budget_memo ? 'true' : 'false');
 
             if (data.is_budget_memo) {
@@ -171,6 +174,7 @@ export default function EditMemoClient({
                 isLoading={isLoading}
                 recipients={recipients}
                 existingAttachments={attachments}
+                canManageVendors={canManageVendors}
             />
         </div>
     );

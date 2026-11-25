@@ -265,6 +265,14 @@ export default async function FinanceReportsPage({
                 </SectionCard>
             </div>
 
+            <SectionCard
+                title="By Vendor"
+                subtitle="Invoice amount, amount paid and balance owed to each registered vendor"
+                action={<Link href="/dashboard/vendors" className="text-[10px] font-black uppercase tracking-widest text-[#1a5aa6] hover:underline">Manage vendors</Link>}
+            >
+                <BreakdownTable rows={report.byVendor} labelHeading="Vendor" empty="No active finance memos." />
+            </SectionCard>
+
             {/* Outstanding obligations */}
             <SectionCard
                 title="Outstanding Obligations"

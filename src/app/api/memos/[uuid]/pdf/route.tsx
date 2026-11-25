@@ -3,6 +3,7 @@ import { renderToBuffer } from '@react-pdf/renderer';
 import { auth } from '@/auth';
 import { query } from '@/lib/db';
 import MemoPdf, { MemoPdfData } from '@/lib/pdf/MemoPdf';
+import { getVendorOption } from '@/lib/vendor-data';
 import { buildMemoPdfWithAttachments, type PdfAttachment } from '@/lib/pdf/pdf-attachments';
 import { loadMemoAuditTrail } from '@/lib/memo-audit';
 
@@ -104,8 +105,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ uuid
             })),
         ].filter(a => a.url);
 
+        const vendor = memo.vendor_id ? await getVendorOption(Number(memo.vendor_id)) : null;
+
         const data: MemoPdfData = {
             title: memo.title,
+            vendor: vendor ? { name: vendor.name, contact: [vendor.email, vendor.phone, vendor.address].filter(Boolean).join(' · ') || null } : null,
             referenceNumber: memo.reference_number,
             createdAt: memo.created_at,
             status: memo.status,

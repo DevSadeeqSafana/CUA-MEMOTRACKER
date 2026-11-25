@@ -9,9 +9,10 @@ import toast from 'react-hot-toast';
 
 interface NewMemoClientProps {
     recipients: any[];
+    canManageVendors?: boolean;
 }
 
-export default function NewMemoClient({ recipients }: NewMemoClientProps) {
+export default function NewMemoClient({ recipients, canManageVendors = false }: NewMemoClientProps) {
     const [isLoading, setIsLoading] = useState(false);
     const router = useRouter();
 
@@ -64,6 +65,7 @@ export default function NewMemoClient({ recipients }: NewMemoClientProps) {
             formData.append('bcc_ids', JSON.stringify(data.bcc_ids || []));
 
             // Budget Fields
+            formData.append('vendor_id', data.vendor?.id ? String(data.vendor.id) : '');
             formData.append('is_budget_memo', data.is_budget_memo ? 'true' : 'false');
             if (data.is_budget_memo) {
                 formData.append('year_id', data.year_id || '');
@@ -115,6 +117,7 @@ export default function NewMemoClient({ recipients }: NewMemoClientProps) {
                 onSubmit={handleFormSubmit}
                 isLoading={isLoading}
                 recipients={recipients}
+                canManageVendors={canManageVendors}
             />
         </>
     );

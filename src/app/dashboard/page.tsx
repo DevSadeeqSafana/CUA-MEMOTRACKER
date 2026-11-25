@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
+import { canViewFinanceReports, getFinanceReport } from '@/lib/finance-report';
+import PaymentsOverview from '@/components/dashboard/PaymentsOverview';
 
 export default async function DashboardPage() {
     const session = await auth();
@@ -38,6 +40,14 @@ export default async function DashboardPage() {
 
     const { pending_count, unread_count, my_total, university_total } = stats[0];
 
+    // Invoice amount, amount paid and outstanding balance: university-wide for Finance,
+    // the VC and administrators; everyone else sees their own memos in the finance queue.
+    const financeWide = canViewFinanceReports(session);
+    const finance = await getFinanceReport(financeWide ? {} : { createdBy: Number(userId) }).catch(e => {
+        console.error('Dashboard finance summary failed:', e);
+        return null;
+    });
+
     // Communication Activity (Last 12 Months)
     const monthlyStats = await query(`
         SELECT 
@@ -62,33 +72,25 @@ export default async function DashboardPage() {
 
     return (
         <div className="space-y-6 md:space-y-8 animate-in fade-in duration-1000 font-sans">
-            {/* Standard Uniform Header Card */}
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-5 md:p-6 border border-slate-200 shadow-sm rounded-xl">
-                <div className="flex items-center gap-3.5">
-                    <div className="w-10 h-10 bg-[#0b2a5b] text-white flex items-center justify-center font-bold shrink-0 rounded-full ring-2 ring-[#e3ac3a]/70 ring-offset-2">
-                        <Activity size={18} />
-                    </div>
-                    <div>
-                        <h1 className="text-xl md:text-3xl font-medium tracking-tight text-[#0b2a5b] font-display">System Overview</h1>
-                        <p className="text-xs text-slate-500 font-medium">Internal memo tracker dashboard and institutional analytics.</p>
-                    </div>
-                </div>
-            </div>
-
-            {/* Executive Greeting Banner */}
-            <div className="relative overflow-hidden bg-[linear-gradient(115deg,#082352_0%,#0d3470_45%,#1a5aa6_80%,#2a6fbf_100%)] rounded-2xl p-5 md:p-8 text-white shadow-lg shadow-[#0b2a5b]/20">
+            {/* Greeting banner (doubles as the page header) */}
+            <div className="relative overflow-hidden bg-[linear-gradient(115deg,#082352_0%,#0d3470_45%,#1a5aa6_80%,#2a6fbf_100%)] rounded-2xl px-5 py-5 md:px-7 md:py-6 text-white shadow-lg shadow-[#0b2a5b]/20">
                 <div className="pointer-events-none absolute -right-16 -top-10 w-72 h-48 bg-[#6fa6e0]/30 blur-[80px] rounded-full" />
                 <div className="pointer-events-none absolute -right-[10%] -top-[140%] w-[55%] aspect-square rounded-full border border-white/15" />
-                <div className="relative z-10 space-y-3">
-                    <div className="flex items-center gap-3 text-blue-300">
-                        <Activity size={16} className="animate-pulse" />
-                        <span className="text-[10px] font-black uppercase tracking-[0.3em]">CUA Institutional Monitor</span>
+                <div className="relative z-10 flex flex-col md:flex-row md:items-end md:justify-between gap-3">
+                    <div className="space-y-2 min-w-0">
+                        <div className="flex items-center gap-2.5 text-blue-300">
+                            <Activity size={14} className="animate-pulse" />
+                            <span className="text-[10px] font-black uppercase tracking-[0.3em]">System Overview</span>
+                        </div>
+                        <h1 className="text-xl sm:text-2xl md:text-3xl font-medium font-display leading-tight tracking-tight">
+                            Greetings, <span className="text-[#a9d4f5]">{session.user.name}</span>
+                        </h1>
+                        <p className="text-blue-100/70 font-medium max-w-xl text-xs md:text-sm">
+                            You have {pending_count + unread_count} item{pending_count + unread_count === 1 ? '' : 's'} requiring attention in your Memo Center.
+                        </p>
                     </div>
-                    <h2 className="text-xl sm:text-2xl font-medium font-display leading-none tracking-tight">
-                        Greetings, <span className="text-[#a9d4f5]">{session.user.name}</span>
-                    </h2>
-                    <p className="text-blue-100/70 font-medium max-w-xl text-xs md:text-sm">
-                        University communications are operating within standard parameters. You have {pending_count + unread_count} items requiring attention in your Memo Center.
+                    <p className="text-[11px] font-semibold text-blue-100/60 shrink-0">
+                        {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Africa/Lagos' })}
                     </p>
                 </div>
             </div>
@@ -148,6 +150,15 @@ export default async function DashboardPage() {
                     </div>
                 </div>
             </div>
+
+            {finance && (financeWide || finance.kpis.memosInQueue > 0) && (
+                <PaymentsOverview
+                    scope={financeWide ? 'university' : 'mine'}
+                    kpis={finance.kpis}
+                    obligations={finance.topOutstanding.slice(0, 6)}
+                    vendors={finance.byVendor.filter(v => v.vendorId !== null && v.outstanding > 0).slice(0, 5)}
+                />
+            )}
         </div>
     );
 }

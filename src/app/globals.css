@@ -190,3 +190,7 @@ a.memo-ref:hover {
     animation-duration: 1ms;
   }
 }
+
+/* Collapsed desktop sidebar (icons only). Set on <html data-sidebar="collapsed">
+   by the dashboard layout script and the sidebar toggle; remembered per browser. */
+@custom-variant sb-collapsed (&:where([data-sidebar=collapsed], [data-sidebar=collapsed] *));

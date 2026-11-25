@@ -26,7 +26,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    // suppressHydrationWarning: the dashboard sets data-sidebar on <html> before React loads
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${inter.variable} ${sourceSerif.variable} font-sans antialiased`}
       >

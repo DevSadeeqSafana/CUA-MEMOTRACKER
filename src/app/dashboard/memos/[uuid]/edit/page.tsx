@@ -5,6 +5,7 @@ import { query } from '@/lib/db';
 import { redirect } from 'next/navigation';
 import { getRecipients } from '@/lib/actions';
 import EditMemoClient from './EditMemoClient';
+import { canManageVendors, getVendorOption } from '@/lib/vendor-data';
 
 export default async function EditMemoPage({
     params,
@@ -83,7 +84,10 @@ export default async function EditMemoPage({
         [memo.id]
     ) as any[];
 
-    const recipients = await getRecipients();
+    const [recipients, vendor] = await Promise.all([
+        getRecipients(),
+        memo.vendor_id ? getVendorOption(Number(memo.vendor_id)) : Promise.resolve(null),
+    ]);
 
     const toIds  = existingRecipients.filter((r: any) => r.recipient_type === 'To').map((r: any) => r.recipient_id);
     const ccIds  = existingRecipients.filter((r: any) => r.recipient_type === 'CC').map((r: any) => r.recipient_id);
@@ -97,6 +101,7 @@ export default async function EditMemoPage({
                 memoUuid={uuid}
                 rejections={rejections}
                 recipients={recipients}
+                canManageVendors={canManageVendors(session)}
                 attachments={attachments.map((a: any) => ({ id: a.id, file_name: a.file_name, file_size: Number(a.file_size) || 0 }))}
                 initialData={{
                     title: memo.title,
@@ -114,6 +119,7 @@ export default async function EditMemoPage({
                     budget_category: memo.budget_category || '',
                     other_category: memo.other_category || '',
                     budget_items: formattedBudgetItems.length > 0 ? formattedBudgetItems : undefined,
+                    vendor,
                 }}
             />
         </div>

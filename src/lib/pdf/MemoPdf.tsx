@@ -56,6 +56,8 @@ export interface MemoPdfData {
     memoType?: string | null;
     category?: string | null;
     contentHtml: string;
+    /** registered vendor the memo concerns */
+    vendor?: { name: string; contact?: string | null } | null;
     from: MemoPerson;
     to: MemoPerson[];
     cc: MemoPerson[];
@@ -221,6 +223,14 @@ export default function MemoPdf({ memo }: { memo: MemoPdfData }) {
                     <MetaRow label="FROM">
                         <Person p={memo.from} />
                     </MetaRow>
+                    {memo.vendor && (
+                        <MetaRow label="VENDOR">
+                            <Text style={s.personLine}>
+                                <Text style={s.personName}>{memo.vendor.name}</Text>
+                                {memo.vendor.contact ? <Text style={s.personRole}>{`  ·  ${memo.vendor.contact}`}</Text> : null}
+                            </Text>
+                        </MetaRow>
+                    )}
                     <MetaRow label="SUBJECT" last>
                         <Text style={s.subject}>{memo.title}</Text>
                     </MetaRow>

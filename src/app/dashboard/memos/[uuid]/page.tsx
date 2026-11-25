@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import {
     Calendar,
     Building,
+    Building2,
     FileText,
     Clock,
     CheckCircle2,
@@ -35,6 +36,7 @@ import AddAttachmentButton from '@/components/memos/AddAttachmentButton';
 import { getRecipients, getManagers, getConsultations, isCurrentUserApproverGroupMember, getMemoReplies, isMemoReplyParticipant } from '@/lib/actions';
 import MemoRepliesThread, { MemoReplyButton } from '@/components/memos/MemoReplies';
 import CommentContent from '@/components/memos/CommentContent';
+import { getVendorOption } from '@/lib/vendor-data';
 
 export default async function MemoDetailsPage({
     params,
@@ -111,6 +113,9 @@ export default async function MemoDetailsPage({
     ) as any[];
 
     const financeProcessingRecord = financeProcessing[0] || null;
+
+    // Registered vendor named on the memo (shared Staff Portal vendor list)
+    const memoVendor = memo.vendor_id ? await getVendorOption(Number(memo.vendor_id)) : null;
 
     // Payments made against this memo (part payments each have their own voucher)
     const financePayments = financeProcessingRecord
@@ -698,6 +703,26 @@ export default async function MemoDetailsPage({
                                 dangerouslySetInnerHTML={{ __html: memo.content }}
                             />
                         </div>
+
+                        {memoVendor && (
+                            <div className="mt-6 flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3.5">
+                                <div className="w-8 h-8 rounded-lg bg-[#0b2a5b] text-white flex items-center justify-center shrink-0">
+                                    <Building2 size={15} />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Vendor</p>
+                                    <p className="text-sm font-black text-[#0b2a5b] break-words">
+                                        {memoVendor.name}
+                                        {!memoVendor.isActive && <span className="ml-2 text-[9px] font-black uppercase tracking-widest text-slate-400">(deactivated)</span>}
+                                    </p>
+                                    {(memoVendor.email || memoVendor.phone || memoVendor.address) && (
+                                        <p className="text-[11px] font-medium text-slate-500 break-words">
+                                            {[memoVendor.email, memoVendor.phone, memoVendor.address].filter(Boolean).join(' · ')}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Unified Budget Details Section (if applicable) */}
                         {budgetItems.length > 0 && (

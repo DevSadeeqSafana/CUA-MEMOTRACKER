@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import VendorPicker from '@/components/vendors/VendorPicker';
+import type { VendorOption } from '@/lib/vendor-data';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -27,6 +29,24 @@ import { cn, formatDate } from '@/lib/utils';
 import Pagination from '@/components/ui/Pagination';
 import { updateFinanceMemoProcessingStatus } from '@/lib/actions';
 import toast from 'react-hot-toast';
+
+
+// Vendor attached to a finance queue row (Finance's choice, else the memo's vendor)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function vendorFromRow(memo: any): VendorOption | null {
+    if (!memo?.vendor_id) return null;
+    return {
+        id: Number(memo.vendor_id),
+        name: memo.vendor_name || `Vendor #${memo.vendor_id}`,
+        email: memo.vendor_email || null,
+        phone: memo.vendor_phone || null,
+        address: memo.vendor_address || null,
+        bankName: memo.vendor_bank_name || null,
+        accountName: memo.vendor_account_name || null,
+        accountNumber: memo.vendor_account_number || null,
+        isActive: memo.vendor_is_active === undefined ? true : Boolean(Number(memo.vendor_is_active)),
+    };
+}
 
 const FINANCE_QUEUE_PAGE_SIZE = 10;
 
@@ -82,6 +102,7 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
     const [processingNotes, setProcessingNotes] = useState<string>('');
     const [payeeName, setPayeeName] = useState<string>('');
     const [payeeAddress, setPayeeAddress] = useState<string>('');
+    const [payeeVendor, setPayeeVendor] = useState<VendorOption | null>(null);
     const [totalAmount, setTotalAmount] = useState<string>('');
     const [payAmount, setPayAmount] = useState<string>('');
     const [paymentNote, setPaymentNote] = useState<string>('');
@@ -115,7 +136,8 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                 const creatorMatch = memo.creator_name?.toLowerCase().includes(q);
                 const voucherMatch = memo.voucher_number?.toLowerCase().includes(q)
                     || memoPayments(memo).some(p => p.voucher_number?.toLowerCase().includes(q))
-                    || memo.payee_name?.toLowerCase().includes(q);
+                    || memo.payee_name?.toLowerCase().includes(q)
+                    || memo.vendor_name?.toLowerCase().includes(q);
                 const catMatch = memo.category?.toLowerCase().includes(q);
                 if (!titleMatch && !refMatch && !creatorMatch && !voucherMatch && !catMatch) {
                     return false;
@@ -134,12 +156,15 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
     const openProcessingModal = (memo: any) => {
         setActiveModalMemo(memo);
         setProcessingStatus(memo.processing_status || 'Pending Processing');
-        setBankName(memo.bank_name || '');
-        setAccountName(memo.account_name || '');
-        setAccountNumber(memo.account_number || '');
+        // Saved details win; otherwise pre-fill from the vendor (Finance's choice, else the memo's)
+        const vendor = vendorFromRow(memo);
+        setPayeeVendor(vendor);
+        setBankName(memo.bank_name || vendor?.bankName || '');
+        setAccountName(memo.account_name || vendor?.accountName || '');
+        setAccountNumber(memo.account_number || vendor?.accountNumber || '');
         setProcessingNotes(memo.processing_notes || '');
-        setPayeeName(memo.payee_name || '');
-        setPayeeAddress(memo.payee_address || '');
+        setPayeeName(memo.payee_name || vendor?.name || '');
+        setPayeeAddress(memo.payee_address || vendor?.address || '');
         const total = memoTotal(memo);
         setTotalAmount(total > 0 ? String(total) : '');
         setPayAmount('');
@@ -205,7 +230,7 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                 status: processingStatus as any,
                 notes: processingNotes,
                 account: { bankName, accountName, accountNumber },
-                payee: { name: payeeName, address: payeeAddress },
+                payee: { name: payeeName, address: payeeAddress, vendorId: payeeVendor?.id ?? null },
                 totalAmount: totalAmount === '' ? null : totalAmount,
                 payment: paying ? { amount: payAmount, note: paymentNote } : null,
             });
@@ -468,8 +493,8 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                                                             {amount - paid > 0 && <span className="text-violet-600"> · Bal {naira(amount - paid)}</span>}
                                                         </span>
                                                     )}
-                                                    {memo.payee_name && (
-                                                        <span className="text-[10px] text-slate-500 font-semibold line-clamp-1">To: {memo.payee_name}</span>
+                                                    {(memo.payee_name || memo.vendor_name) && (
+                                                        <span className="text-[10px] text-slate-500 font-semibold line-clamp-1">To: {memo.payee_name || memo.vendor_name}</span>
                                                     )}
                                                     {memo.budget_items_count > 0 && (
                                                         <span className="text-[10px] text-slate-400 font-semibold">
@@ -575,6 +600,27 @@ export default function AccountantProcessingView({ initialMemos }: AccountantPro
                                             </span>
                                         </div>
                                         <div className="space-y-3">
+                                            <div>
+                                                <span className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Registered vendor</span>
+                                                <VendorPicker
+                                                    value={payeeVendor}
+                                                    compact
+                                                    canManage
+                                                    placeholder="Search vendors to fill in the payee…"
+                                                    onChange={v => {
+                                                        setPayeeVendor(v);
+                                                        if (!v) return;
+                                                        setPayeeName(v.name);
+                                                        if (v.address) setPayeeAddress(v.address);
+                                                        if (v.bankName) setBankName(v.bankName);
+                                                        if (v.accountName) setAccountName(v.accountName);
+                                                        if (v.accountNumber) setAccountNumber(v.accountNumber);
+                                                    }}
+                                                />
+                                                {activeModalMemo?.memo_vendor_id && payeeVendor && payeeVendor.id !== Number(activeModalMemo.memo_vendor_id) && (
+                                                    <p className="mt-1 text-[10px] font-semibold text-amber-600">Different from the vendor named on the memo.</p>
+                                                )}
+                                            </div>
                                             <div>
                                                 <label htmlFor="fp-payee-name" className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Name</label>
                                                 <input

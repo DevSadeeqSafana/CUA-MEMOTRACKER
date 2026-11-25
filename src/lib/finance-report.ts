@@ -18,6 +18,8 @@ export interface FinanceReportFilters {
     to?: string;        // YYYY-MM-DD, memos routed on/before this day
     status?: string;    // one of FINANCE_STATUSES
     category?: string;  // budget category
+    vendorId?: number;  // registered vendor (Finance's choice, else the memo's vendor)
+    createdBy?: number; // only memos raised by this user (staff dashboard)
 }
 
 export interface FinanceObligation {
@@ -28,6 +30,7 @@ export interface FinanceObligation {
     department: string | null;
     category: string;
     payee: string | null;
+    vendorId: number | null;
     status: string;
     expected: number;   // naira
     paid: number;
@@ -45,8 +48,12 @@ export interface FinanceBreakdownRow {
     outstanding: number;
 }
 
+export interface FinanceVendorRow extends FinanceBreakdownRow {
+    vendorId: number | null;
+}
+
 export interface FinanceReport {
-    filters: Required<FinanceReportFilters>;
+    filters: Required<Omit<FinanceReportFilters, 'vendorId' | 'createdBy'>> & Pick<FinanceReportFilters, 'vendorId' | 'createdBy'>;
     categories: string[];
     kpis: {
         totalExpected: number;
@@ -69,6 +76,7 @@ export interface FinanceReport {
     byStatus: FinanceBreakdownRow[];
     byCategory: FinanceBreakdownRow[];
     byDepartment: FinanceBreakdownRow[];
+    byVendor: FinanceVendorRow[];
     paymentsByMonth: { month: string; label: string; count: number; amount: number }[];
     topOutstanding: FinanceObligation[];
     obligations: FinanceObligation[];
@@ -90,8 +98,11 @@ const kobo = (v: unknown) => Math.round((Number(v) || 0) * 100);
 const naira = (k: number) => k / 100;
 const DAY_MS = 86_400_000;
 
-function cleanFilters(f: FinanceReportFilters): Required<FinanceReportFilters> {
+function cleanFilters(f: FinanceReportFilters): FinanceReport['filters'] {
+    const posInt = (v: unknown) => (Number.isInteger(v) && (v as number) > 0 ? (v as number) : undefined);
     return {
+        vendorId: posInt(f.vendorId),
+        createdBy: posInt(f.createdBy),
         from: f.from && DATE_RE.test(f.from) ? f.from : '',
         to: f.to && DATE_RE.test(f.to) ? f.to : '',
         status: f.status && (FINANCE_STATUSES as readonly string[]).includes(f.status) ? f.status : '',
@@ -114,10 +125,14 @@ export async function getFinanceReport(input: FinanceReportFilters = {}): Promis
         where.push(`COALESCE(NULLIF(CASE WHEN bi.budget_category = 'Others' THEN bi.other_category ELSE bi.budget_category END, ''), 'Uncategorised') = ?`);
         params.push(filters.category);
     }
+    if (filters.vendorId) { where.push('COALESCE(fp.vendor_id, m.vendor_id) = ?'); params.push(filters.vendorId); }
+    if (filters.createdBy) { where.push('m.created_by = ?'); params.push(filters.createdBy); }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
     const rows = await query(`
-        SELECT fp.id AS processing_id, fp.status, fp.payee_name, fp.total_amount, fp.created_at AS routed_at,
+        SELECT fp.id AS processing_id, fp.status, fp.total_amount, fp.created_at AS routed_at,
+               COALESCE(NULLIF(fp.payee_name, ''), v.vendor_name) AS payee_name,
+               v.vendor_id, v.vendor_name,
                m.uuid, m.reference_number, m.title, m.department,
                COALESCE(NULLIF(CASE WHEN bi.budget_category = 'Others' THEN bi.other_category ELSE bi.budget_category END, ''), 'Uncategorised') AS category,
                (SELECT SUM(bit.total) FROM memo_budget_items bit WHERE bit.memo_id = m.id) AS budget_total,
@@ -126,6 +141,7 @@ export async function getFinanceReport(input: FinanceReportFilters = {}): Promis
         FROM memo_finance_processing fp
         JOIN memos m ON m.id = fp.memo_id
         LEFT JOIN memo_budget_info bi ON bi.memo_id = m.id
+        LEFT JOIN inventory_vendor v ON v.vendor_id = COALESCE(fp.vendor_id, m.vendor_id)
         ${whereSql}
         ORDER BY fp.created_at ASC
     `, params) as Row[];
@@ -145,6 +161,7 @@ export async function getFinanceReport(input: FinanceReportFilters = {}): Promis
     const byStatus = new Map<string, Acc>(FINANCE_STATUSES.map(s => [s, blank()]));
     const byCategory = new Map<string, Acc>();
     const byDepartment = new Map<string, Acc>();
+    const byVendor = new Map<string, Acc & { vendorId: number | null; label: string }>();
     const add = (map: Map<string, Acc>, key: string, e: number, p: number, o: number) => {
         const a = map.get(key) ?? blank();
         a.memos += 1; a.expected += e; a.paid += p; a.outstanding += o;
@@ -183,6 +200,10 @@ export async function getFinanceReport(input: FinanceReportFilters = {}): Promis
             if (o > 0 && (oldestUnpaidDays === null || days > oldestUnpaidDays)) oldestUnpaidDays = days;
             add(byCategory, r.category, e, p, o);
             add(byDepartment, r.department || 'Unspecified', e, p, o);
+            const vKey = r.vendor_id ? `v${r.vendor_id}` : 'none';
+            const va = byVendor.get(vKey) ?? { ...blank(), vendorId: r.vendor_id ? Number(r.vendor_id) : null, label: r.vendor_name || 'No registered vendor' };
+            va.memos += 1; va.expected += e; va.paid += p; va.outstanding += o;
+            byVendor.set(vKey, va);
         }
         add(byStatus, r.status || 'Pending Processing', isRejected ? 0 : e, p, o);
 
@@ -194,6 +215,7 @@ export async function getFinanceReport(input: FinanceReportFilters = {}): Promis
             department: r.department,
             category: r.category,
             payee: r.payee_name,
+            vendorId: r.vendor_id ? Number(r.vendor_id) : null,
             status: r.status,
             expected: naira(e),
             paid: naira(p),
@@ -223,10 +245,12 @@ export async function getFinanceReport(input: FinanceReportFilters = {}): Promis
         `, [...processingIds, `${monthKeys[0]}-01 00:00:00`]) as Row[];
         recentRows = await query(`
             SELECT p.id, p.paid_at, p.voucher_number, p.amount, p.payment_note,
-                   m.uuid, m.reference_number, m.title, fp.payee_name
+                   m.uuid, m.reference_number, m.title,
+                   COALESCE(NULLIF(fp.payee_name, ''), v.vendor_name) AS payee_name
             FROM memo_finance_payments p
             JOIN memo_finance_processing fp ON fp.id = p.processing_id
             JOIN memos m ON m.id = fp.memo_id
+            LEFT JOIN inventory_vendor v ON v.vendor_id = COALESCE(fp.vendor_id, m.vendor_id)
             WHERE p.processing_id IN (${placeholders})
             ORDER BY p.paid_at DESC, p.id DESC
             LIMIT 20
@@ -272,6 +296,9 @@ export async function getFinanceReport(input: FinanceReportFilters = {}): Promis
         byStatus: toRows(byStatus).filter(r => r.memos > 0),
         byCategory: toRows(byCategory).sort((a, b) => b.expected - a.expected),
         byDepartment: toRows(byDepartment).sort((a, b) => b.expected - a.expected),
+        byVendor: Array.from(byVendor.values())
+            .map(a => ({ vendorId: a.vendorId, label: a.label, memos: a.memos, expected: naira(a.expected), paid: naira(a.paid), outstanding: naira(a.outstanding) }))
+            .sort((a, b) => (a.vendorId === null ? 1 : 0) - (b.vendorId === null ? 1 : 0) || b.expected - a.expected),
         paymentsByMonth,
         topOutstanding: openObligations.slice(0, 20),
         obligations: [...obligations].sort((a, b) => b.balance - a.balance),
