@@ -1596,126 +1596,252 @@ export async function getConsultations(memoId: number) {
 }
 
 // ─── MEMO REPLIES ────────────────────────────────────────────────────────────
-// A reviewer may reply to the memo's creator before deciding: the pending
-// approver at the current step (line manager, approver or final approver), or a
-// recipient who has not acknowledged the memo yet. Each conversation is private
-// between the creator and that reviewer; the creator can answer in any of them.
+// Email-style replies on a memo. Anyone taking part in the memo (creator, approvers,
+// recipients, people it was forwarded to, people in a reply) can reply. A reply has
+// its own To / CC / BCC list: To defaults to the memo's sender but can be changed to
+// anyone, and more people can be added. A reply may answer an earlier reply
+// (parent_id), so replies form threads. Recipients of a reply become participants
+// of the memo, so they can reply again or forward the memo onward.
+// A reply is visible to its author and its recipients; BCC recipients are visible
+// only to the author and to themselves.
 
 const MAX_REPLY_HTML_LENGTH = 20000;
+const MAX_REPLY_RECIPIENTS = 50;
 
-// Can this user start a reply on the memo right now? (before their decision)
-async function canStartMemoReply(memoId: number, userId: number) {
-    const rows = await query(`
-        SELECT m.created_by, m.status,
-               (SELECT a.approver_id FROM memo_approvals a
-                 WHERE a.memo_id = m.id AND a.status = 'Pending'
-                 ORDER BY a.step_order ASC LIMIT 1) AS pending_approver_id,
-               EXISTS (SELECT 1 FROM memo_recipients r
-                        WHERE r.memo_id = m.id AND r.recipient_id = ? AND r.acknowledged_at IS NULL) AS unacknowledged_recipient
-        FROM memos m WHERE m.id = ?
-    `, [userId, memoId]) as any[];
-    const memo = rows[0];
-    if (!memo || memo.created_by === userId || memo.status === 'Draft') return false;
-    if (memo.pending_approver_id === userId) return true;
-    return memo.status === 'Distributed' && Boolean(memo.unacknowledged_recipient);
+export type ReplyRecipientType = 'To' | 'CC' | 'BCC';
+
+export interface MemoReplyRecipient {
+    user_id: number;
+    name: string;
+    department: string | null;
+    type: ReplyRecipientType;
 }
 
-export async function getMemoReplies(memoId: number) {
+export interface MemoReplyMessage {
+    id: number;
+    parent_id: number | null;
+    author_id: number;
+    author_name: string;
+    message: string;
+    created_at: string;
+    recipients: MemoReplyRecipient[];
+    /** true when the viewer received this reply and has not opened the memo since */
+    unread: boolean;
+}
+
+export interface PostMemoReplyInput {
+    to: number[];
+    cc?: number[];
+    bcc?: number[];
+    message: string;
+    /** the reply being answered or forwarded; omit to reply to the memo itself */
+    parentId?: number | null;
+    /** 'forward' only changes the wording of notifications and the audit log */
+    mode?: 'reply' | 'forward';
+}
+
+/** Is the user part of this memo's workflow (and therefore allowed to reply)? */
+async function isMemoParticipant(memoId: number, userId: number) {
+    const rows = await query(`
+        SELECT
+            (m.created_by = ?)
+            OR EXISTS (SELECT 1 FROM memo_approvals a WHERE a.memo_id = m.id AND a.approver_id = ?)
+            OR EXISTS (SELECT 1 FROM memo_recipients r WHERE r.memo_id = m.id AND r.recipient_id = ?)
+            OR EXISTS (SELECT 1 FROM memo_consultations c WHERE c.memo_id = m.id AND (c.from_user_id = ? OR c.to_user_id = ?))
+            OR EXISTS (SELECT 1 FROM memo_replies mr
+                       LEFT JOIN memo_reply_recipients rr ON rr.reply_id = mr.id AND rr.user_id = ?
+                       WHERE mr.memo_id = m.id AND (mr.author_id = ? OR rr.user_id IS NOT NULL)) AS participant
+        FROM memos m WHERE m.id = ?
+    `, [userId, userId, userId, userId, userId, userId, userId, memoId]) as any[];
+    return Boolean(rows[0]?.participant);
+}
+
+/** Has the user received (or written) any reply on this memo? Used by the memo page. */
+export async function isMemoReplyParticipant(memoId: number) {
+    const session = await auth();
+    if (!session?.user?.id) return false;
+    const userId = parseInt(session.user.id);
+    try {
+        const rows = await query(`
+            SELECT 1 FROM memo_replies mr
+            LEFT JOIN memo_reply_recipients rr ON rr.reply_id = mr.id AND rr.user_id = ?
+            WHERE mr.memo_id = ? AND (mr.author_id = ? OR rr.user_id IS NOT NULL)
+            LIMIT 1
+        `, [userId, memoId, userId]) as any[];
+        return rows.length > 0;
+    } catch {
+        return false;
+    }
+}
+
+/** Replies on a memo that the signed-in user may see, oldest first. */
+export async function getMemoReplies(memoId: number): Promise<MemoReplyMessage[]> {
     const session = await auth();
     if (!session?.user?.id) return [];
     const userId = parseInt(session.user.id);
     try {
-        const memoRows = await query('SELECT created_by FROM memos WHERE id = ?', [memoId]) as any[];
-        if (memoRows.length === 0) return [];
-        const isCreator = memoRows[0].created_by === userId;
-        const rows = await query(`
-            SELECT r.id, r.memo_id, r.thread_user_id, r.author_id, r.message, r.created_at,
+        const replies = await query(`
+            SELECT mr.id, mr.parent_id, mr.author_id, mr.message, mr.created_at,
                    COALESCE(CONCAT(ahs.FirstName, ' ', IFNULL(CONCAT(ahs.MiddleName, ' '), ''), ahs.Surname), au.username) AS author_name,
-                   COALESCE(CONCAT(ths.FirstName, ' ', IFNULL(CONCAT(ths.MiddleName, ' '), ''), ths.Surname), tu.username) AS thread_user_name
-            FROM memo_replies r
-            JOIN memo_system_users au ON au.id = r.author_id
+                   me.user_id IS NOT NULL AND me.read_at IS NULL AS unread
+            FROM memo_replies mr
+            JOIN memo_system_users au ON au.id = mr.author_id
             LEFT JOIN hr_staff ahs ON au.staff_id = ahs.StaffID
-            JOIN memo_system_users tu ON tu.id = r.thread_user_id
-            LEFT JOIN hr_staff ths ON tu.staff_id = ths.StaffID
-            WHERE r.memo_id = ? ${isCreator ? '' : 'AND r.thread_user_id = ?'}
-            ORDER BY r.created_at ASC, r.id ASC
-        `, isCreator ? [memoId] : [memoId, userId]) as any[];
-        return rows;
+            LEFT JOIN memo_reply_recipients me ON me.reply_id = mr.id AND me.user_id = ?
+            WHERE mr.memo_id = ? AND (mr.author_id = ? OR me.user_id IS NOT NULL)
+            ORDER BY mr.created_at ASC, mr.id ASC
+        `, [userId, memoId, userId]) as any[];
+        if (replies.length === 0) return [];
+
+        const ids = replies.map(r => r.id);
+        const recipients = await query(`
+            SELECT rr.reply_id, rr.user_id, rr.recipient_type,
+                   COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) AS name,
+                   u.department
+            FROM memo_reply_recipients rr
+            JOIN memo_system_users u ON u.id = rr.user_id
+            LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+            WHERE rr.reply_id IN (${ids.map(() => '?').join(',')})
+            ORDER BY FIELD(rr.recipient_type, 'To', 'CC', 'BCC'), name ASC
+        `, ids) as any[];
+
+        return replies.map(r => ({
+            id: r.id,
+            parent_id: r.parent_id ?? null,
+            author_id: r.author_id,
+            author_name: r.author_name,
+            message: r.message,
+            created_at: new Date(r.created_at).toISOString(),
+            unread: Boolean(r.unread),
+            recipients: recipients
+                .filter(x => x.reply_id === r.id)
+                // BCC stays hidden from everyone except the author and the BCC'd person
+                .filter(x => x.recipient_type !== 'BCC' || r.author_id === userId || x.user_id === userId)
+                .map(x => ({ user_id: x.user_id, name: x.name, department: x.department, type: x.recipient_type })),
+        }));
     } catch (error: any) {
-        // Table not migrated yet: behave as "no replies" instead of breaking the memo page
-        if (error?.code !== 'ER_NO_SUCH_TABLE') console.error('getMemoReplies error:', error);
+        // Tables not migrated yet: behave as "no replies" instead of breaking the memo page
+        if (error?.code !== 'ER_NO_SUCH_TABLE' && error?.code !== 'ER_BAD_FIELD_ERROR') console.error('getMemoReplies error:', error);
         return [];
     }
 }
 
-/**
- * Post a reply.
- * - Reviewer: omit threadUserId. Starting a conversation requires being the pending
- *   approver (or an unacknowledged recipient); continuing an existing one is always allowed.
- * - Creator: pass threadUserId to answer that reviewer's conversation.
- */
-export async function postMemoReply(memoId: number, message: string, threadUserId?: number) {
+/** Marks the replies the signed-in user received on this memo as read. */
+export async function markMemoRepliesRead(memoId: number) {
+    const session = await auth();
+    if (!session?.user?.id) return;
+    try {
+        await query(`
+            UPDATE memo_reply_recipients rr JOIN memo_replies mr ON mr.id = rr.reply_id
+            SET rr.read_at = CURRENT_TIMESTAMP
+            WHERE mr.memo_id = ? AND rr.user_id = ? AND rr.read_at IS NULL
+        `, [memoId, parseInt(session.user.id)]);
+    } catch (error: any) {
+        if (error?.code !== 'ER_NO_SUCH_TABLE') console.error('markMemoRepliesRead error:', error);
+    }
+}
+
+/** Send a reply (or forward a reply) with its own To / CC / BCC recipients. */
+export async function postMemoReply(memoId: number, input: PostMemoReplyInput) {
     const session = await auth();
     if (!session?.user?.id) return { success: false, error: NOT_AUTHORIZED_MESSAGE };
     const userId = parseInt(session.user.id);
 
+    const message = input?.message ?? '';
     const html = isCommentEmpty(message) ? '' : sanitizeCommentHtml(message);
     if (!html) return { success: false, error: 'Write a reply before sending.' };
     if (html.length > MAX_REPLY_HTML_LENGTH) return { success: false, error: 'This reply is too long.' };
 
+    // One entry per person: To wins over CC, CC over BCC. You never send to yourself.
+    const ids = (list: unknown) => Array.isArray(list) ? list.map(Number).filter(n => Number.isInteger(n) && n > 0 && n !== userId) : [];
+    const typeByUser = new Map<number, ReplyRecipientType>();
+    for (const [type, list] of [['To', input.to], ['CC', input.cc], ['BCC', input.bcc]] as const) {
+        for (const id of ids(list)) if (!typeByUser.has(id)) typeByUser.set(id, type);
+    }
+    if (![...typeByUser.values()].includes('To')) return { success: false, error: 'Add at least one person in the "To" field.' };
+    if (typeByUser.size > MAX_REPLY_RECIPIENTS) return { success: false, error: `A reply can go to at most ${MAX_REPLY_RECIPIENTS} people.` };
+
+    const mode = input.mode === 'forward' ? 'forward' : 'reply';
+    const parentId = input.parentId ? Number(input.parentId) : null;
+
     try {
-        const memoRows = await query('SELECT id, uuid, title, created_by, status FROM memos WHERE id = ?', [memoId]) as any[];
+        const memoRows = await query('SELECT id, uuid, title, status FROM memos WHERE id = ?', [memoId]) as any[];
         const memo = memoRows[0];
         if (!memo) return { success: false, error: 'Memo not found.' };
-        const isCreator = memo.created_by === userId;
+        if (memo.status === 'Draft') return { success: false, error: 'You can reply once the memo has been submitted.' };
 
-        let threadId: number;
-        if (isCreator) {
-            if (!threadUserId) return { success: false, error: 'Choose the conversation to reply to.' };
-            const existing = await query(
-                'SELECT 1 FROM memo_replies WHERE memo_id = ? AND thread_user_id = ? LIMIT 1',
-                [memoId, threadUserId]
-            ) as any[];
-            if (existing.length === 0) return { success: false, error: 'You can only answer a reply someone sent you.' };
-            threadId = threadUserId;
-        } else {
-            const existing = await query(
-                'SELECT 1 FROM memo_replies WHERE memo_id = ? AND thread_user_id = ? LIMIT 1',
-                [memoId, userId]
-            ) as any[];
-            if (existing.length === 0 && !(await canStartMemoReply(memoId, userId))) {
-                return { success: false, error: 'You can reply to this memo only before making your decision on it.' };
-            }
-            threadId = userId;
+        if (!(await isMemoParticipant(memoId, userId))) {
+            return { success: false, error: 'Only people involved in this memo can reply to it.' };
         }
 
-        const result = await query(
-            'INSERT INTO memo_replies (memo_id, thread_user_id, author_id, message) VALUES (?, ?, ?, ?)',
-            [memoId, threadId, userId, html]
-        ) as any;
+        if (parentId !== null) {
+            // The reply being answered must be on this memo and visible to the user
+            const parent = await query(`
+                SELECT 1 FROM memo_replies mr
+                LEFT JOIN memo_reply_recipients rr ON rr.reply_id = mr.id AND rr.user_id = ?
+                WHERE mr.id = ? AND mr.memo_id = ? AND (mr.author_id = ? OR rr.user_id IS NOT NULL)
+            `, [userId, parentId, memoId, userId]) as any[];
+            if (parent.length === 0) return { success: false, error: 'The message you are replying to was not found.' };
+        }
+
+        const recipientIds = [...typeByUser.keys()];
+        const users = await query(`
+            SELECT u.id, COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) AS name
+            FROM memo_system_users u LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+            WHERE u.is_active = 1 AND u.id IN (${recipientIds.map(() => '?').join(',')})
+        `, recipientIds) as any[];
+        if (users.length !== recipientIds.length) return { success: false, error: 'One of the recipients is not an active user. Remove them and try again.' };
+        const nameById = new Map<number, string>(users.map(u => [u.id, u.name]));
+
+        const connection = await pool.getConnection();
+        let replyId: number;
+        try {
+            await connection.beginTransaction();
+            const [result] = await connection.execute(
+                'INSERT INTO memo_replies (memo_id, parent_id, author_id, message) VALUES (?, ?, ?, ?)',
+                [memoId, parentId, userId, html]
+            ) as any;
+            replyId = result.insertId;
+            for (const [id, type] of typeByUser) {
+                await connection.execute(
+                    'INSERT INTO memo_reply_recipients (reply_id, user_id, recipient_type) VALUES (?, ?, ?)',
+                    [replyId, id, type]
+                );
+            }
+            await connection.commit();
+        } catch (e) {
+            await connection.rollback();
+            throw e;
+        } finally {
+            connection.release();
+        }
 
         const authorName = await getUserFullName(userId);
-        const notifyUserId = isCreator ? threadId : memo.created_by;
-        await query(
-            'INSERT INTO notifications (user_id, memo_id, message) VALUES (?, ?, ?)',
-            [notifyUserId, memoId, isCreator
-                ? `${authorName} answered your reply on the memo "${memo.title}".`
-                : `${authorName} replied to your memo "${memo.title}".`]
-        );
+        const verb = mode === 'forward' ? 'forwarded a reply on' : 'replied on';
+        for (const id of recipientIds) {
+            await query(
+                'INSERT INTO notifications (user_id, memo_id, message) VALUES (?, ?, ?)',
+                [id, memoId, `${authorName} ${verb} the memo "${memo.title}" and included you.`]
+            );
+        }
 
+        const namesOf = (type: ReplyRecipientType) => recipientIds.filter(id => typeByUser.get(id) === type).map(id => nameById.get(id));
         await query(
             'INSERT INTO audit_logs (user_id, action, table_name, record_id, new_value) VALUES (?, ?, ?, ?, ?)',
-            [userId, 'MEMO_REPLY', 'memo_replies', result.insertId, JSON.stringify({ memoId, threadUserId: threadId })]
+            [userId, mode === 'forward' ? 'FORWARD_MEMO_REPLY' : 'MEMO_REPLY', 'memo_replies', replyId,
+                // BCC names are left out of the audit trail on purpose; only the count is kept
+                JSON.stringify({ memoId, parentId, to: namesOf('To'), cc: namesOf('CC'), bccCount: namesOf('BCC').length })]
         );
 
         revalidatePath(`/dashboard/memos/${memo.uuid}`);
-        return { success: true };
+        revalidatePath('/dashboard/tasks');
+        return { success: true, replyId };
     } catch (error: any) {
         console.error('postMemoReply error:', error);
-        if (error?.code === 'ER_NO_SUCH_TABLE') {
+        if (error?.code === 'ER_NO_SUCH_TABLE' || error?.code === 'ER_BAD_FIELD_ERROR') {
             return { success: false, error: 'Replies are not enabled yet. Ask the administrator to run the latest migration.' };
         }
-        return { success: false, error: 'Failed to send the reply.' };
+        return { success: false, error: friendlyError(error, "We couldn't send the reply. Please try again.") };
     }
 }
 
@@ -1856,8 +1982,15 @@ export async function getSidebarCounts() {
             WHERE fp.status IN ('Pending Processing', 'In Progress', 'Partially Paid')
         `) as any[];
 
+        // Memos with replies this user has not read yet (table may not be migrated yet)
+        const [unreadReplies] = await query(`
+            SELECT COUNT(DISTINCT mr.memo_id) as count
+            FROM memo_reply_recipients rr JOIN memo_replies mr ON mr.id = rr.reply_id
+            WHERE rr.user_id = ? AND rr.read_at IS NULL
+        `, [userId]).catch(() => [{ count: 0 }]) as any[];
+
         const actions = (pendingApprovals?.count || 0) + (pendingConsultations?.count || 0);
-        const inbox = (unreadInbox?.count || 0) + actions;
+        const inbox = (unreadInbox?.count || 0) + actions + (unreadReplies?.count || 0);
 
         return {
             inbox,

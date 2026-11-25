@@ -33,13 +33,9 @@ interface ReviewerDecisionPanelProps {
     availableManagers?: any[];
     // Approver-group members may also approve and send the memo to the Accountant
     canSendToAccountant?: boolean;
-    // Reply to the memo's creator before deciding
-    canReply?: boolean;
-    creatorName?: string;
 }
 
 import ConsultationThread from '@/components/memos/ConsultationThread';
-import { MemoReplyButton } from '@/components/memos/MemoReplies';
 import LineManagerRoutingAdjustment from '@/components/memos/LineManagerRoutingAdjustment';
 
 export default function ReviewerDecisionPanel({
@@ -56,9 +52,7 @@ export default function ReviewerDecisionPanel({
     initialApprovers,
     availableUsers,
     availableManagers,
-    canSendToAccountant = false,
-    canReply = false,
-    creatorName = 'the sender'
+    canSendToAccountant = false
 }: ReviewerDecisionPanelProps) {
     const [isLoading, setIsLoading] = useState(false);
     const [isCompleted, setIsCompleted] = useState(false);
@@ -162,7 +156,6 @@ export default function ReviewerDecisionPanel({
                                 buttonOnly
                             />
                         )}
-                        {canReply && <MemoReplyButton memoId={memoId} creatorName={creatorName} />}
                     </div>
                 </div>
 

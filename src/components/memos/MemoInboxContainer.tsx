@@ -439,6 +439,15 @@ export default function MemoInboxContainer({ memos, initialFolder = 'inbox', isA
                                                 Input Requested
                                             </span>
                                         )}
+                                        {memo.has_reply && (
+                                            <span
+                                                title={memo.replied_at ? `Last reply ${formatDate(memo.replied_at)}` : undefined}
+                                                className="bg-sky-600 text-white text-[8px] font-black uppercase tracking-[0.2em] px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-sm shrink-0"
+                                            >
+                                                <MessageSquare size={9} />
+                                                Reply
+                                            </span>
+                                        )}
                                         {/* My decision (Decisions folder) */}
                                         {memo.my_decision && (
                                             <span

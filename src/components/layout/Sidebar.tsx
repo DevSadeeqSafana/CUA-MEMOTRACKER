@@ -18,7 +18,8 @@ import {
     Landmark,
     ArrowRight,
     CheckCircle2,
-    Users
+    Users,
+    Receipt
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getSidebarCounts } from '@/lib/actions';
@@ -81,6 +82,7 @@ export default function Sidebar({ userRoles }: { userRoles: string[] }) {
         { href: '/dashboard', label: 'Overview', icon: CheckSquare, roles: [] },
         { href: '/dashboard/tasks?folder=inbox', label: 'Inbox', icon: Inbox, roles: [], badgeKey: 'inbox' as const },
         { href: '/dashboard/accountant', label: 'Finance Queue', icon: Landmark, roles: ['Accountant', 'Administrator'], badgeKey: 'accountant_queue' as const },
+        { href: '/dashboard/finance-reports', label: 'Finance Reports', icon: Receipt, roles: ['Accountant', 'Administrator', 'VC'] },
         { href: '/dashboard/tasks?folder=important', label: 'Important', icon: Star, roles: [], badgeKey: 'important' as const },
         { href: '/dashboard/tasks?folder=actions', label: 'Action Queue', icon: AlertCircle, roles: [], badgeKey: 'actions' as const },
         { href: '/dashboard/tasks?folder=decided', label: 'My Decisions', icon: CheckCircle2, roles: [] },

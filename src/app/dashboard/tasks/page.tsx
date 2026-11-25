@@ -105,6 +105,25 @@ export default async function MemoCenterPage({
         LIMIT 100
     `, [userId]) as any[];
 
+    // 6. Memos on which this user received a reply (email-style replies with To/CC/BCC)
+    const repliedTo = await query(`
+        SELECT m.id, m.uuid, m.title, m.reference_number, m.content, m.priority, m.memo_type, m.category, m.status, m.created_at, m.department,
+               COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as creator_name,
+               MAX(mr.created_at) as replied_at,
+               SUM(rr.read_at IS NULL) as unread_replies,
+               (SELECT COUNT(*) FROM memo_budget_info bi WHERE bi.memo_id = m.id) > 0 as is_budget_memo,
+               (SELECT COUNT(*) FROM attachments att WHERE att.memo_id = m.id) as attachment_count
+        FROM memo_reply_recipients rr
+        JOIN memo_replies mr ON mr.id = rr.reply_id
+        JOIN memos m ON m.id = mr.memo_id
+        JOIN memo_system_users u ON m.created_by = u.id
+        LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+        WHERE rr.user_id = ?
+        GROUP BY m.id
+        ORDER BY replied_at DESC
+        LIMIT 200
+    `, [userId]).catch(() => []) as any[];
+
     // --- Unify Memos List ---
     const unifiedMemos: any[] = [];
     const memoIdsSeen = new Set<string>();
@@ -155,6 +174,27 @@ export default async function MemoCenterPage({
         }
     });
 
+    // Add replies received: flag the memo's inbox row if it has one, else list it in the inbox
+    repliedTo.forEach(m => {
+        const unread = Number(m.unread_replies) > 0;
+        const existing = unifiedMemos.find(x => x.id === m.id && x.folder === 'inbox');
+        if (existing) {
+            existing.has_reply = true;
+            existing.replied_at = m.replied_at;
+            existing.is_unread = existing.is_unread || unread;
+        } else if (!memoIdsSeen.has(`reply-${m.id}`)) {
+            memoIdsSeen.add(`reply-${m.id}`);
+            unifiedMemos.push({
+                ...m,
+                folder: 'inbox',
+                is_unread: unread,
+                is_starred: m.priority === 'High',
+                action_type: null,
+                has_reply: true
+            });
+        }
+    });
+
     // Add User Created Memos (Sent and Drafts)
     created.forEach(m => {
         const folderType = m.status === 'Draft' ? 'drafts' : 'sent';
@@ -187,7 +227,7 @@ export default async function MemoCenterPage({
     });
 
     // Sort combined list chronologically (Newest first); decisions sort by when they were made
-    const sortDate = (m: { decided_at?: string | Date; created_at: string | Date }) => new Date(m.decided_at || m.created_at).getTime();
+    const sortDate = (m: { decided_at?: string | Date; replied_at?: string | Date; created_at: string | Date }) => new Date(m.decided_at || m.replied_at || m.created_at).getTime();
     unifiedMemos.sort((a, b) => sortDate(b) - sortDate(a));
 
     return (

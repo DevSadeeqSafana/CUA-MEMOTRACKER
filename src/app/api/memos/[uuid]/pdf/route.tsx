@@ -3,9 +3,13 @@ import { renderToBuffer } from '@react-pdf/renderer';
 import { auth } from '@/auth';
 import { query } from '@/lib/db';
 import MemoPdf, { MemoPdfData } from '@/lib/pdf/MemoPdf';
+import { buildMemoPdfWithAttachments, type PdfAttachment } from '@/lib/pdf/pdf-attachments';
+import { loadMemoAuditTrail } from '@/lib/memo-audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// Attachments are downloaded and merged in, which can take a while for large memos
+export const maxDuration = 120;
 
 // DB rows are untyped mysql2 results
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -66,8 +70,39 @@ export async function GET(request: Request, { params }: { params: Promise<{ uuid
                 [memo.id]
             ) as Promise<Row[]>,
             query('SELECT * FROM memo_budget_items WHERE memo_id = ?', [memo.id]) as Promise<Row[]>,
-            query('SELECT * FROM attachments WHERE memo_id = ?', [memo.id]) as Promise<Row[]>,
+            query(
+                `SELECT a.*, ${PERSON_NAME} as uploader_name
+                 FROM attachments a
+                 LEFT JOIN memo_system_users u ON a.uploaded_by = u.id
+                 LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+                 WHERE a.memo_id = ? ORDER BY a.uploaded_at ASC, a.id ASC`,
+                [memo.id]
+            ) as Promise<Row[]>,
         ]);
+
+        // Log this download first so the PDF's own audit trail includes it
+        await query(
+            'INSERT INTO audit_logs (user_id, action, table_name, record_id, new_value) VALUES (?, ?, ?, ?, ?)',
+            [session.user.id, 'DOWNLOAD_MEMO_PDF', 'memos', memo.id, JSON.stringify({ reference: memo.reference_number })]
+        ).catch(err => console.error('Failed to audit PDF download:', err));
+        const auditTrail = await loadMemoAuditTrail(memo.id);
+
+        // Memo attachments, then documents attached to individual budget lines
+        const fileAttachments: PdfAttachment[] = [
+            ...attachments.map(a => ({
+                name: a.file_name || 'Attachment',
+                url: String(a.file_path || ''),
+                type: a.file_type,
+                size: a.file_size,
+                uploadedBy: a.uploader_name,
+                uploadedAt: a.uploaded_at,
+                note: a.reason,
+            })),
+            ...budgetItems.filter(item => item.attachment_path).map(item => ({
+                name: `Budget line: ${item.name || 'item'} (${decodeURIComponent(String(item.attachment_path).split('/').pop() || 'document')})`,
+                url: String(item.attachment_path),
+            })),
+        ].filter(a => a.url);
 
         const data: MemoPdfData = {
             title: memo.title,
@@ -98,17 +133,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ uuid
                     };
                 }),
             } : null,
-            attachments: attachments.map(a => a.file_name || 'Attachment'),
+            attachments: fileAttachments.map(a => a.name),
+            auditTrail,
             generatedBy: session.user.name || session.user.email || 'Staff',
             generatedAt: new Date(),
         };
 
-        const pdf = await renderToBuffer(<MemoPdf memo={data} />);
-
-        await query(
-            'INSERT INTO audit_logs (user_id, action, table_name, record_id, new_value) VALUES (?, ?, ?, ?, ?)',
-            [session.user.id, 'DOWNLOAD_MEMO_PDF', 'memos', memo.id, JSON.stringify({ reference: memo.reference_number })]
-        ).catch(err => console.error('Failed to audit PDF download:', err));
+        const memoPdf = await renderToBuffer(<MemoPdf memo={data} />);
+        const pdf = await buildMemoPdfWithAttachments(new Uint8Array(memoPdf), fileAttachments, new URL(request.url).origin);
 
         const safeName = String(memo.reference_number || memo.title || 'memo').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'memo';
         return new NextResponse(new Uint8Array(pdf), {
