@@ -5,6 +5,7 @@ import { Bell, Check, Clock, Inbox } from 'lucide-react';
 import { getNotifications, markNotificationAsRead } from '@/lib/actions';
 import { cn, formatDate } from '@/lib/utils';
 import Link from 'next/link';
+import { useVisiblePolling } from '@/hooks/use-visible-polling';
 
 export default function NotificationBell() {
     const [notifications, setNotifications] = useState<any[]>([]);
@@ -17,11 +18,8 @@ export default function NotificationBell() {
         setUnreadCount(data.filter(n => !n.is_read).length);
     };
 
-    useEffect(() => {
-        fetchNotifications();
-        const interval = setInterval(fetchNotifications, 30000); // Polling every 30s
-        return () => clearInterval(interval);
-    }, []);
+    // Every 60 seconds while the tab is visible; opening the bell refreshes too
+    useVisiblePolling(fetchNotifications, 60000);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -41,7 +39,7 @@ export default function NotificationBell() {
     return (
         <div className="relative">
             <button
-                onClick={() => setIsOpen(!isOpen)}
+                onClick={() => { if (!isOpen) fetchNotifications(); setIsOpen(!isOpen); }}
                 aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
                 aria-expanded={isOpen}
                 className={cn(

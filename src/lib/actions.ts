@@ -1941,70 +1941,51 @@ export async function getSidebarCounts() {
     const userId = parseInt(session.user.id);
 
     try {
-        const [unreadInbox] = await query(`
-            SELECT COUNT(*) as count 
-            FROM memo_recipients mr 
-            JOIN memos m ON mr.memo_id = m.id 
-            WHERE mr.recipient_id = ? AND mr.acknowledged_at IS NULL AND m.status = 'Distributed'
-        `, [userId]) as any[];
-
-        const [pendingApprovals] = await query(`
-            SELECT COUNT(*) as count 
-            FROM memo_approvals a
-            JOIN memos m ON a.memo_id = m.id
-            WHERE a.approver_id = ? AND a.status = 'Pending'
-            AND NOT EXISTS (
-                SELECT 1 FROM memo_approvals a2 
-                WHERE a2.memo_id = m.id AND a2.step_order < a.step_order AND a2.status != 'Approved'
-            )
-        `, [userId]) as any[];
-
-        const [pendingConsultations] = await query(`
-            SELECT COUNT(*) as count 
-            FROM memo_consultations c
-            WHERE c.to_user_id = ? AND c.type = 'Forward'
-            AND NOT EXISTS (
-                SELECT 1 FROM memo_consultations r 
-                WHERE r.parent_id = c.id AND r.from_user_id = ? AND r.type = 'Response'
-            )
-        `, [userId, userId]) as any[];
-
-        const [importantCount] = await query(`
-            SELECT COUNT(*) as count 
-            FROM memos m
-            LEFT JOIN memo_recipients mr ON m.id = mr.memo_id AND mr.recipient_id = ?
-            LEFT JOIN memo_approvals a ON m.id = a.memo_id AND a.approver_id = ?
-            WHERE m.priority = 'High' 
-            AND (
-                (mr.recipient_id = ? AND mr.acknowledged_at IS NULL AND m.status = 'Distributed')
-                OR 
-                (a.approver_id = ? AND a.status = 'Pending' AND NOT EXISTS (
-                    SELECT 1 FROM memo_approvals a2 
-                    WHERE a2.memo_id = m.id AND a2.step_order < a.step_order AND a2.status != 'Approved'
-                ))
-            )
-        `, [userId, userId, userId, userId]) as any[];
-
-        const [draftsCount] = await query(`
-            SELECT COUNT(*) as count FROM memos WHERE created_by = ? AND status = 'Draft'
-        `, [userId]) as any[];
-
-        const [sentCount] = await query(`
-            SELECT COUNT(*) as count FROM memos WHERE created_by = ? AND status != 'Draft'
-        `, [userId]) as any[];
-
-        const [accountantQueue] = await query(`
-            SELECT COUNT(*) as count 
-            FROM memo_finance_processing fp
-            WHERE fp.status IN ('Pending Processing', 'In Progress', 'Partially Paid')
-        `) as any[];
-
-        // Memos with replies this user has not read yet (table may not be migrated yet)
-        const [unreadReplies] = await query(`
-            SELECT COUNT(DISTINCT mr.memo_id) as count
-            FROM memo_reply_recipients rr JOIN memo_replies mr ON mr.id = rr.reply_id
-            WHERE rr.user_id = ? AND rr.read_at IS NULL
-        `, [userId]).catch(() => [{ count: 0 }]) as any[];
+        // One query for every count: the sidebar polls this, and each separate query
+        // costs a full round trip to the database.
+        const countsSql = (withReplies: boolean) => `
+            SELECT
+                (SELECT COUNT(*) FROM memo_recipients mr JOIN memos m ON mr.memo_id = m.id
+                  WHERE mr.recipient_id = ? AND mr.acknowledged_at IS NULL AND m.status = 'Distributed') AS unread_inbox,
+                (SELECT COUNT(*) FROM memo_approvals a JOIN memos m ON a.memo_id = m.id
+                  WHERE a.approver_id = ? AND a.status = 'Pending'
+                    AND NOT EXISTS (SELECT 1 FROM memo_approvals a2
+                                     WHERE a2.memo_id = m.id AND a2.step_order < a.step_order AND a2.status != 'Approved')) AS pending_approvals,
+                (SELECT COUNT(*) FROM memo_consultations c
+                  WHERE c.to_user_id = ? AND c.type = 'Forward'
+                    AND NOT EXISTS (SELECT 1 FROM memo_consultations r
+                                     WHERE r.parent_id = c.id AND r.from_user_id = ? AND r.type = 'Response')) AS pending_consultations,
+                (SELECT COUNT(*) FROM memos m
+                   LEFT JOIN memo_recipients mr ON m.id = mr.memo_id AND mr.recipient_id = ?
+                   LEFT JOIN memo_approvals a ON m.id = a.memo_id AND a.approver_id = ?
+                  WHERE m.priority = 'High'
+                    AND ((mr.recipient_id = ? AND mr.acknowledged_at IS NULL AND m.status = 'Distributed')
+                      OR (a.approver_id = ? AND a.status = 'Pending' AND NOT EXISTS (
+                            SELECT 1 FROM memo_approvals a2
+                             WHERE a2.memo_id = m.id AND a2.step_order < a.step_order AND a2.status != 'Approved')))) AS important,
+                (SELECT COUNT(*) FROM memos WHERE created_by = ? AND status = 'Draft') AS drafts,
+                (SELECT COUNT(*) FROM memos WHERE created_by = ? AND status != 'Draft') AS sent,
+                (SELECT COUNT(*) FROM memo_finance_processing fp
+                  WHERE fp.status IN ('Pending Processing', 'In Progress', 'Partially Paid')) AS accountant_queue,
+                ${withReplies
+                    ? `(SELECT COUNT(DISTINCT mr.memo_id) FROM memo_reply_recipients rr JOIN memo_replies mr ON mr.id = rr.reply_id
+                         WHERE rr.user_id = ? AND rr.read_at IS NULL)`
+                    : '0'} AS unread_replies
+        `;
+        const params = [userId, userId, userId, userId, userId, userId, userId, userId, userId, userId];
+        // Reply tables may not be migrated yet on an older database
+        const rows = await query(countsSql(true), [...params, userId])
+            .catch(() => query(countsSql(false), params)) as any[];
+        const c = rows[0] || {};
+        const num = (v: unknown) => Number(v) || 0;
+        const pendingApprovals = { count: num(c.pending_approvals) };
+        const pendingConsultations = { count: num(c.pending_consultations) };
+        const unreadInbox = { count: num(c.unread_inbox) };
+        const unreadReplies = { count: num(c.unread_replies) };
+        const importantCount = { count: num(c.important) };
+        const draftsCount = { count: num(c.drafts) };
+        const sentCount = { count: num(c.sent) };
+        const accountantQueue = { count: num(c.accountant_queue) };
 
         const actions = (pendingApprovals?.count || 0) + (pendingConsultations?.count || 0);
         const inbox = (unreadInbox?.count || 0) + actions + (unreadReplies?.count || 0);

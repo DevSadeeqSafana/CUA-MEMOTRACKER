@@ -21,8 +21,14 @@ export default async function DashboardPage() {
     if (!session?.user) return null;
     const userId = session.user.id;
 
-    // High level metrics
-    const stats = await query(`
+    // Invoice amount, amount paid and outstanding balance: university-wide for Finance,
+    // the VC and administrators; everyone else sees their own memos in the finance queue.
+    const financeWide = canViewFinanceReports(session);
+
+    // Headline counts and the finance summary load together (each is a round trip to the database)
+    const [stats, finance] = await Promise.all([
+        // High level metrics
+        query(`
         SELECT 
             (
                 (SELECT COUNT(*) FROM memo_approvals WHERE approver_id = ? AND status = 'Pending') +
@@ -36,39 +42,14 @@ export default async function DashboardPage() {
              WHERE mr.recipient_id = ? AND mr.acknowledged_at IS NULL AND m.status = 'Distributed') as unread_count,
             (SELECT COUNT(*) FROM memos WHERE created_by = ?) as my_total,
             (SELECT COUNT(*) FROM memos WHERE status = 'Distributed') as university_total
-    `, [userId, userId, userId, userId, userId]) as any[];
+    `, [userId, userId, userId, userId, userId]) as Promise<any[]>,
+        getFinanceReport(financeWide ? {} : { createdBy: Number(userId) }).catch(e => {
+            console.error('Dashboard finance summary failed:', e);
+            return null;
+        }),
+    ]);
 
     const { pending_count, unread_count, my_total, university_total } = stats[0];
-
-    // Invoice amount, amount paid and outstanding balance: university-wide for Finance,
-    // the VC and administrators; everyone else sees their own memos in the finance queue.
-    const financeWide = canViewFinanceReports(session);
-    const finance = await getFinanceReport(financeWide ? {} : { createdBy: Number(userId) }).catch(e => {
-        console.error('Dashboard finance summary failed:', e);
-        return null;
-    });
-
-    // Communication Activity (Last 12 Months)
-    const monthlyStats = await query(`
-        SELECT 
-            DATE_FORMAT(created_at, '%b %Y') as label,
-            COUNT(*) as count
-        FROM memos
-        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
-        GROUP BY DATE_FORMAT(created_at, '%Y-%m'), DATE_FORMAT(created_at, '%b %Y')
-        ORDER BY MIN(created_at) ASC
-    `) as any[];
-
-    // Ensure we have 12 bars (pad with 0 if needed)
-    const chartData = monthlyStats.length > 0 ? monthlyStats : [
-        { label: 'Jan', count: 40 }, { label: 'Feb', count: 70 }, { label: 'Mar', count: 45 },
-        { label: 'Apr', count: 90 }, { label: 'May', count: 65 }, { label: 'Jun', count: 80 },
-        { label: 'Jul', count: 55 }, { label: 'Aug', count: 100 }, { label: 'Sep', count: 85 },
-        { label: 'Oct', count: 75 }, { label: 'Nov', count: 95 }, { label: 'Dec', count: 120 }
-    ];
-
-    // Normalize height (max 120 or highest count)
-    const maxCount = Math.max(...chartData.map(d => d.count), 1);
 
     return (
         <div className="space-y-6 md:space-y-8 animate-in fade-in duration-1000 font-sans">

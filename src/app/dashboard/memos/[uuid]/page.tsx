@@ -68,91 +68,100 @@ export default async function MemoDetailsPage({
 
     const memo = memos[0];
 
-    // Fetch budget items if it's a budget memo
-    const budgetItems = await query(
-        `SELECT * FROM memo_budget_items WHERE memo_id = ?`,
-        [memo.id]
-    ) as any[];
-
-    // Fetch attachments with uploader details
-    const attachments = await query(
-        `SELECT a.*, 
-                COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as uploader_name
-         FROM attachments a
-         LEFT JOIN memo_system_users u ON a.uploaded_by = u.id
-         LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
-         WHERE a.memo_id = ?
-         ORDER BY a.uploaded_at ASC`,
-        [memo.id]
-    ) as any[];
+    // Everything below depends only on the memo, so it is fetched in one go: the database
+    // is ~260 ms away, and running these one after another made this page take 8-15 s.
+    const viewerIsCreator = memo.created_by === currentUserId;
+    const [
+        budgetItems, attachments, approvals, financeProcessing, allRecipients, routingLogs,
+        financePayments, memoVendor, isApproverGroupMember, consultations, replies, isReplyParticipant, auditEvents,
+    ] = await Promise.all([
+        // Budget items (budget memos)
+        query(
+            `SELECT * FROM memo_budget_items WHERE memo_id = ?`,
+            [memo.id]
+        ) as Promise<any[]>,
+        // Attachments with uploader details
+        query(
+            `SELECT a.*, 
+                    COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as uploader_name
+             FROM attachments a
+             LEFT JOIN memo_system_users u ON a.uploaded_by = u.id
+             LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+             WHERE a.memo_id = ?
+             ORDER BY a.uploaded_at ASC`,
+            [memo.id]
+        ) as Promise<any[]>,
+        // Approval chain
+        query(
+            `SELECT a.*, COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as approver_name 
+          FROM memo_approvals a 
+          JOIN memo_system_users u ON a.approver_id = u.id 
+          LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+          WHERE a.memo_id = ? 
+          ORDER BY a.step_order ASC`,
+            [memo.id]
+        ) as Promise<any[]>,
+        // Finance-processing record for memos routed to the Accountant
+        query(
+            `SELECT fp.*, 
+                    COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as accountant_name
+             FROM memo_finance_processing fp
+             JOIN memo_system_users u ON fp.accountant_id = u.id
+             LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+             WHERE fp.memo_id = ?
+             LIMIT 1`,
+            [memo.id]
+        ) as Promise<any[]>,
+        // All recipients for the history timeline
+        query(
+            `SELECT mr.*, COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as recipient_name, u.department
+             FROM memo_recipients mr 
+             JOIN memo_system_users u ON mr.recipient_id = u.id 
+             LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+             WHERE mr.memo_id = ?
+             ORDER BY FIELD(mr.recipient_type, 'To', 'CC', 'BCC'), u.username ASC`,
+            [memo.id]
+        ) as Promise<any[]>,
+        // Routing adjustment logs (new_value as CHAR so mysql2 returns a parseable string)
+        query(
+            `SELECT al.id, al.user_id, al.action, al.timestamp,
+                    CAST(al.new_value AS CHAR) as new_value,
+                    COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as action_by_name
+             FROM audit_logs al
+             JOIN memo_system_users u ON al.user_id = u.id
+             LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
+             WHERE al.table_name = 'memos' AND al.record_id = ? AND al.action = 'ADJUST_ROUTING'
+             ORDER BY al.timestamp DESC`,
+            [memo.id]
+        ) as Promise<any[]>,
+        // Payments made against this memo (part payments each have their own voucher)
+        (query(
+            `SELECT p.id, p.amount, p.voucher_number, p.payment_note, p.paid_at
+             FROM memo_finance_payments p
+             JOIN memo_finance_processing fp ON fp.id = p.processing_id
+             WHERE fp.memo_id = ? ORDER BY p.paid_at ASC, p.id ASC`,
+            [memo.id]
+        ) as Promise<any[]>).catch(() => [] as any[]),
+        // Registered vendor named on the memo (shared Staff Portal vendor list)
+        memo.vendor_id ? getVendorOption(Number(memo.vendor_id)) : Promise.resolve(null),
+        viewerIsCreator ? Promise.resolve(false) : isCurrentUserApproverGroupMember(),
+        // Consultation threads
+        getConsultations(memo.id),
+        // Replies the viewer sent or received; receiving a reply makes them part of the workflow
+        getMemoReplies(memo.id),
+        isMemoReplyParticipant(memo.id),
+        loadMemoAuditTrail(memo.id),
+    ]);
 
     const budgetGrandTotal = budgetItems.reduce((acc, item) => acc + (parseFloat(item.total) || 0), 0);
     const creatorInitial = (memo.creator_name && memo.creator_name.length > 0) ? memo.creator_name[0].toUpperCase() : 'U';
 
-    // Fetch approvals
-    const approvals = await query(
-        `SELECT a.*, COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as approver_name 
-      FROM memo_approvals a 
-      JOIN memo_system_users u ON a.approver_id = u.id 
-      LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
-      WHERE a.memo_id = ? 
-      ORDER BY a.step_order ASC`,
-        [memo.id]
-    ) as any[];
-
-    // Fetch finance-processing records for routed budget/finance memos
-    const financeProcessing = await query(
-        `SELECT fp.*, 
-                COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as accountant_name
-         FROM memo_finance_processing fp
-         JOIN memo_system_users u ON fp.accountant_id = u.id
-         LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
-         WHERE fp.memo_id = ?
-         LIMIT 1`,
-        [memo.id]
-    ) as any[];
-
     const financeProcessingRecord = financeProcessing[0] || null;
 
-    // Registered vendor named on the memo (shared Staff Portal vendor list)
-    const memoVendor = memo.vendor_id ? await getVendorOption(Number(memo.vendor_id)) : null;
-
-    // Payments made against this memo (part payments each have their own voucher)
-    const financePayments = financeProcessingRecord
-        ? await query(
-            `SELECT id, amount, voucher_number, payment_note, paid_at
-             FROM memo_finance_payments WHERE processing_id = ? ORDER BY paid_at ASC, id ASC`,
-            [financeProcessingRecord.id]
-        ).catch(() => []) as any[]
-        : [];
     const financePaidTotal = financePayments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
     const financeTotalOwed = Number(financeProcessingRecord?.total_amount) || 0;
     const financeBalance = Math.max(financeTotalOwed - financePaidTotal, 0);
     const formatNGN = (v: number) => `₦${v.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-    // Fetch all recipients for the history timeline
-    const allRecipients = await query(
-        `SELECT mr.*, COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as recipient_name, u.department
-         FROM memo_recipients mr 
-         JOIN memo_system_users u ON mr.recipient_id = u.id 
-         LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
-         WHERE mr.memo_id = ?
-         ORDER BY FIELD(mr.recipient_type, 'To', 'CC', 'BCC'), u.username ASC`,
-        [memo.id]
-    ) as any[];
-
-    // Fetch routing adjustment logs — CAST new_value as CHAR to ensure MySQL2 delivers it as a parseable string
-    const routingLogs = await query(
-        `SELECT al.id, al.user_id, al.action, al.timestamp,
-                CAST(al.new_value AS CHAR) as new_value,
-                COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as action_by_name
-         FROM audit_logs al
-         JOIN memo_system_users u ON al.user_id = u.id
-         LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
-         WHERE al.table_name = 'memos' AND al.record_id = ? AND al.action = 'ADJUST_ROUTING'
-         ORDER BY al.timestamp DESC`,
-        [memo.id]
-    ) as any[];
 
     // Role resolution
     const isCreator = memo.created_by === currentUserId;
@@ -172,7 +181,6 @@ export default async function MemoDetailsPage({
 
     // Role-specific power: allow ANY pending approver to adjust routing (added approvers, line managers, etc)
     const canAdjustRouting = isPendingApprover;
-    const isApproverGroupMember = !isCreator && await isCurrentUserApproverGroupMember();
     const canSendToAccountant = isPendingApprover && isApproverGroupMember;
     // After distribution, a group member who received or approved the memo
     // can still send it to the Accountant if it is not already queued
@@ -180,18 +188,9 @@ export default async function MemoDetailsPage({
         && !financeProcessingRecord && (isRecipient || myDecision?.status === 'Approved');
 
     // Fetch data for routing adjustment if authorized
-    const availableUsers = canAdjustRouting ? await getRecipients() : [];
-    const availableManagers = canAdjustRouting ? await getManagers() : [];
-
-    // Fetch consultation threads
-    const consultations = await getConsultations(memo.id);
-
-    // Replies the viewer sent or received; receiving a reply makes them part of the workflow
-    const [replies, isReplyParticipant, auditEvents] = await Promise.all([
-        getMemoReplies(memo.id),
-        isMemoReplyParticipant(memo.id),
-        loadMemoAuditTrail(memo.id),
-    ]);
+    const [availableUsers, availableManagers] = canAdjustRouting
+        ? await Promise.all([getRecipients(), getManagers()])
+        : [[], []];
 
     // canForward: any pending approver, anyone who received a forward or a reply, final recipients
     const isForwardRecipient = consultations.some((c: any) => c.to_user_id === currentUserId);

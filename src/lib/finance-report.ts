@@ -129,7 +129,8 @@ export async function getFinanceReport(input: FinanceReportFilters = {}): Promis
     if (filters.createdBy) { where.push('m.created_by = ?'); params.push(filters.createdBy); }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
-    const rows = await query(`
+    // The memo rows and the category list are independent: fetch both at once
+    const rowsQ = query(`
         SELECT fp.id AS processing_id, fp.status, fp.total_amount, fp.created_at AS routed_at,
                COALESCE(NULLIF(fp.payee_name, ''), v.vendor_name) AS payee_name,
                v.vendor_id, v.vendor_name,
@@ -144,14 +145,15 @@ export async function getFinanceReport(input: FinanceReportFilters = {}): Promis
         LEFT JOIN inventory_vendor v ON v.vendor_id = COALESCE(fp.vendor_id, m.vendor_id)
         ${whereSql}
         ORDER BY fp.created_at ASC
-    `, params) as Row[];
+    `, params) as Promise<Row[]>;
 
-    const categoryRows = await query(`
+    const categoryQ = query(`
         SELECT DISTINCT COALESCE(NULLIF(CASE WHEN bi.budget_category = 'Others' THEN bi.other_category ELSE bi.budget_category END, ''), 'Uncategorised') AS category
         FROM memo_finance_processing fp
         LEFT JOIN memo_budget_info bi ON bi.memo_id = fp.memo_id
         ORDER BY category ASC
-    `) as Row[];
+    `) as Promise<Row[]>;
+    const [rows, categoryRows] = await Promise.all([rowsQ, categoryQ]);
 
     const now = Date.now();
     const processingIds: number[] = [];
@@ -237,13 +239,12 @@ export async function getFinanceReport(input: FinanceReportFilters = {}): Promis
     let recentRows: Row[] = [];
     if (processingIds.length > 0) {
         const placeholders = processingIds.map(() => '?').join(',');
-        monthRows = await query(`
+        [monthRows, recentRows] = await Promise.all([query(`
             SELECT DATE_FORMAT(p.paid_at, '%Y-%m') AS ym, COUNT(*) AS n, SUM(p.amount) AS total
             FROM memo_finance_payments p
             WHERE p.processing_id IN (${placeholders}) AND p.paid_at >= ?
             GROUP BY ym
-        `, [...processingIds, `${monthKeys[0]}-01 00:00:00`]) as Row[];
-        recentRows = await query(`
+        `, [...processingIds, `${monthKeys[0]}-01 00:00:00`]) as Promise<Row[]>, query(`
             SELECT p.id, p.paid_at, p.voucher_number, p.amount, p.payment_note,
                    m.uuid, m.reference_number, m.title,
                    COALESCE(NULLIF(fp.payee_name, ''), v.vendor_name) AS payee_name
@@ -254,7 +255,7 @@ export async function getFinanceReport(input: FinanceReportFilters = {}): Promis
             WHERE p.processing_id IN (${placeholders})
             ORDER BY p.paid_at DESC, p.id DESC
             LIMIT 20
-        `, processingIds) as Row[];
+        `, processingIds) as Promise<Row[]>]);
     }
     const monthMap = new Map(monthRows.map(m => [m.ym, m]));
     const paymentsByMonth = monthKeys.map(key => {

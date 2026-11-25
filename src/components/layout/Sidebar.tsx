@@ -27,6 +27,7 @@ import {
 import { cn } from '@/lib/utils';
 import { getSidebarCounts } from '@/lib/actions';
 import { useTrackInAppNavigation } from '@/lib/nav-history';
+import { useVisiblePolling } from '@/hooks/use-visible-polling';
 
 function SealBadge({ size, className }: { size: number, className?: string }) {
     return (
@@ -92,12 +93,9 @@ export default function Sidebar({ userRoles }: { userRoles: string[] }) {
         setIsOpen(false);
     }, [pathname]);
 
-    // Poll counts every 10 seconds for instant real-time counts!
-    useEffect(() => {
-        fetchCounts();
-        const interval = setInterval(fetchCounts, 10000);
-        return () => clearInterval(interval);
-    }, []);
+    // Counts refresh on every page change (where they usually change) and every
+    // 30 seconds while the tab is visible.
+    useVisiblePolling(fetchCounts, 30000, [pathname]);
 
     const navLinks = [
         { href: '/dashboard/memos/new', label: 'Compose', icon: PlusCircle, roles: [], isCompose: true },

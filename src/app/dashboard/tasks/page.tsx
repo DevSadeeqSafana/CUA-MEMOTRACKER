@@ -18,7 +18,7 @@ export default async function MemoCenterPage({
     const folder = resolvedSearchParams.folder || 'inbox';
 
     // 1. Fetch distributed memos (Memos sent to the user as a recipient)
-    const distributed = await query(`
+    const distributedQ = query(`
         SELECT m.id, m.uuid, m.title, m.reference_number, m.content, m.priority, m.memo_type, m.category, m.status, m.created_at, m.department,
                COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as creator_name,
                mr.read_at, mr.acknowledged_at,
@@ -30,10 +30,10 @@ export default async function MemoCenterPage({
         LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
         WHERE mr.recipient_id = ? AND m.status = 'Distributed'
         ORDER BY m.created_at DESC
-    `, [userId]) as any[];
+    `, [userId]);
 
     // 2. Fetch pending approvals (Memos waiting for this user's approval)
-    const approvals = await query(`
+    const approvalsQ = query(`
         SELECT m.id, m.uuid, m.title, m.reference_number, m.content, m.priority, m.memo_type, m.category, m.status, m.created_at, m.department,
                COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as creator_name,
                a.step_order, a.id as approval_id,
@@ -52,10 +52,10 @@ export default async function MemoCenterPage({
             AND a2.status != 'Approved'
         )
         ORDER BY m.created_at DESC
-    `, [userId]) as any[];
+    `, [userId]);
 
     // 3. Fetch pending consultations (Forwards requiring user response)
-    const consultations = await query(`
+    const consultationsQ = query(`
         SELECT m.id, m.uuid, m.title, m.reference_number, m.content, m.priority, m.memo_type, m.category, m.status, m.created_at, m.department,
                COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as creator_name,
                c.created_at as forwarded_at, c.id as consultation_id,
@@ -74,10 +74,10 @@ export default async function MemoCenterPage({
             WHERE r.parent_id = c.id AND r.from_user_id = ? AND r.type = 'Response'
         )
         ORDER BY c.created_at DESC
-    `, [userId, userId]) as any[];
+    `, [userId, userId]);
 
     // 4. Fetch created memos (Sent items & drafts created by this user)
-    const created = await query(`
+    const createdQ = query(`
         SELECT m.id, m.uuid, m.title, m.reference_number, m.content, m.priority, m.memo_type, m.category, m.status, m.created_at, m.department,
                COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as creator_name,
                (SELECT COUNT(*) FROM memo_budget_info bi WHERE bi.memo_id = m.id) > 0 as is_budget_memo,
@@ -87,10 +87,10 @@ export default async function MemoCenterPage({
         LEFT JOIN hr_staff hs ON u.staff_id = hs.StaffID
         WHERE m.created_by = ?
         ORDER BY m.created_at DESC
-    `, [userId]) as any[];
+    `, [userId]);
 
     // 5. Fetch approval decisions this user has already made (the "My Decisions" folder)
-    const decided = await query(`
+    const decidedQ = query(`
         SELECT m.id, m.uuid, m.title, m.reference_number, m.content, m.priority, m.memo_type, m.category, m.status, m.created_at, m.department,
                COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as creator_name,
                a.status as my_decision, a.processed_at as decided_at, a.step_order,
@@ -103,10 +103,10 @@ export default async function MemoCenterPage({
         WHERE a.approver_id = ? AND a.status IN ('Approved', 'Rejected')
         ORDER BY a.processed_at DESC
         LIMIT 100
-    `, [userId]) as any[];
+    `, [userId]);
 
     // 6. Memos on which this user received a reply (email-style replies with To/CC/BCC)
-    const repliedTo = await query(`
+    const repliedToQ = query(`
         SELECT m.id, m.uuid, m.title, m.reference_number, m.content, m.priority, m.memo_type, m.category, m.status, m.created_at, m.department,
                COALESCE(CONCAT(hs.FirstName, ' ', IFNULL(CONCAT(hs.MiddleName, ' '), ''), hs.Surname), u.username) as creator_name,
                MAX(mr.created_at) as replied_at,
@@ -122,7 +122,12 @@ export default async function MemoCenterPage({
         GROUP BY m.id
         ORDER BY replied_at DESC
         LIMIT 200
-    `, [userId]).catch(() => []) as any[];
+    `, [userId]).catch(() => []);
+
+    // The six lists are independent: fetch them together (one round trip instead of six)
+    const [distributed, approvals, consultations, created, decided, repliedTo] = await Promise.all([
+        distributedQ, approvalsQ, consultationsQ, createdQ, decidedQ, repliedToQ,
+    ]) as any[][];
 
     // --- Unify Memos List ---
     const unifiedMemos: any[] = [];
