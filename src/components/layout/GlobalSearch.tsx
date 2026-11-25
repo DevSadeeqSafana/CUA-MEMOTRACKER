@@ -2,20 +2,30 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, X, Loader2, ArrowRight, FileText } from 'lucide-react';
+import { Search, X, Loader2, ArrowRight, FileText, Compass, User, Building2, Receipt } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { useClickAway } from '@/hooks/use-click-away';
 
+type SearchKind = 'page' | 'memo' | 'person' | 'vendor' | 'payment';
 interface SearchResult {
-    id: number;
-    uuid: string;
+    kind: SearchKind;
+    id: string;
     title: string;
-    reference_number: string;
-    status: string;
+    subtitle?: string;
+    href: string;
 }
 
-const MIN_CHARS = 3;
+// Result groups in display order (keyboard order follows the same order)
+const GROUPS: { kind: SearchKind; label: string; icon: typeof FileText }[] = [
+    { kind: 'page', label: 'Pages', icon: Compass },
+    { kind: 'memo', label: 'Memos', icon: FileText },
+    { kind: 'person', label: 'People', icon: User },
+    { kind: 'vendor', label: 'Vendors', icon: Building2 },
+    { kind: 'payment', label: 'Payments', icon: Receipt },
+];
+
+const MIN_CHARS = 2;
 const DEBOUNCE_MS = 250;
 
 export default function GlobalSearch() {
@@ -47,7 +57,9 @@ export default function GlobalSearch() {
                 const response = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
                 const data = await response.json();
                 if (id === requestId.current) {
-                    setResults(data.results || []);
+                    const list: SearchResult[] = data.results || [];
+                    // Keep results in group order so arrow keys move top to bottom
+                    setResults(GROUPS.flatMap(g => list.filter(r => r.kind === g.kind)));
                     setActiveIndex(0);
                 }
             } catch (error) {
@@ -77,7 +89,8 @@ export default function GlobalSearch() {
     const open = (result: SearchResult) => {
         setIsOpen(false);
         inputRef.current?.blur();
-        router.push(`/dashboard/memos/${result.uuid}`);
+        if (result.href.startsWith('mailto:')) window.location.href = result.href;
+        else router.push(result.href);
     };
 
     const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -109,12 +122,12 @@ export default function GlobalSearch() {
                     role="combobox"
                     aria-expanded={showDropdown}
                     aria-controls="global-search-results"
-                    aria-label="Search memos by title or reference number"
+                    aria-label="Search memos, people, vendors, payments and pages"
                     value={query}
                     onChange={(e) => { setQuery(e.target.value); setIsOpen(true); }}
                     onFocus={() => setIsOpen(true)}
                     onKeyDown={onKeyDown}
-                    placeholder="Search memos or reference no."
+                    placeholder="Search memos, people, vendors, pages…"
                     className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-16 text-sm text-slate-700 placeholder:text-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#1a5aa6]/20 focus:border-[#1a5aa6] transition-all [&::-webkit-search-cancel-button]:hidden"
                 />
                 {query ? (
@@ -143,34 +156,46 @@ export default function GlobalSearch() {
                             </div>
                         ) : results.length > 0 ? (
                             <div className="p-2">
-                                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] px-3 py-2">Memos</p>
-                                {results.map((result, i) => (
-                                    <Link
-                                        key={result.id}
-                                        role="option"
-                                        aria-selected={i === activeIndex}
-                                        href={`/dashboard/memos/${result.uuid}`}
-                                        onClick={() => setIsOpen(false)}
-                                        onMouseEnter={() => setActiveIndex(i)}
-                                        className={cn(
-                                            "flex items-center gap-3 p-3 rounded-lg group transition-colors",
-                                            i === activeIndex ? "bg-[#eef3fa]" : "hover:bg-slate-50"
-                                        )}
-                                    >
-                                        <div className="w-8 h-8 rounded-full bg-[#0b2a5b]/5 flex items-center justify-center text-[#0b2a5b] shrink-0">
-                                            <FileText size={15} />
+                                {GROUPS.map(group => {
+                                    const items = results.filter(r => r.kind === group.kind);
+                                    if (items.length === 0) return null;
+                                    const Icon = group.icon;
+                                    return (
+                                        <div key={group.kind} role="group" aria-label={group.label}>
+                                            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] px-3 pt-2 pb-1">{group.label}</p>
+                                            {items.map(result => {
+                                                const i = results.indexOf(result);
+                                                return (
+                                                    <Link
+                                                        key={result.id}
+                                                        role="option"
+                                                        aria-selected={i === activeIndex}
+                                                        href={result.href}
+                                                        onClick={() => setIsOpen(false)}
+                                                        onMouseEnter={() => setActiveIndex(i)}
+                                                        className={cn(
+                                                            "flex items-center gap-3 px-3 py-2.5 rounded-lg group transition-colors",
+                                                            i === activeIndex ? "bg-[#eef3fa]" : "hover:bg-slate-50"
+                                                        )}
+                                                    >
+                                                        <div className="w-8 h-8 rounded-full bg-[#0b2a5b]/5 flex items-center justify-center text-[#0b2a5b] shrink-0">
+                                                            <Icon size={15} />
+                                                        </div>
+                                                        <div className="flex-grow min-w-0">
+                                                            <p className="text-sm font-semibold text-slate-800 truncate">{result.title}</p>
+                                                            {result.subtitle && <p className="text-[11px] text-slate-400 truncate">{result.subtitle}</p>}
+                                                        </div>
+                                                        <ArrowRight size={14} className={cn("text-[#1a5aa6] transition-all shrink-0", i === activeIndex ? "opacity-100 translate-x-0.5" : "opacity-0")} />
+                                                    </Link>
+                                                );
+                                            })}
                                         </div>
-                                        <div className="flex-grow min-w-0">
-                                            <p className="text-sm font-semibold text-slate-800 truncate">{result.title}</p>
-                                            <p className="text-[11px] text-slate-400 font-mono truncate">{result.reference_number} · {result.status}</p>
-                                        </div>
-                                        <ArrowRight size={14} className={cn("text-[#1a5aa6] transition-all", i === activeIndex ? "opacity-100 translate-x-0.5" : "opacity-0")} />
-                                    </Link>
-                                ))}
+                                    );
+                                })}
                             </div>
                         ) : (
                             <div className="p-8 text-center text-sm text-slate-400">
-                                No memos match &ldquo;{query.trim()}&rdquo;
+                                Nothing matches &ldquo;{query.trim()}&rdquo;
                             </div>
                         )}
                     </div>

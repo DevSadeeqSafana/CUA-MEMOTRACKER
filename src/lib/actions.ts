@@ -577,12 +577,25 @@ export async function approveMemo(memoId: number, approvalId: number, comments: 
 export async function rejectMemo(memoId: number, approvalId: number, comments?: string) {
     const session = await auth();
     if (!session?.user) throw new Error('Unauthorized');
-    comments = isCommentEmpty(comments) ? '' : sanitizeCommentHtml(comments);
+    // A rejection must say why (rich text from CommentEditor, sanitised before saving)
+    if (isCommentEmpty(comments)) {
+        return { success: false, error: 'Please write the reason for rejecting this memo.' };
+    }
+    comments = sanitizeCommentHtml(comments!);
 
     try {
+        // Only the approver of this pending step may reject it
+        const ownStep = await query(
+            'SELECT id FROM memo_approvals WHERE id = ? AND memo_id = ? AND approver_id = ? AND status = "Pending"',
+            [approvalId, memoId, session.user.id]
+        ) as any[];
+        if (ownStep.length === 0) {
+            return { success: false, error: 'This memo is no longer waiting for your decision. Refresh the page to see its current status.' };
+        }
+
         await query(
             'UPDATE memo_approvals SET status = "Rejected", comments = ?, processed_at = CURRENT_TIMESTAMP WHERE id = ?',
-            [comments || 'No comments', approvalId]
+            [comments, approvalId]
         );
 
         await query('UPDATE memos SET status = "Draft" WHERE id = ?', [memoId]);
@@ -606,7 +619,7 @@ export async function rejectMemo(memoId: number, approvalId: number, comments?: 
         return { success: true };
     } catch (error) {
         console.error('Rejection Error:', error);
-        return { success: false };
+        return { success: false, error: friendlyError(error, "We couldn't record the rejection. Please try again.") };
     }
 }
 

@@ -647,7 +647,7 @@ export default async function MemoDetailsPage({
             )}
 
             {/* Main Content & Shared Components */}
-            <div className="max-w-5xl">
+            <div className="min-w-0">
                 <div className="space-y-8">
                     {/* Gmail-Style Email Reader Card */}
                     <div className="bg-white border border-slate-200 rounded-[2rem] p-6 md:p-8 shadow-sm space-y-6">
